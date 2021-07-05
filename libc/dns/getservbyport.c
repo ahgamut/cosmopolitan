@@ -30,7 +30,7 @@
 
 struct servent *getservbyport(int port, const char *proto) {
   static struct servent *ptr1, se1;
-  static char s_name[DNS_NAME_MAX];
+  static char s_name[DNS_NAME_MAX + 1];
   char *localproto = proto;
 
   if (!ptr1) {
@@ -41,8 +41,8 @@ struct servent *getservbyport(int port, const char *proto) {
     ptr1 = &se1;
   }
 
-  if (LookupServicesByPort(port, &localproto, ptr1->s_name,
-                           sizeof(ptr1->s_name), NULL) == -1) {
+  if (LookupServicesByPort(port, &localproto, ptr1->s_name, DNS_NAME_MAX,
+                           NULL) == -1) {
     // localproto got alloc'd during the lookup?
     if (!proto && localproto != proto) free(localproto);
     return NULL;

@@ -31,7 +31,7 @@
 
 struct servent *getservbyname(const char *name, const char *proto) {
   static struct servent *ptr0, se0;
-  static char s_name[DNS_NAME_MAX];
+  static char s_name[DNS_NAME_MAX + 1];
   char *localproto = proto;
   int p;
 
@@ -43,8 +43,7 @@ struct servent *getservbyname(const char *name, const char *proto) {
     ptr0 = &se0;
   }
 
-  p = LookupServicesByName(name, &localproto, ptr0->s_name,
-                           sizeof(ptr0->s_name), NULL);
+  p = LookupServicesByName(name, &localproto, ptr0->s_name, DNS_NAME_MAX, NULL);
   if (p == -1) {
     // localproto got alloc'd during the lookup?
     if (!proto && localproto != proto) free(localproto);
