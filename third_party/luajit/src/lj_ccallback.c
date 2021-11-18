@@ -3,6 +3,7 @@
 ** Copyright (C) 2005-2017 Mike Pall. See Copyright Notice in luajit.h
 */
 
+#include "libc/sysv/consts/prot.h"
 #include "lj_obj.h"
 
 #if LJ_HASFFI

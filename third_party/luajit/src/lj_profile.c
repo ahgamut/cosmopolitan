@@ -6,6 +6,7 @@
 #define lj_profile_c
 #define LUA_CORE
 
+#include "libc/sysv/consts/sa.h"
 #include "lj_obj.h"
 
 #if LJ_HASPROFILE
