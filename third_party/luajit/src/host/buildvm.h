@@ -11,6 +11,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include "libc/calls/calls.h"
+#include "third_party/gdtoa/gdtoa.h"
 
 #include "lj_def.h"
 #include "lj_arch.h"
