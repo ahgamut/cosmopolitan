@@ -39,6 +39,8 @@ int _CRT_glob = 0;
 #include <setjmp.h>
 #include <errno.h>
 #include <time.h>
+#include "libc/calls/calls.h"
+#include "third_party/gdtoa/gdtoa.h"
 typedef enum{
 TM_INDEX,
 TM_NEWINDEX,
