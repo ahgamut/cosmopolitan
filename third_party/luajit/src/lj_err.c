@@ -499,6 +499,14 @@ static void err_raise_ext(int errcode)
   RaiseException(LJ_EXCODE_MAKE(errcode), 1 /* EH_NONCONTINUABLE */, 0, NULL);
 }
 
+#else
+
+LJ_FUNCA int lj_err_unwind_dwarf(int version, int actions,
+  uint64_t uexclass, void *uex, void *ctx)
+{
+    return 9;
+}
+
 #endif
 
 /* -- Error handling ------------------------------------------------------ */

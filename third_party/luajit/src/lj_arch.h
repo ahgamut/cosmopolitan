@@ -105,7 +105,8 @@
 #define LJ_TARGET_OSX		(LUAJIT_OS == LUAJIT_OS_OSX)
 #define LJ_TARGET_IOS		(LJ_TARGET_OSX && (LUAJIT_TARGET == LUAJIT_ARCH_ARM || LUAJIT_TARGET == LUAJIT_ARCH_ARM64))
 #define LJ_TARGET_POSIX		(LUAJIT_OS > LUAJIT_OS_WINDOWS)
-#define LJ_TARGET_DLOPEN	LJ_TARGET_POSIX
+#undef LJ_TARGET_DLOPEN
+/* #define LJ_TARGET_DLOPEN	LJ_TARGET_POSIX */
 
 #ifdef __CELLOS_LV2__
 #define LJ_TARGET_PS3		1
@@ -400,7 +401,7 @@
 /* Check target-specific constraints. */
 #ifndef _BUILDVM_H
 #if LJ_TARGET_X64
-#if __USING_SJLJ_EXCEPTIONS__
+#if 0 && __USING_SJLJ_EXCEPTIONS__
 #error "Need a C compiler with native exception handling on x64"
 #endif
 #elif LJ_TARGET_ARM

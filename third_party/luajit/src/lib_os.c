@@ -8,6 +8,7 @@
 
 #include <errno.h>
 #include <time.h>
+#include "libc/time/struct/tm.h"
 
 #define lib_os_c
 #define LUA_LIB

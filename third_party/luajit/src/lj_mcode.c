@@ -6,6 +6,7 @@
 #define lj_mcode_c
 #define LUA_CORE
 
+#include "libc/sysv/consts/prot.h"
 #include "lj_obj.h"
 #if LJ_HASJIT
 #include "lj_gc.h"

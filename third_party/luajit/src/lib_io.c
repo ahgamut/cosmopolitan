@@ -8,6 +8,7 @@
 
 #include <errno.h>
 #include <stdio.h>
+#include "libc/calls/calls.h"
 
 #define lib_io_c
 #define LUA_LIB
