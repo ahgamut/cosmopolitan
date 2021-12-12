@@ -310,6 +310,7 @@ PYTHON_YOINK("traceback");
 PYTHON_YOINK("tty");
 PYTHON_YOINK("types");
 PYTHON_YOINK("typing");
+PYTHON_YOINK("typing_extensions");
 PYTHON_YOINK("uu");
 PYTHON_YOINK("uuid");
 PYTHON_YOINK("warnings");

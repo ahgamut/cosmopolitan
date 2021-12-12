@@ -1063,6 +1063,7 @@ THIRD_PARTY_PYTHON_STAGE2_A_PYS =						\
 	third_party/python/Lib/tty.py						\
 	third_party/python/Lib/types.py						\
 	third_party/python/Lib/typing.py					\
+	third_party/python/Lib/typing_extensions.py					\
 	third_party/python/Lib/urllib/__init__.py				\
 	third_party/python/Lib/urllib/error.py					\
 	third_party/python/Lib/urllib/parse.py					\
@@ -1124,6 +1125,10 @@ THIRD_PARTY_PYTHON_STAGE2_A_DATA =						\
 	third_party/python/Lib/MarkupSafe-2.0.1.dist-info/top_level.txt	\
 	third_party/python/Lib/markupsafe/_speedups.pyi	\
 	third_party/python/Lib/markupsafe/py.typed	\
+	third_party/python/Lib/typing_extensions-4.0.1.dist-info/LICENSE	\
+	third_party/python/Lib/typing_extensions-4.0.1.dist-info/METADATA	\
+	third_party/python/Lib/typing_extensions-4.0.1.dist-info/RECORD	\
+	third_party/python/Lib/typing_extensions-4.0.1.dist-info/WHEEL	\
 	third_party/python/Lib/pydoc_data/					\
 	third_party/python/Lib/pydoc_data/_pydoc.css
 
