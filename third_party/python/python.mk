@@ -669,6 +669,7 @@ THIRD_PARTY_PYTHON_STAGE2_A_SRCS =					\
 	third_party/python/Modules/hashtable.c				\
 	third_party/python/Modules/itertoolsmodule.c			\
 	third_party/python/Modules/main.c				\
+	third_party/python/Modules/markupsafe/_speedups.c	\
 	third_party/python/Modules/mathmodule.c				\
 	third_party/python/Modules/mmapmodule.c				\
 	third_party/python/Modules/parsermodule.c			\
@@ -959,6 +960,9 @@ THIRD_PARTY_PYTHON_STAGE2_A_PYS =						\
 	third_party/python/Lib/macurl2path.py					\
 	third_party/python/Lib/mailbox.py					\
 	third_party/python/Lib/mailcap.py					\
+	third_party/python/Lib/markupsafe/__init__.py		\
+	third_party/python/Lib/markupsafe/_native.py		\
+	third_party/python/Lib/markupsafe/_speedups.py		\
 	third_party/python/Lib/mimetypes.py					\
 	third_party/python/Lib/modulefinder.py					\
 	third_party/python/Lib/multiprocessing/__init__.py			\
@@ -1113,6 +1117,13 @@ THIRD_PARTY_PYTHON_STAGE2_A_PYS =						\
 
 THIRD_PARTY_PYTHON_STAGE2_A_DATA =						\
 	third_party/python/Lib/mime.types					\
+	third_party/python/Lib/MarkupSafe-2.0.1.dist-info/LICENSE.rst	\
+	third_party/python/Lib/MarkupSafe-2.0.1.dist-info/METADATA	\
+	third_party/python/Lib/MarkupSafe-2.0.1.dist-info/RECORD	\
+	third_party/python/Lib/MarkupSafe-2.0.1.dist-info/WHEEL	\
+	third_party/python/Lib/MarkupSafe-2.0.1.dist-info/top_level.txt	\
+	third_party/python/Lib/markupsafe/_speedups.pyi	\
+	third_party/python/Lib/markupsafe/py.typed	\
 	third_party/python/Lib/pydoc_data/					\
 	third_party/python/Lib/pydoc_data/_pydoc.css
 
