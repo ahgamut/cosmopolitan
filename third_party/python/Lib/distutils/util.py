@@ -97,12 +97,6 @@ def get_platform ():
         m = rel_re.match(release)
         if m:
             release = m.group()
-    elif osname[:6] == "darwin":
-        import _osx_support, distutils.sysconfig
-        osname, release, machine = _osx_support.get_platform_osx(
-                                        distutils.sysconfig.get_config_vars(),
-                                        osname, release, machine)
-
     return "%s-%s-%s" % (osname, release, machine)
 
 # get_platform ()

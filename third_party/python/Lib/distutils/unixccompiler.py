@@ -23,9 +23,6 @@ from distutils.errors import \
      DistutilsExecError, CompileError, LibError, LinkError
 from distutils import log
 
-if sys.platform == 'darwin':
-    import _osx_support
-
 # XXX Things not currently handled:
 #   * optimization/debug/warning flags; we just use whatever's in Python's
 #     Makefile and live with it.  Is this adequate?  If not, we might
@@ -110,9 +107,6 @@ class UnixCCompiler(CCompiler):
 
     def _compile(self, obj, src, ext, cc_args, extra_postargs, pp_opts):
         compiler_so = self.compiler_so
-        if sys.platform == 'darwin':
-            compiler_so = _osx_support.compiler_fixup(compiler_so,
-                                                    cc_args + extra_postargs)
         try:
             self.spawn(compiler_so + cc_args + [src, '-o', obj] +
                        extra_postargs)
@@ -190,8 +184,6 @@ class UnixCCompiler(CCompiler):
                             i += 1
                     linker[i] = self.compiler_cxx[i]
 
-                if sys.platform == 'darwin':
-                    linker = _osx_support.compiler_fixup(linker, ld_args)
 
                 self.spawn(linker + ld_args)
             except DistutilsExecError as msg:

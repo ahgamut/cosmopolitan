@@ -8,7 +8,7 @@ Python scripts."""
 import os
 from distutils.core import Command
 from distutils import log
-from stat import ST_MODE
+from _stat import ST_MODE
 
 
 class install_scripts(Command):

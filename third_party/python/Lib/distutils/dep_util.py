@@ -20,7 +20,7 @@ def newer (source, target):
     if not os.path.exists(target):
         return 1
 
-    from stat import ST_MTIME
+    from _stat import ST_MTIME
     mtime1 = os.stat(source)[ST_MTIME]
     mtime2 = os.stat(target)[ST_MTIME]
 
@@ -72,7 +72,7 @@ def newer_group (sources, target, missing='error'):
     # is more recent than 'target', then 'target' is out-of-date and
     # we can immediately return true.  If we fall through to the end
     # of the loop, then 'target' is up-to-date and we return false.
-    from stat import ST_MTIME
+    from _stat import ST_MTIME
     target_mtime = os.stat(target)[ST_MTIME]
     for source in sources:
         if not os.path.exists(source):

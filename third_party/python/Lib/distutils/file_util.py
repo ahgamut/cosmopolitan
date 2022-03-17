@@ -98,7 +98,7 @@ def copy_file(src, dst, preserve_mode=1, preserve_times=1, update=0,
     # (not update) and (src newer than dst).
 
     from distutils.dep_util import newer
-    from stat import ST_ATIME, ST_MTIME, ST_MODE, S_IMODE
+    from _stat import ST_ATIME, ST_MTIME, ST_MODE, S_IMODE
 
     if not os.path.isfile(src):
         raise DistutilsFileError(

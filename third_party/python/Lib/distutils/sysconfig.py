@@ -154,70 +154,7 @@ def customize_compiler(compiler):
     varies across Unices and is stored in Python's Makefile.
     """
     if compiler.compiler_type == "unix":
-        if sys.platform == "darwin":
-            # Perform first-time customization of compiler-related
-            # config vars on OS X now that we know we need a compiler.
-            # This is primarily to support Pythons from binary
-            # installers.  The kind and paths to build tools on
-            # the user system may vary significantly from the system
-            # that Python itself was built on.  Also the user OS
-            # version and build tools may not support the same set
-            # of CPU architectures for universal builds.
-            global _config_vars
-            # Use get_config_var() to ensure _config_vars is initialized.
-            if not get_config_var('CUSTOMIZED_OSX_COMPILER'):
-                import _osx_support
-                _osx_support.customize_compiler(_config_vars)
-                _config_vars['CUSTOMIZED_OSX_COMPILER'] = 'True'
-
-        (cc, cxx, opt, cflags, ccshared, ldshared, shlib_suffix, ar, ar_flags) = \
-            get_config_vars('CC', 'CXX', 'OPT', 'CFLAGS',
-                            'CCSHARED', 'LDSHARED', 'SHLIB_SUFFIX', 'AR', 'ARFLAGS')
-
-        if 'CC' in os.environ:
-            newcc = os.environ['CC']
-            if (sys.platform == 'darwin'
-                    and 'LDSHARED' not in os.environ
-                    and ldshared.startswith(cc)):
-                # On OS X, if CC is overridden, use that as the default
-                #       command for LDSHARED as well
-                ldshared = newcc + ldshared[len(cc):]
-            cc = newcc
-        if 'CXX' in os.environ:
-            cxx = os.environ['CXX']
-        if 'LDSHARED' in os.environ:
-            ldshared = os.environ['LDSHARED']
-        if 'CPP' in os.environ:
-            cpp = os.environ['CPP']
-        else:
-            cpp = cc + " -E"           # not always
-        if 'LDFLAGS' in os.environ:
-            ldshared = ldshared + ' ' + os.environ['LDFLAGS']
-        if 'CFLAGS' in os.environ:
-            cflags = opt + ' ' + os.environ['CFLAGS']
-            ldshared = ldshared + ' ' + os.environ['CFLAGS']
-        if 'CPPFLAGS' in os.environ:
-            cpp = cpp + ' ' + os.environ['CPPFLAGS']
-            cflags = cflags + ' ' + os.environ['CPPFLAGS']
-            ldshared = ldshared + ' ' + os.environ['CPPFLAGS']
-        if 'AR' in os.environ:
-            ar = os.environ['AR']
-        if 'ARFLAGS' in os.environ:
-            archiver = ar + ' ' + os.environ['ARFLAGS']
-        else:
-            archiver = ar + ' ' + ar_flags
-
-        cc_cmd = cc + ' ' + cflags
-        compiler.set_executables(
-            preprocessor=cpp,
-            compiler=cc_cmd,
-            compiler_so=cc_cmd + ' ' + ccshared,
-            compiler_cxx=cxx,
-            linker_so=ldshared,
-            linker_exe=cc,
-            archiver=archiver)
-
-        compiler.shared_lib_extension = shlib_suffix
+        pass
 
 
 def get_config_h_filename():
@@ -506,12 +443,6 @@ def get_config_vars(*args):
                 # directory and make srcdir absolute.
                 srcdir = os.path.join(base, _config_vars['srcdir'])
                 _config_vars['srcdir'] = os.path.normpath(srcdir)
-
-        # OS X platforms require special customization to handle
-        # multi-architecture, multi-os-version installers
-        if sys.platform == 'darwin':
-            import _osx_support
-            _osx_support.customize_config_vars(_config_vars)
 
     if args:
         vals = []
