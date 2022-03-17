@@ -27,6 +27,7 @@
 #include "libc/nexgen32e/rdtsc.h"
 #include "libc/nexgen32e/rdtscp.h"
 #include "libc/runtime/runtime.h"
+#include "libc/str/str.h"
 #include "third_party/python/Include/abstract.h"
 #include "third_party/python/Include/import.h"
 #include "third_party/python/Include/longobject.h"
@@ -39,6 +40,7 @@
 #include "third_party/python/Include/pyport.h"
 #include "third_party/python/Include/structmember.h"
 #include "third_party/python/Include/yoink.h"
+#include "third_party/python/Python/storeasset.inc"
 #include "third_party/xed/x86.h"
 /* clang-format off */
 
@@ -201,6 +203,88 @@ cosmo_exit1(PyObject *self, PyObject *args)
     _Exit(1);
 }
 
+PyDoc_STRVAR(storefile_doc,
+"storefile(path, target=None)\n\
+--\n\n\
+stores file at path into zip at target.\n\
+\n\
+This function stores the file found at the provided path into\n\
+the internal zip store of the APE at the target location. If \n\
+target is None, will attempt to create from path.");
+
+static PyObject *
+cosmo_storefile(PyObject *self, PyObject *args)
+{
+    bool failed = false;
+    char *path = NULL;
+    Py_ssize_t pathlen = 0;
+    char *target = NULL;
+    Py_ssize_t targetlen = 0;
+    
+    char *data = NULL;
+    size_t datalen = 0;
+    struct stat st;
+
+    if (!PyArg_ParseTuple(args, "s#|z#", &path, &pathlen, &target, &targetlen)) {
+        failed = true;
+        goto cleanup;
+    }
+    if (target == NULL) {
+        if (startswith(path, ".python")) {
+            targetlen = pathlen;
+            target = _gc(malloc(targetlen+1));
+            strcpy(target, path);
+        }
+        else if (startswith(path, "./.python")) {
+            targetlen = pathlen - 2; // remove ./
+            target = _gc(malloc(targetlen+1));
+            strcpy(target, path + 2);
+        }
+        else if (startswith(path, "./") && pathlen > 2) {
+            targetlen = pathlen - 2 + strlen(".python") + 1; // remove ./ and then add a /
+            target = _gc(malloc(targetlen+1));
+            strcpy(target, ".python/");
+            strcat(target, path + 2);
+        }
+        else {
+           PyErr_SetString(PyExc_RuntimeError, "unable to create target path");
+           failed = true;
+           goto cleanup;
+        }
+    }
+    else {
+        if(!startswith(target, ".python")) {
+           PyErr_SetString(PyExc_RuntimeError, "target path should start with .python");
+           failed = true;
+           goto cleanup;
+        }
+    }
+    
+    initOpenZip();
+    if (lstat(path, &st) == -1) {
+      PyErr_SetString(PyExc_RuntimeError, "can't stat the file");
+      failed = true;
+      goto cleanup;
+      // DIEF("Can't stat %`'s: %m", path);
+    }
+    if (!(data = xslurp(path, &datalen))) {
+      PyErr_SetString(PyExc_RuntimeError, "can't read the file");
+      failed = true;
+      goto cleanup;
+      // DIEF("Can't read %`'s: %m", path);
+    }
+    StoreAsset(target, targetlen, data, datalen, st.st_mode & 0777);
+    // If the file is a text .py file
+    // here I could convert it to a .pyc
+    // and store that in the zip as well
+    
+cleanup:
+    if(data) free(data);
+    if(failed)
+        return 0;
+    Py_RETURN_NONE;
+}
+
 static bool ftrace_installed = 0;
 
 typedef struct {
@@ -274,6 +358,7 @@ static PyMethodDef cosmo_methods[] = {
     {"decimate", cosmo_decimate, METH_VARARGS, decimate_doc},
     {"getcpucore", cosmo_getcpucore, METH_NOARGS, getcpucore_doc},
     {"getcpunode", cosmo_getcpunode, METH_NOARGS, getcpunode_doc},
+    {"storefile", cosmo_storefile, METH_VARARGS, storefile_doc},
 #ifdef __PG__
     {"ftrace", cosmo_ftrace, METH_NOARGS, ftrace_doc},
 #endif
