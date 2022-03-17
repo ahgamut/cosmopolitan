@@ -358,6 +358,7 @@ def _init_posix():
         platform=sys.platform,
         multiarch=getattr(sys.implementation, '_multiarch', ''),
     ))
+    name = "_sysconfigdata_m_cosmo_x86_64_cosmo"
     _temp = __import__(name, globals(), locals(), ['build_time_vars'], 0)
     build_time_vars = _temp.build_time_vars
     global _config_vars
