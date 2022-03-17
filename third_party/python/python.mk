@@ -706,6 +706,7 @@ THIRD_PARTY_PYTHON_STAGE2_A_SRCS =					\
         third_party/python/Python/pyfpe.c				\
         third_party/python/Python/sigcheck.c
 
+
 THIRD_PARTY_PYTHON_STAGE2_A_PYS =						\
 	third_party/python/Parser/asdl.py					\
 	third_party/python/Parser/asdl_c.py					\
@@ -1111,12 +1112,140 @@ THIRD_PARTY_PYTHON_STAGE2_A_PYS =						\
 	third_party/python/Lib/sqlite3/__init__.py				\
 	third_party/python/Lib/sqlite3/dump.py					\
 	third_party/python/Lib/sqlite3/dbapi2.py				\
-	third_party/python/Lib/zipfile.py
+	third_party/python/Lib/zipfile.py						\
+	$(THIRD_PARTY_PYTHON_STAGE2_SETUPTOOLS_PYS)
 
 THIRD_PARTY_PYTHON_STAGE2_A_DATA =						\
 	third_party/python/Lib/mime.types					\
 	third_party/python/Lib/pydoc_data/					\
 	third_party/python/Lib/pydoc_data/_pydoc.css
+
+THIRD_PARTY_PYTHON_STAGE2_SETUPTOOLS_PYS =	\
+	third_party/python/Lib/distutils/archive_util.py	\
+	third_party/python/Lib/distutils/bcppcompiler.py	\
+	third_party/python/Lib/distutils/ccompiler.py	\
+	third_party/python/Lib/distutils/cmd.py	\
+	third_party/python/Lib/distutils/command/bdist_dumb.py	\
+	third_party/python/Lib/distutils/command/bdist.py	\
+	third_party/python/Lib/distutils/command/bdist_rpm.py	\
+	third_party/python/Lib/distutils/command/bdist_wininst.py	\
+	third_party/python/Lib/distutils/command/build_clib.py	\
+	third_party/python/Lib/distutils/command/build_ext.py	\
+	third_party/python/Lib/distutils/command/build.py	\
+	third_party/python/Lib/distutils/command/build_py.py	\
+	third_party/python/Lib/distutils/command/build_scripts.py	\
+	third_party/python/Lib/distutils/command/check.py	\
+	third_party/python/Lib/distutils/command/clean.py	\
+	third_party/python/Lib/distutils/command/config.py	\
+	third_party/python/Lib/distutils/command/__init__.py	\
+	third_party/python/Lib/distutils/command/install_data.py	\
+	third_party/python/Lib/distutils/command/install_egg_info.py	\
+	third_party/python/Lib/distutils/command/install_headers.py	\
+	third_party/python/Lib/distutils/command/install_lib.py	\
+	third_party/python/Lib/distutils/command/install.py	\
+	third_party/python/Lib/distutils/command/install_scripts.py	\
+	third_party/python/Lib/distutils/command/register.py	\
+	third_party/python/Lib/distutils/command/sdist.py	\
+	third_party/python/Lib/distutils/command/upload.py	\
+	third_party/python/Lib/distutils/config.py	\
+	third_party/python/Lib/distutils/core.py	\
+	third_party/python/Lib/distutils/cygwinccompiler.py	\
+	third_party/python/Lib/distutils/debug.py	\
+	third_party/python/Lib/distutils/dep_util.py	\
+	third_party/python/Lib/distutils/dir_util.py	\
+	third_party/python/Lib/distutils/dist.py	\
+	third_party/python/Lib/distutils/errors.py	\
+	third_party/python/Lib/distutils/extension.py	\
+	third_party/python/Lib/distutils/fancy_getopt.py	\
+	third_party/python/Lib/distutils/filelist.py	\
+	third_party/python/Lib/distutils/file_util.py	\
+	third_party/python/Lib/distutils/__init__.py	\
+	third_party/python/Lib/distutils/log.py	\
+	third_party/python/Lib/distutils/spawn.py	\
+	third_party/python/Lib/distutils/sysconfig.py	\
+	third_party/python/Lib/distutils/text_file.py	\
+	third_party/python/Lib/distutils/unixccompiler.py	\
+	third_party/python/Lib/distutils/util.py	\
+	third_party/python/Lib/distutils/versionpredicate.py	\
+	third_party/python/Lib/distutils/version.py	\
+	third_party/python/Lib/pkg_resources/__init__.py	\
+	third_party/python/Lib/pkg_resources/py31compat.py	\
+	third_party/python/Lib/_vendor/appdirs.py	\
+	third_party/python/Lib/_vendor/__init__.py	\
+	third_party/python/Lib/_vendor/packaging/__about__.py	\
+	third_party/python/Lib/_vendor/packaging/_compat.py	\
+	third_party/python/Lib/_vendor/packaging/__init__.py	\
+	third_party/python/Lib/_vendor/packaging/markers.py	\
+	third_party/python/Lib/_vendor/packaging/requirements.py	\
+	third_party/python/Lib/_vendor/packaging/specifiers.py	\
+	third_party/python/Lib/_vendor/packaging/_structures.py	\
+	third_party/python/Lib/_vendor/packaging/utils.py	\
+	third_party/python/Lib/_vendor/packaging/version.py	\
+	third_party/python/Lib/_vendor/pyparsing.py	\
+	third_party/python/Lib/_vendor/six.py	\
+	third_party/python/Lib/setuptools/__init__.py	\
+	third_party/python/Lib/setuptools/_deprecation_warning.py	\
+	third_party/python/Lib/setuptools/archive_util.py	\
+	third_party/python/Lib/setuptools/build_meta.py	\
+	third_party/python/Lib/setuptools/command/__init__.py	\
+	third_party/python/Lib/setuptools/command/alias.py	\
+	third_party/python/Lib/setuptools/command/bdist_egg.py	\
+	third_party/python/Lib/setuptools/command/bdist_rpm.py	\
+	third_party/python/Lib/setuptools/command/bdist_wininst.py	\
+	third_party/python/Lib/setuptools/command/build_clib.py	\
+	third_party/python/Lib/setuptools/command/build_ext.py	\
+	third_party/python/Lib/setuptools/command/build_py.py	\
+	third_party/python/Lib/setuptools/command/develop.py	\
+	third_party/python/Lib/setuptools/command/dist_info.py	\
+	third_party/python/Lib/setuptools/command/easy_install.py	\
+	third_party/python/Lib/setuptools/command/egg_info.py	\
+	third_party/python/Lib/setuptools/command/install.py	\
+	third_party/python/Lib/setuptools/command/install_egg_info.py	\
+	third_party/python/Lib/setuptools/command/install_lib.py	\
+	third_party/python/Lib/setuptools/command/install_scripts.py	\
+	third_party/python/Lib/setuptools/command/py36compat.py	\
+	third_party/python/Lib/setuptools/command/register.py	\
+	third_party/python/Lib/setuptools/command/rotate.py	\
+	third_party/python/Lib/setuptools/command/saveopts.py	\
+	third_party/python/Lib/setuptools/command/sdist.py	\
+	third_party/python/Lib/setuptools/command/setopt.py	\
+	third_party/python/Lib/setuptools/command/upload.py	\
+	third_party/python/Lib/setuptools/command/upload_docs.py	\
+	third_party/python/Lib/setuptools/config.py	\
+	third_party/python/Lib/setuptools/dep_util.py	\
+	third_party/python/Lib/setuptools/depends.py	\
+	third_party/python/Lib/setuptools/dist.py	\
+	third_party/python/Lib/setuptools/extension.py	\
+	third_party/python/Lib/setuptools/glibc.py	\
+	third_party/python/Lib/setuptools/glob.py	\
+	third_party/python/Lib/setuptools/launch.py	\
+	third_party/python/Lib/setuptools/monkey.py	\
+	third_party/python/Lib/setuptools/namespaces.py	\
+	third_party/python/Lib/setuptools/package_index.py	\
+	third_party/python/Lib/setuptools/pep425tags.py	\
+	third_party/python/Lib/setuptools/py27compat.py	\
+	third_party/python/Lib/setuptools/py31compat.py	\
+	third_party/python/Lib/setuptools/py33compat.py	\
+	third_party/python/Lib/setuptools/sandbox.py	\
+	third_party/python/Lib/setuptools/site-patch.py	\
+	third_party/python/Lib/setuptools/ssl_support.py	\
+	third_party/python/Lib/setuptools/unicode_utils.py	\
+	third_party/python/Lib/setuptools/version.py	\
+	third_party/python/Lib/setuptools/wheel.py
+	# third_party/python/Lib/setuptools/windows_support.py
+	# third_party/python/Lib/setuptools/lib2to3_ex.py	\
+
+THIRD_PARTY_PYTHON_STAGE2_SETUPTOOLS_DATA = \
+	third_party/python/Lib/distutils/command/command_template	\
+	third_party/python/Lib/site-packages/setuptools-41.2.0.dist-info/INSTALLER	\
+	third_party/python/Lib/site-packages/setuptools-41.2.0.dist-info/LICENSE	\
+	third_party/python/Lib/site-packages/setuptools-41.2.0.dist-info/METADATA	\
+	third_party/python/Lib/site-packages/setuptools-41.2.0.dist-info/RECORD	\
+	third_party/python/Lib/site-packages/setuptools-41.2.0.dist-info/WHEEL	\
+	third_party/python/Lib/site-packages/setuptools-41.2.0.dist-info/dependency_links.txt	\
+	third_party/python/Lib/site-packages/setuptools-41.2.0.dist-info/entry_points.txt	\
+	third_party/python/Lib/site-packages/setuptools-41.2.0.dist-info/top_level.txt	\
+	third_party/python/Lib/site-packages/setuptools-41.2.0.dist-info/zip-safe	
 
 THIRD_PARTY_PYTHON_STAGE2_A_DIRECTDEPS =				\
 	DSP_CORE							\
