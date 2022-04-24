@@ -670,6 +670,7 @@ THIRD_PARTY_PYTHON_STAGE2_A_SRCS =					\
 	third_party/python/Modules/itertoolsmodule.c			\
 	third_party/python/Modules/main.c				\
 	third_party/python/Modules/mathmodule.c				\
+	third_party/python/Modules/markupsafe/_speedups.c   \
 	third_party/python/Modules/mmapmodule.c				\
 	third_party/python/Modules/parsermodule.c			\
 	third_party/python/Modules/posixmodule.c			\
@@ -961,6 +962,8 @@ THIRD_PARTY_PYTHON_STAGE2_A_PYS =						\
 	third_party/python/Lib/mailcap.py					\
 	third_party/python/Lib/mimetypes.py					\
 	third_party/python/Lib/modulefinder.py					\
+	third_party/python/Lib/markupsafe/__init__.py				\
+	third_party/python/Lib/markupsafe/_native.py				\
 	third_party/python/Lib/multiprocessing/__init__.py			\
 	third_party/python/Lib/multiprocessing/connection.py			\
 	third_party/python/Lib/multiprocessing/context.py			\

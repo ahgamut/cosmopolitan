@@ -3,14 +3,6 @@ import re
 import string
 import typing as t
 
-if t.TYPE_CHECKING:
-    import typing_extensions as te
-
-    class HasHTML(te.Protocol):
-        def __html__(self) -> str:
-            pass
-
-
 __version__ = "2.0.1"
 
 _striptags_re = re.compile(r"(<!--.*?-->|<[^>]*>)")

@@ -1,4 +1,19 @@
-#include <Python.h>
+/*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:4;tab-width:8;coding:utf-8 -*-│
+│vi: set net ft=c ts=4 sts=4 sw=4 fenc=utf-8                                :vi│
+╞══════════════════════════════════════════════════════════════════════════════╡
+│ Markupsafe 2.0.1 -- _speedups.c                                              │
+│ BSD 3-Clause License                                                         │
+│ https://github.com/pallets/markupsafe/blob/2.0.1/LICENSE.rst                 │
+╚─────────────────────────────────────────────────────────────────────────────*/
+#include "third_party/python/Include/Python.h" // pls forgive
+#include "third_party/python/Include/yoink.h"
+/* clang-format off */
+
+PYTHON_PROVIDE("markupsafe._speedups");
+PYTHON_PROVIDE("markupsafe._speedups.escape");
+PYTHON_PROVIDE("markupsafe._speedups.escape_silent");
+PYTHON_PROVIDE("markupsafe._speedups.soft_str");
+PYTHON_PROVIDE("markupsafe._speedups.soft_unicode");
 
 static PyObject* markup;
 
@@ -337,3 +352,8 @@ PyInit__speedups(void)
 
 	return PyModule_Create(&module_definition);
 }
+
+_Section(".rodata.pytab.1") const struct _inittab _PyImport_Inittab__markupsafe_speedups = {
+    "markupsafe._speedups",
+    PyInit__speedups,
+};

@@ -515,3 +515,6 @@ PYTHON_YOINK("asyncio.unix_events");
 PYTHON_YOINK("asyncio.windows_events");
 PYTHON_YOINK("asyncio.windows_utils");
 #endif
+
+PYTHON_YOINK("markupsafe");
+PYTHON_YOINK("markupsafe._speedups");

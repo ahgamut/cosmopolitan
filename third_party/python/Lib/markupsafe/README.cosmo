@@ -6,3 +6,9 @@ ORIGIN
 LICENSE
 
     BSD 3-Clause License
+
+LOCAL CHANGES
+
+    moved _speedups to Modules/markupsafe
+    removed _speedups.pyi and py.typed
+    remove import of typing_extensions
