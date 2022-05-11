@@ -1525,7 +1525,7 @@ PyImport_ImportModuleLevelObject(PyObject *name, PyObject *globals,
                                  PyObject *locals, PyObject *fromlist,
                                  int level)
 {
-    _Py_IDENTIFIER(_find_and_load);
+    _Py_IDENTIFIER(_find_and_load_unlocked);
     _Py_IDENTIFIER(_handle_fromlist);
     PyObject *abs_name = NULL;
     PyObject *final_mod = NULL;
@@ -1607,7 +1607,7 @@ PyImport_ImportModuleLevelObject(PyObject *name, PyObject *globals,
     }
     else {
         mod = _PyObject_CallMethodIdObjArgs(interp->importlib,
-                                            &PyId__find_and_load, abs_name,
+                                            &PyId__find_and_load_unlocked, abs_name,
                                             interp->import_func, NULL);
         if (mod == NULL) {
             goto error;

@@ -258,7 +258,7 @@ def _load_module_shim(self, fullname):
         _exec(spec, module)
         return sys.modules[fullname]
     else:
-        return _load(spec)
+        return _load_unlocked(spec)
 
 # Module specifications #######################################################
 
@@ -304,17 +304,12 @@ class _installed_safely:
         sys.modules[self._spec.name] = self._module
 
     def __exit__(self, *args):
-        try:
-            spec = self._spec
-            if any(arg is not None for arg in args):
-                try:
-                    del sys.modules[spec.name]
-                except KeyError:
-                    pass
-            else:
-                _verbose_message('import {!r} # {!r}', spec.name, spec.loader)
-        finally:
-            self._spec._initializing = False
+        spec = self._spec
+        if any(arg is not None for arg in args):
+            sys.modules.pop(spec.name, None)
+        else:
+            _verbose_message('import {!r} # {!r}', spec.name, spec.loader)
+        spec._initializing = False
 
 
 class ModuleSpec:
@@ -531,24 +526,23 @@ def _module_repr_from_spec(spec):
 def _exec(spec, module):
     """Execute the spec's specified module in an existing module's namespace."""
     name = spec.name
-    with _ModuleLockManager(name):
-        if sys.modules.get(name) is not module:
-            msg = 'module {!r} not in sys.modules'.format(name)
-            raise ImportError(msg, name=name)
-        if spec.loader is None:
-            if spec.submodule_search_locations is None:
-                raise ImportError('missing loader', name=spec.name)
-            # namespace package
-            _init_module_attrs(spec, module, override=True)
-            return module
+    if sys.modules.get(name) is not module:
+        msg = 'module {!r} not in sys.modules'.format(name)
+        raise ImportError(msg, name=name)
+    if spec.loader is None:
+        if spec.submodule_search_locations is None:
+            raise ImportError('missing loader', name=spec.name)
+        # namespace package
         _init_module_attrs(spec, module, override=True)
-        if not hasattr(spec.loader, 'exec_module'):
-            # (issue19713) Once BuiltinImporter and ExtensionFileLoader
-            # have exec_module() implemented, we can add a deprecation
-            # warning here.
-            spec.loader.load_module(name)
-        else:
-            spec.loader.exec_module(module)
+        return module
+    _init_module_attrs(spec, module, override=True)
+    if not hasattr(spec.loader, 'exec_module'):
+        # (issue19713) Once BuiltinImporter and ExtensionFileLoader
+        # have exec_module() implemented, we can add a deprecation
+        # warning here.
+        spec.loader.load_module(name)
+    else:
+        spec.loader.exec_module(module)
     return sys.modules[name]
 
 
@@ -816,15 +810,14 @@ def _find_spec(name, path, target=None):
     # sys.modules provides one.
     is_reload = name in sys.modules
     for finder in meta_path:
-        with _ImportLockContext():
-            try:
-                find_spec = finder.find_spec
-            except AttributeError:
-                spec = _find_spec_legacy(finder, name, path)
-                if spec is None:
-                    continue
-            else:
-                spec = find_spec(name, path, target)
+        try:
+            find_spec = finder.find_spec
+        except AttributeError:
+            spec = _find_spec_legacy(finder, name, path)
+            if spec is None:
+                continue
+        else:
+            spec = find_spec(name, path, target)
         if spec is not None:
             # The parent import may have already imported this module.
             if not is_reload and name in sys.modules:
@@ -937,7 +930,7 @@ def _gcd_import(name, package=None, level=0):
     _sanity_check(name, package, level)
     if level > 0:
         name = _resolve_name(name, package, level)
-    return _find_and_load(name, _gcd_import)
+    return _find_and_load_unlocked(name, _gcd_import)
 
 
 def _handle_fromlist(module, fromlist, import_, *, recursive=False):
