@@ -4,8 +4,7 @@
 │ Python 3                                                                     │
 │ https://docs.python.org/3/license.html                                       │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "third_party/python/Include/import.h"
-
+#include "libc/bits/bits.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/stat.h"
 #include "libc/calls/struct/stat.macros.h"
@@ -22,9 +21,11 @@
 #include "third_party/python/Include/eval.h"
 #include "third_party/python/Include/fileutils.h"
 #include "third_party/python/Include/frameobject.h"
+#include "third_party/python/Include/import.h"
 #include "third_party/python/Include/listobject.h"
 #include "third_party/python/Include/longobject.h"
 #include "third_party/python/Include/marshal.h"
+#include "third_party/python/Include/memoryobject.h"
 #include "third_party/python/Include/modsupport.h"
 #include "third_party/python/Include/objimpl.h"
 #include "third_party/python/Include/osdefs.h"
@@ -75,6 +76,7 @@ static PyObject *extensions = NULL;
 
 static PyObject *initstr = NULL;
 
+static struct stat stinfo;
 /*[clinic input]
 module _imp
 [clinic start generated code]*/
@@ -816,21 +818,14 @@ PyImport_ExecCodeModuleWithPathnames(const char *name, PyObject *co,
             goto error;
     }
     else if (cpathobj != NULL) {
-        PyInterpreterState *interp = PyThreadState_GET()->interp;
-        _Py_IDENTIFIER(_get_sourcefile);
-
-        if (interp == NULL) {
-            Py_FatalError("PyImport_ExecCodeModuleWithPathnames: "
-                          "no interpreter!");
-        }
-
-        external= PyObject_GetAttrString(interp->importlib,
-                                         "_bootstrap_external");
-        if (external != NULL) {
-            pathobj = _PyObject_CallMethodIdObjArgs(external,
-                                                    &PyId__get_sourcefile, cpathobj,
-                                                    NULL);
-            Py_DECREF(external);
+        // cpathobj != NULL means cpathname != NULL
+        size_t cpathlen = strlen(cpathname);
+        char *pathname2 = _gc(strdup(cpathname));
+        if (endswith(pathname2, ".pyc"))
+        {
+            pathname2[cpathlen-2] = '\0'; // so now ends with .py
+            if(!stat(pathname2, &stinfo) && (stinfo.st_mode & S_IFMT) == S_IFREG)
+                pathobj = PyUnicode_FromStringAndSize(pathname2, cpathlen);
         }
         if (pathobj == NULL)
             PyErr_Clear();
@@ -2084,7 +2079,6 @@ dump buffer
 [clinic start generated code]*/
 /*[clinic end generated code: output=da39a3ee5e6b4b0d input=524ce2e021e4eba6]*/
 
-static struct stat stinfo;
 static PyObject *_check_path_mode(const char* path, uint32_t mode)
 {
     if (stat(path, &stinfo)) Py_RETURN_FALSE;
@@ -2159,7 +2153,7 @@ static PyObject *_imp_r_long(PyObject *module, PyObject *arg)
     if(!PyArg_Parse(arg, "y#:_r_long", &path, &n)) return 0;
     if(n > 4) n = 4;
     for(i = 0; i < n; i++) b[i] = path[i];
-    return PyLong_FromLong((long)(*(int32_t*)(b)));
+    return PyLong_FromLong(READ32LE(b));
 }
 PyDoc_STRVAR(_imp_r_long_doc, "convert 4 bytes to 32bit int");
 
@@ -2224,6 +2218,79 @@ exit:
 }
 PyDoc_STRVAR(_imp_compile_bytecode_doc, "compile bytecode to a code object");
 
+static PyObject *_imp_validate_bytecode_header(PyObject *module, PyObject *args, PyObject *kwargs)
+{
+    static char * _keywords[] = {"data", "source_stats", "name", "path", NULL};
+    static const char defname[] = "<bytecode>";
+    static const char defpath[] = "";
+
+    Py_buffer data = {NULL, NULL};
+    PyObject *source_stats = NULL;
+    PyObject *result = NULL;
+    const char *name = defname;
+    const char *path = defpath;
+
+    long magic = 0;
+    int64_t raw_timestamp = 0;
+    int64_t raw_size = 0;
+
+    PyObject *tmp = NULL;
+    int64_t source_size = 0;
+    int64_t source_mtime = 0;
+
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "|y*Ozz", _keywords,
+        &data, &source_stats, &name, &path)){
+        goto exit;
+    }
+
+    char* buf = data.buf;
+
+    if (data.len < 4 || (magic = READ16LE(buf)) != 3379 || buf[2] != '\r' || buf[3] != '\n') {
+        PyErr_Format(PyExc_ImportError, "bad magic number in %s: %d\n", name, magic);
+        goto exit;
+    }
+    if (data.len < 8) {
+        PyErr_Format(PyExc_ImportError, "reached EOF while reading timestamp in %s\n", name);
+        goto exit;
+    }
+    raw_timestamp = (int64_t)(READ32LE(&(buf[4])));
+    if (data.len < 12) {
+        PyErr_Format(PyExc_ImportError, "reached EOF while size of source in %s\n", name);
+        goto exit;
+    }
+    raw_size = (int64_t)(READ32LE(&(buf[8])));
+
+    if(source_stats && PyDict_Check(source_stats))
+    {
+        if((tmp = PyDict_GetItemString(source_stats, "mtime")) && PyLong_Check(tmp))
+        {
+            source_mtime = PyLong_AsLong(tmp);
+            if(source_mtime != raw_timestamp)
+                PyErr_Format(PyExc_ImportError, "bytecode is stale for %s\n", name);
+        }
+        Py_XDECREF(tmp);
+        if((tmp = PyDict_GetItemString(source_stats, "size")) && PyLong_Check(tmp))
+        {
+            source_size = PyLong_AsLong(tmp) & 0xFFFFFFFF;
+            if(source_size != raw_size)
+                PyErr_Format(PyExc_ImportError, "bytecode is stale for %s\n", name);
+        }
+        Py_XDECREF(tmp);
+    }
+    // shift buffer pointer to prevent copying
+    data.buf = &(buf[12]);
+    data.len -= 12;
+    result = PyMemoryView_FromBuffer(&data);
+    // TODO: figure out if refcounts are managed between data and result
+
+    // if there is a memory fault, use the below line which copies
+    // result = PyBytes_FromStringAndSize(&(buf[12]), data.len-12);
+exit:
+    if(data.obj) PyBuffer_Release(&data);
+    return result;
+}
+PyDoc_STRVAR(_imp_validate_bytecode_header_doc, "validate first 12 bytes and stat info of bytecode");
+
 PyDoc_STRVAR(doc_imp,
 "(Extremely) low-level import machinery bits as used by importlib and imp.");
 
@@ -2252,6 +2319,7 @@ static PyMethodDef imp_methods[] = {
     {"_relax_case", _imp_relax_case, METH_NOARGS, NULL},
     {"_write_atomic", (PyCFunction)_imp_write_atomic, METH_FASTCALL, _imp_write_atomic_doc},
     {"_compile_bytecode", (PyCFunction)_imp_compile_bytecode, METH_VARARGS | METH_KEYWORDS , _imp_compile_bytecode_doc},
+    {"_validate_bytecode_header", (PyCFunction)_imp_validate_bytecode_header, METH_VARARGS | METH_KEYWORDS , _imp_validate_bytecode_header_doc},
     {NULL, NULL}  /* sentinel */
 };
 

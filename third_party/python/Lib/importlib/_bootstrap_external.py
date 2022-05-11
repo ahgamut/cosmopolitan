@@ -219,22 +219,6 @@ def source_from_cache(path):
     return _os.fspath(path)[:-1]
 
 
-def _get_sourcefile(bytecode_path):
-    """Convert a bytecode file path to a source path (if possible).
-
-    This function exists purely for backwards-compatibility for
-    PyImport_ExecCodeModuleWithFilenames() in the C API.
-
-    """
-    if len(bytecode_path) == 0:
-        return None
-    rest, _, extension = bytecode_path.rpartition('.')
-    if not rest or extension.lower()[-3:] != 'pyc':
-        return bytecode_path
-    source_path = bytecode_path[:-1]
-    return source_path if _path_isfile(source_path) else bytecode_path
-
-
 def _get_cached(filename):
     if filename.endswith(tuple(SOURCE_SUFFIXES)):
          return cache_from_source(filename)
@@ -278,61 +262,6 @@ def _find_module_shim(self, fullname):
         msg = 'Not importing directory {}: missing __init__'
         _warnings.warn(msg.format(portions[0]), ImportWarning)
     return loader
-
-
-def _validate_bytecode_header(data, source_stats=None, name=None, path=None):
-    """Validate the header of the passed-in bytecode against source_stats (if
-    given) and returning the bytecode that can be compiled by compile().
-
-    All other arguments are used to enhance error reporting.
-
-    ImportError is raised when the magic number is incorrect or the bytecode is
-    found to be stale. EOFError is raised when the data is found to be
-    truncated.
-
-    """
-    exc_details = {}
-    if name is not None:
-        exc_details['name'] = name
-    else:
-        # To prevent having to make all messages have a conditional name.
-        name = '<bytecode>'
-    if path is not None:
-        exc_details['path'] = path
-    magic = data[:4]
-    raw_timestamp = data[4:8]
-    raw_size = data[8:12]
-    if magic != MAGIC_NUMBER:
-        message = 'bad magic number in {!r}: {!r}'.format(name, magic)
-        _bootstrap._verbose_message('{}', message)
-        raise ImportError(message, **exc_details)
-    elif len(raw_timestamp) != 4:
-        message = 'reached EOF while reading timestamp in {!r}'.format(name)
-        _bootstrap._verbose_message('{}', message)
-        raise EOFError(message)
-    elif len(raw_size) != 4:
-        message = 'reached EOF while reading size of source in {!r}'.format(name)
-        _bootstrap._verbose_message('{}', message)
-        raise EOFError(message)
-    if source_stats is not None:
-        try:
-            source_mtime = int(source_stats['mtime'])
-        except KeyError:
-            pass
-        else:
-            if _r_long(raw_timestamp) != source_mtime:
-                message = 'bytecode is stale for {!r}'.format(name)
-                _bootstrap._verbose_message('{}', message)
-                raise ImportError(message, **exc_details)
-        try:
-            source_size = source_stats['size'] & 0xFFFFFFFF
-        except KeyError:
-            pass
-        else:
-            if _r_long(raw_size) != source_size:
-                raise ImportError('bytecode is stale for {!r}'.format(name),
-                                  **exc_details)
-    return data[12:]
 
 
 def _code_to_bytecode(code, mtime=0, source_size=0):
@@ -1221,7 +1150,8 @@ def _setup(_bootstrap_module):
         "_w_long",
         "_relax_case",
         "_write_atomic",
-         "_compile_bytecode",
+        "_compile_bytecode",
+        "_validate_bytecode_header",
     ):
         self_mod_dict[port] = _imp_dict[port]
     for name in (
