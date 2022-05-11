@@ -4,6 +4,8 @@
 │ Python 3                                                                     │
 │ https://docs.python.org/3/license.html                                       │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "third_party/python/Include/import.h"
+
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/stat.h"
 #include "libc/calls/struct/stat.macros.h"
@@ -20,7 +22,6 @@
 #include "third_party/python/Include/eval.h"
 #include "third_party/python/Include/fileutils.h"
 #include "third_party/python/Include/frameobject.h"
-#include "third_party/python/Include/import.h"
 #include "third_party/python/Include/listobject.h"
 #include "third_party/python/Include/longobject.h"
 #include "third_party/python/Include/marshal.h"
@@ -2172,21 +2173,56 @@ static PyObject *_imp_relax_case(PyObject *module, PyObject *Py_UNUSED(ignored))
 static PyObject *_imp_write_atomic(PyObject *module, PyObject **args, Py_ssize_t nargs, PyObject *kwnames)
 {
     const char* path;
-    const char* data;
-    Py_ssize_t n, datalen;
+    Py_ssize_t n;
+    Py_buffer data = {NULL, NULL};
     uint32_t mode = 0666;
     int fd;
     if (!_PyArg_NoStackKeywords("_write_atomic", kwnames)) return 0;
-    if (!_PyArg_ParseStack(args, nargs, "s#y#|I:_write_atomic", &path, &n, &data, &datalen, &mode)) return 0;
+    if (!_PyArg_ParseStack(args, nargs, "s#y*|I:_write_atomic", &path, &n, &data, &mode)) return 0;
     mode &= 0666;
     if ((fd = open(path, O_EXCL | O_CREAT | O_WRONLY, mode)) == -1
-            || write(fd, data, datalen) == -1) {
+            || write(fd, data.buf, data.len) == -1) {
         PyErr_Format(PyExc_OSError, "");
+        if (data.obj) PyBuffer_Release(&data);
         return 0;
     }
+    if (data.obj) PyBuffer_Release(&data);
     Py_RETURN_NONE;
 }
 PyDoc_STRVAR(_imp_write_atomic_doc, "atomic write to a file");
+
+static PyObject *_imp_compile_bytecode(PyObject *module, PyObject *args, PyObject *kwargs)
+{
+    static char * _keywords[] = {"data", "name", "bytecode_path", "source_path", NULL};
+    Py_buffer data = {NULL, NULL};
+    const char* name = NULL;
+    const char* bpath = NULL;
+    Py_buffer spath = {NULL, NULL};
+    PyObject *code = NULL;
+
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "|y*zzz*", _keywords,
+        &data, &name, &bpath, &spath)){
+        goto exit;
+    }
+    if(!(code = PyMarshal_ReadObjectFromString(data.buf, data.len)))
+        goto exit;
+    if (!PyCode_Check(code)) {
+        PyErr_Format(PyExc_ImportError, "non-code object in %s\n", bpath);
+        goto exit;
+    }
+    else {
+        if (Py_VerboseFlag)
+            PySys_FormatStderr("# code object from '%s'\n", bpath);
+        if (spath.buf != NULL)
+            update_compiled_module((PyCodeObject*)code, PyUnicode_FromStringAndSize(spath.buf, spath.len));
+    }
+
+exit:
+    if(data.obj) PyBuffer_Release(&data);
+    if(spath.obj) PyBuffer_Release(&spath);
+    return code;
+}
+PyDoc_STRVAR(_imp_compile_bytecode_doc, "compile bytecode to a code object");
 
 PyDoc_STRVAR(doc_imp,
 "(Extremely) low-level import machinery bits as used by importlib and imp.");
@@ -2215,6 +2251,7 @@ static PyMethodDef imp_methods[] = {
     {"_r_long", _imp_r_long, METH_O, _imp_r_long_doc},
     {"_relax_case", _imp_relax_case, METH_NOARGS, NULL},
     {"_write_atomic", (PyCFunction)_imp_write_atomic, METH_FASTCALL, _imp_write_atomic_doc},
+    {"_compile_bytecode", (PyCFunction)_imp_compile_bytecode, METH_VARARGS | METH_KEYWORDS , _imp_compile_bytecode_doc},
     {NULL, NULL}  /* sentinel */
 };
 

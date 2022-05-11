@@ -335,18 +335,6 @@ def _validate_bytecode_header(data, source_stats=None, name=None, path=None):
     return data[12:]
 
 
-def _compile_bytecode(data, name=None, bytecode_path=None, source_path=None):
-    """Compile bytecode as returned by _validate_bytecode_header()."""
-    code = marshal.loads(data)
-    if isinstance(code, _code_type):
-        _bootstrap._verbose_message('code object from {!r}', bytecode_path)
-        if source_path is not None:
-            _imp._fix_co_filename(code, source_path)
-        return code
-    else:
-        raise ImportError('Non-code object in {!r}'.format(bytecode_path),
-                          name=name, path=bytecode_path)
-
 def _code_to_bytecode(code, mtime=0, source_size=0):
     """Compile a code object into bytecode for writing out to a byte-compiled
     file."""
@@ -1233,6 +1221,7 @@ def _setup(_bootstrap_module):
         "_w_long",
         "_relax_case",
         "_write_atomic",
+         "_compile_bytecode",
     ):
         self_mod_dict[port] = _imp_dict[port]
     for name in (
