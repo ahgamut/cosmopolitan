@@ -72,36 +72,6 @@ def _path_split(path):
     return '', path
 
 
-def _path_stat(path):
-    """Stat the path.
-
-    Made a separate function to make it easier to override in experiments
-    (e.g. cache stat results).
-
-    """
-    return _os.stat(path)
-
-
-def _path_is_mode_type(path, mode):
-    """Test whether the path is the specified mode type."""
-    try:
-        stat_info = _path_stat(path)
-    except OSError:
-        return False
-    return (stat_info.st_mode & 0o170000) == mode
-
-
-def _path_isfile(path):
-    """Replacement for os.path.isfile."""
-    return _path_is_mode_type(path, 0o100000)
-
-
-def _path_isdir(path):
-    """Replacement for os.path.isdir."""
-    path = path or _os.getcwd()
-    return _path_is_mode_type(path, 0o040000)
-
-
 def _write_atomic(path, data, mode=0o666):
     """Best-effort function to write data to a path atomically.
     Be prepared to handle a FileExistsError if concurrent writing of the
@@ -369,18 +339,6 @@ def _get_cached(filename):
         return None
 
 
-def _calc_mode(path):
-    """Calculate the mode permissions for a bytecode file."""
-    try:
-        mode = _path_stat(path).st_mode
-    except OSError:
-        mode = 0o666
-    # We always ensure write access so we can update cached files
-    # later even when the source files are read-only on Windows (#6074)
-    mode |= 0o200
-    return mode
-
-
 def _check_name(method):
     """Decorator to verify that the module being requested matches the one the
     loader can handle.
@@ -621,11 +579,7 @@ class WindowsRegistryFinder:
     @classmethod
     def find_spec(cls, fullname, path=None, target=None):
         filepath = cls._search_registry(fullname)
-        if filepath is None:
-            return None
-        try:
-            _path_stat(filepath)
-        except OSError:
+        if filepath is None or not _path_isfile(filepath):
             return None
         for loader, suffixes in _get_supported_file_loaders():
             if filepath.endswith(tuple(suffixes)):
@@ -834,8 +788,8 @@ class SourceFileLoader(FileLoader, SourceLoader):
 
     def path_stats(self, path):
         """Return the metadata for the path."""
-        st = _path_stat(path)
-        return {'mtime': st.st_mtime, 'size': st.st_size}
+        st = _calc_mtime_and_size(path)
+        return {'mtime': st[0], 'size': st[1]}
 
     def _cache_bytecode(self, source_path, bytecode_path, data):
         # Adapt between the two APIs
@@ -1231,10 +1185,7 @@ class FileFinder:
         """
         is_namespace = False
         tail_module = fullname.rpartition('.')[2]
-        try:
-            mtime = _path_stat(self.path or _os.getcwd()).st_mtime
-        except OSError:
-            mtime = -1
+        mtime = _calc_mtime_and_size(self.path)[0]
         if mtime != self._path_mtime:
             self._fill_cache()
             self._path_mtime = mtime
@@ -1372,6 +1323,11 @@ def _setup(_bootstrap_module):
     builtin_from_name = _bootstrap._builtin_from_name
     # Directly load built-in modules needed during bootstrap.
     self_module = sys.modules[__name__]
+    setattr(self_module, "_path_is_mode_type", _imp._path_is_mode_type)
+    setattr(self_module, "_path_isfile", _imp._path_isfile)
+    setattr(self_module, "_path_isdir", _imp._path_isdir)
+    setattr(self_module, "_calc_mode", _imp._calc_mode)
+    setattr(self_module, "_calc_mtime_and_size", _imp._calc_mtime_and_size)
     for builtin_name in ('_io', '_warnings', 'builtins', 'marshal', 'posix', '_weakref'):
         setattr(self_module, builtin_name, sys.modules.get(builtin_name, builtin_from_name(builtin_name)))
 

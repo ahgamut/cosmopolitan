@@ -4,6 +4,11 @@
 │ Python 3                                                                     │
 │ https://docs.python.org/3/license.html                                       │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/calls/calls.h"
+#include "libc/calls/struct/stat.h"
+#include "libc/calls/struct/stat.macros.h"
+#include "libc/runtime/gc.h"
+#include "libc/sysv/consts/s.h"
 #include "third_party/python/Include/Python-ast.h"
 #include "third_party/python/Include/abstract.h"
 #include "third_party/python/Include/boolobject.h"
@@ -56,6 +61,10 @@ PYTHON_PROVIDE("_imp.is_frozen");
 PYTHON_PROVIDE("_imp.is_frozen_package");
 PYTHON_PROVIDE("_imp.lock_held");
 PYTHON_PROVIDE("_imp.release_lock");
+PYTHON_PROVIDE("_imp._path_is_mode_type");
+PYTHON_PROVIDE("_imp._path_isfile");
+PYTHON_PROVIDE("_imp._path_isdir");
+PYTHON_PROVIDE("_imp._calc_mode");
 
 #define CACHEDIR "__pycache__"
 
@@ -2071,6 +2080,64 @@ dump buffer
 [clinic start generated code]*/
 /*[clinic end generated code: output=da39a3ee5e6b4b0d input=524ce2e021e4eba6]*/
 
+static struct stat stinfo;
+static PyObject *_check_path_mode(const char* path, uint32_t mode)
+{
+    if (stat(path, &stinfo)) Py_RETURN_FALSE;
+    if ((stinfo.st_mode & S_IFMT) == mode) Py_RETURN_TRUE;
+    Py_RETURN_FALSE;
+}
+
+static PyObject *_imp_path_is_mode_type(PyObject *module, PyObject *args)
+{
+    Py_ssize_t n;
+    const char *path;
+    uint32_t mode;
+    if (!PyArg_ParseTuple(args, "s#I:_path_is_mode_type", &path, &n, &mode)) return 0;
+    return _check_path_mode(path, mode);
+}
+PyDoc_STRVAR(_imp_path_is_mode_type_doc, "check if path is mode type");
+
+static PyObject *_imp_path_isfile(PyObject *module, PyObject *arg)
+{
+    Py_ssize_t n;
+    const char *path;
+    if (!PyArg_Parse(arg, "s#:_path_isfile", &path, &n)) return 0;
+    return _check_path_mode(path, S_IFREG);
+}
+PyDoc_STRVAR(_imp_path_isfile_doc, "check if path is file");
+
+static PyObject *_imp_path_isdir(PyObject *module, PyObject *arg)
+{
+    Py_ssize_t n;
+    const char *path;
+    if (!PyArg_Parse(arg, "z#:_path_isdir", &path, &n)) return 0;
+    if (path == NULL) path = _gc(getcwd(NULL, 0));
+    return _check_path_mode(path, S_IFDIR);
+}
+PyDoc_STRVAR(_imp_path_isdir_doc, "check if path is dir");
+
+static PyObject *_imp_calc_mode(PyObject *module, PyObject *arg)
+{
+    Py_ssize_t n;
+    const char *path;
+    if (!PyArg_Parse(arg, "s#:_calc_mode", &path, &n)) return 0;
+    if (stat(path, &stinfo)) return PyLong_FromUnsignedLong((unsigned long)0666);
+    return PyLong_FromUnsignedLong((unsigned long)stinfo.st_mode | 0200);
+}
+PyDoc_STRVAR(_imp_calc_mode_doc, "return stat.st_mode of path");
+
+static PyObject *_imp_calc_mtime_and_size(PyObject *module, PyObject *arg)
+{
+    Py_ssize_t n;
+    const char *path;
+    if (!PyArg_Parse(arg, "z#:_calc_mtime_and_size", &path, &n)) return 0;
+    if (path == NULL) path = _gc(getcwd(NULL, 0));
+    if (stat(path, &stinfo)) return PyTuple_Pack(2, PyLong_FromLong((long)-1), PyLong_FromLong((long)0));
+    return PyTuple_Pack(2, PyLong_FromLong((long)stinfo.st_mtime), PyLong_FromLong((long)stinfo.st_size));
+}
+PyDoc_STRVAR(_imp_calc_mtime_and_size_doc, "return stat.st_mtime and stat.st_size of path in tuple");
+
 
 PyDoc_STRVAR(doc_imp,
 "(Extremely) low-level import machinery bits as used by importlib and imp.");
@@ -2090,6 +2157,11 @@ static PyMethodDef imp_methods[] = {
     _IMP_EXEC_DYNAMIC_METHODDEF
     _IMP_EXEC_BUILTIN_METHODDEF
     _IMP__FIX_CO_FILENAME_METHODDEF
+    {"_path_is_mode_type", _imp_path_is_mode_type, METH_VARARGS, _imp_path_is_mode_type_doc},
+    {"_path_isfile", _imp_path_isfile, METH_O, _imp_path_isfile_doc},
+    {"_path_isdir", _imp_path_isdir, METH_O, _imp_path_isdir_doc},
+    {"_calc_mode", _imp_calc_mode, METH_O, _imp_calc_mode_doc},
+    {"_calc_mtime_and_size", _imp_calc_mtime_and_size, METH_O, _imp_calc_mtime_and_size_doc},
     {NULL, NULL}  /* sentinel */
 };
 
