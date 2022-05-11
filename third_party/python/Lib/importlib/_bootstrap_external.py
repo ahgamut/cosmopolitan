@@ -26,6 +26,11 @@ _CASE_INSENSITIVE_PLATFORMS_BYTES_KEY = 'cygwin', 'darwin'
 _CASE_INSENSITIVE_PLATFORMS =  (_CASE_INSENSITIVE_PLATFORMS_BYTES_KEY
                                 + _CASE_INSENSITIVE_PLATFORMS_STR_KEY)
 
+def _wrap(new, old):
+    for replace in ['__module__', '__name__', '__qualname__', '__doc__']:
+        if hasattr(old, replace):
+            setattr(new, replace, getattr(old, replace))
+    new.__dict__.update(old.__dict__)
 
 def _make_relax_case():
     if sys.platform.startswith(_CASE_INSENSITIVE_PLATFORMS):
@@ -42,16 +47,6 @@ def _make_relax_case():
             """True if filenames must be checked case-insensitively."""
             return False
     return _relax_case
-
-
-def _w_long(x):
-    """Convert a 32-bit integer to little-endian."""
-    return (int(x) & 0xFFFFFFFF).to_bytes(4, 'little')
-
-
-def _r_long(int_bytes):
-    """Convert 4 bytes in little-endian to an integer."""
-    return int.from_bytes(int_bytes, 'little')
 
 
 def _path_join(*path_parts):
@@ -72,29 +67,7 @@ def _path_split(path):
     return '', path
 
 
-def _write_atomic(path, data, mode=0o666):
-    """Best-effort function to write data to a path atomically.
-    Be prepared to handle a FileExistsError if concurrent writing of the
-    temporary file is attempted."""
-    # id() is used to generate a pseudo-random filename.
-    path_tmp = '{}.{}'.format(path, id(path))
-    fd = _os.open(path_tmp,
-                  _os.O_EXCL | _os.O_CREAT | _os.O_WRONLY, mode & 0o666)
-    try:
-        # We first write data to a temporary file, and then use os.replace() to
-        # perform an atomic rename.
-        with _io.FileIO(fd, 'wb') as file:
-            file.write(data)
-        _os.replace(path_tmp, path)
-    except OSError:
-        try:
-            _os.unlink(path_tmp)
-        except OSError:
-            pass
-        raise
-
-
-_code_type = type(_write_atomic.__code__)
+_code_type = type(_wrap.__code__)
 
 
 # Finder/loader utility code ###############################################
@@ -354,11 +327,6 @@ def _check_name(method):
             raise ImportError('loader for %s cannot handle %s' %
                                 (self.name, name), name=name)
         return method(self, name, *args, **kwargs)
-    def _wrap(new, old):
-        for replace in ['__module__', '__name__', '__qualname__', '__doc__']:
-            if hasattr(old, replace):
-                setattr(new, replace, getattr(old, replace))
-        new.__dict__.update(old.__dict__)
     _wrap(_check_name_wrapper, method)
     return _check_name_wrapper
 
@@ -1307,7 +1275,6 @@ def _get_supported_file_loaders():
     bytecode = SourcelessFileLoader, BYTECODE_SUFFIXES
     return [bytecode, extensions, source]
 
-
 def _setup(_bootstrap_module):
     """Setup the path-based importers for importlib by importing needed
     built-in modules and injecting them into the global namespace.
@@ -1322,25 +1289,40 @@ def _setup(_bootstrap_module):
 
     builtin_from_name = _bootstrap._builtin_from_name
     # Directly load built-in modules needed during bootstrap.
-    self_module = sys.modules[__name__]
-    setattr(self_module, "_path_is_mode_type", _imp._path_is_mode_type)
-    setattr(self_module, "_path_isfile", _imp._path_isfile)
-    setattr(self_module, "_path_isdir", _imp._path_isdir)
-    setattr(self_module, "_calc_mode", _imp._calc_mode)
-    setattr(self_module, "_calc_mtime_and_size", _imp._calc_mtime_and_size)
-    for builtin_name in ('_io', '_warnings', 'builtins', 'marshal', 'posix', '_weakref'):
-        setattr(self_module, builtin_name, sys.modules.get(builtin_name, builtin_from_name(builtin_name)))
+    self_mod_dict = sys.modules[__name__].__dict__
+    _imp_dict = _imp.__dict__
+    for port in (
+        "_path_is_mode_type",
+        "_path_isfile",
+        "_path_isdir",
+        "_calc_mode",
+        "_calc_mtime_and_size",
+        "_r_long",
+        "_w_long",
+        "_relax_case",
+        "_write_atomic",
+    ):
+        self_mod_dict[port] = _imp_dict[port]
+    for name in (
+        "_io",
+        "_warnings",
+        "builtins",
+        "marshal",
+        "posix",
+        "_weakref",
+    ):
+        self_mod_dict[name] = sys.modules.get(
+            name, builtin_from_name(name)
+        )
 
     # Directly load the os module (needed during bootstrap).
-    os_details = ('posix', ['/']), ('nt', ['\\', '/'])
+    os_details = ("posix", ["/"]), ("nt", ["\\", "/"])
     builtin_os, path_separators = os_details[0]
-    setattr(self_module, '_os', sys.modules.get(builtin_os, builtin_from_name(builtin_os)))
-    setattr(self_module, 'path_sep', path_separators[0])
-    setattr(self_module, 'path_separators', ''.join(path_separators))
-    setattr(self_module, '_thread', None)
-
+    self_mod_dict["_os"] = sys.modules.get(builtin_os, builtin_from_name(builtin_os))
+    self_mod_dict["path_sep"] =  path_separators[0]
+    self_mod_dict["path_separators"] = "".join(path_separators)
+    self_mod_dict["_thread"] = None
     # Constants
-    setattr(self_module, '_relax_case', _make_relax_case())
     EXTENSION_SUFFIXES.extend(_imp.extension_suffixes())
 
 def _install(_bootstrap_module):

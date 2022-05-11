@@ -8,6 +8,7 @@
 #include "libc/calls/struct/stat.h"
 #include "libc/calls/struct/stat.macros.h"
 #include "libc/runtime/gc.h"
+#include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/s.h"
 #include "third_party/python/Include/Python-ast.h"
 #include "third_party/python/Include/abstract.h"
@@ -535,7 +536,8 @@ PyImport_Cleanup(void)
 long
 PyImport_GetMagicNumber(void)
 {
-    long res;
+    /* so many indirections for a single constant */
+    /* 
     PyInterpreterState *interp = PyThreadState_Get()->interp;
     PyObject *external, *pyc_magic;
 
@@ -548,7 +550,8 @@ PyImport_GetMagicNumber(void)
         return -1;
     res = PyLong_AsLong(pyc_magic);
     Py_DECREF(pyc_magic);
-    return res;
+    */
+    return 3379;
 }
 
 
@@ -2088,12 +2091,13 @@ static PyObject *_check_path_mode(const char* path, uint32_t mode)
     Py_RETURN_FALSE;
 }
 
-static PyObject *_imp_path_is_mode_type(PyObject *module, PyObject *args)
+static PyObject *_imp_path_is_mode_type(PyObject *module, PyObject **args, Py_ssize_t nargs, PyObject *kwnames)
 {
     Py_ssize_t n;
     const char *path;
     uint32_t mode;
-    if (!PyArg_ParseTuple(args, "s#I:_path_is_mode_type", &path, &n, &mode)) return 0;
+    if (!_PyArg_NoStackKeywords("_path_is_mode_type", kwnames)) return 0;
+    if (!_PyArg_ParseStack(args, nargs, "s#I:_path_is_mode_type", &path, &n, &mode)) return 0;
     return _check_path_mode(path, mode);
 }
 PyDoc_STRVAR(_imp_path_is_mode_type_doc, "check if path is mode type");
@@ -2138,6 +2142,51 @@ static PyObject *_imp_calc_mtime_and_size(PyObject *module, PyObject *arg)
 }
 PyDoc_STRVAR(_imp_calc_mtime_and_size_doc, "return stat.st_mtime and stat.st_size of path in tuple");
 
+static PyObject *_imp_w_long(PyObject *module, PyObject *arg)
+{
+    int32_t value;
+    if(!PyArg_Parse(arg, "i:_w_long", &value)) return 0;
+    return PyBytes_FromStringAndSize((const char*)(&value), 4);
+}
+PyDoc_STRVAR(_imp_w_long_doc, "convert 32-bit int to 4 bytes");
+
+static PyObject *_imp_r_long(PyObject *module, PyObject *arg)
+{
+    char b[4] = {0};
+    const char* path;
+    Py_ssize_t i, n;
+    if(!PyArg_Parse(arg, "y#:_r_long", &path, &n)) return 0;
+    if(n > 4) n = 4;
+    for(i = 0; i < n; i++) b[i] = path[i];
+    return PyLong_FromLong((long)(*(int32_t*)(b)));
+}
+PyDoc_STRVAR(_imp_r_long_doc, "convert 4 bytes to 32bit int");
+
+static PyObject *_imp_relax_case(PyObject *module, PyObject *Py_UNUSED(ignored))
+{
+    // TODO: check if this affects case-insensitive system imports.
+    // if yes, then have an IsWindows() check along w/ PYTHONCASEOK
+    Py_RETURN_FALSE;
+}
+
+static PyObject *_imp_write_atomic(PyObject *module, PyObject **args, Py_ssize_t nargs, PyObject *kwnames)
+{
+    const char* path;
+    const char* data;
+    Py_ssize_t n, datalen;
+    uint32_t mode = 0666;
+    int fd;
+    if (!_PyArg_NoStackKeywords("_write_atomic", kwnames)) return 0;
+    if (!_PyArg_ParseStack(args, nargs, "s#y#|I:_write_atomic", &path, &n, &data, &datalen, &mode)) return 0;
+    mode &= 0666;
+    if ((fd = open(path, O_EXCL | O_CREAT | O_WRONLY, mode)) == -1
+            || write(fd, data, datalen) == -1) {
+        PyErr_Format(PyExc_OSError, "");
+        return 0;
+    }
+    Py_RETURN_NONE;
+}
+PyDoc_STRVAR(_imp_write_atomic_doc, "atomic write to a file");
 
 PyDoc_STRVAR(doc_imp,
 "(Extremely) low-level import machinery bits as used by importlib and imp.");
@@ -2157,11 +2206,15 @@ static PyMethodDef imp_methods[] = {
     _IMP_EXEC_DYNAMIC_METHODDEF
     _IMP_EXEC_BUILTIN_METHODDEF
     _IMP__FIX_CO_FILENAME_METHODDEF
-    {"_path_is_mode_type", _imp_path_is_mode_type, METH_VARARGS, _imp_path_is_mode_type_doc},
+    {"_path_is_mode_type", (PyCFunction)_imp_path_is_mode_type, METH_FASTCALL, _imp_path_is_mode_type_doc},
     {"_path_isfile", _imp_path_isfile, METH_O, _imp_path_isfile_doc},
     {"_path_isdir", _imp_path_isdir, METH_O, _imp_path_isdir_doc},
     {"_calc_mode", _imp_calc_mode, METH_O, _imp_calc_mode_doc},
     {"_calc_mtime_and_size", _imp_calc_mtime_and_size, METH_O, _imp_calc_mtime_and_size_doc},
+    {"_w_long", _imp_w_long, METH_O, _imp_w_long_doc},
+    {"_r_long", _imp_r_long, METH_O, _imp_r_long_doc},
+    {"_relax_case", _imp_relax_case, METH_NOARGS, NULL},
+    {"_write_atomic", (PyCFunction)_imp_write_atomic, METH_FASTCALL, _imp_write_atomic_doc},
     {NULL, NULL}  /* sentinel */
 };
 
