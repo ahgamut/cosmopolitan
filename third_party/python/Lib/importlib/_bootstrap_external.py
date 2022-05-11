@@ -32,22 +32,6 @@ def _wrap(new, old):
             setattr(new, replace, getattr(old, replace))
     new.__dict__.update(old.__dict__)
 
-def _make_relax_case():
-    if sys.platform.startswith(_CASE_INSENSITIVE_PLATFORMS):
-        if sys.platform.startswith(_CASE_INSENSITIVE_PLATFORMS_STR_KEY):
-            key = 'PYTHONCASEOK'
-        else:
-            key = b'PYTHONCASEOK'
-
-        def _relax_case():
-            """True if filenames must be checked case-insensitively."""
-            return key in _os.environ
-    else:
-        def _relax_case():
-            """True if filenames must be checked case-insensitively."""
-            return False
-    return _relax_case
-
 
 def _path_join(*path_parts):
     """Replacement for os.path.join()."""
@@ -220,31 +204,7 @@ def cache_from_source(path, debug_override=None, *, optimization=None):
     If sys.implementation.cache_tag is None then NotImplementedError is raised.
 
     """
-    if debug_override is not None:
-        _warnings.warn('the debug_override parameter is deprecated; use '
-                       "'optimization' instead", DeprecationWarning)
-        if optimization is not None:
-            message = 'debug_override or optimization must be set to None'
-            raise TypeError(message)
-        optimization = '' if debug_override else 1
-    path = _os.fspath(path)
-    head, tail = _path_split(path)
-    base, sep, rest = tail.rpartition('.')
-    tag = sys.implementation.cache_tag
-    if tag is None:
-        raise NotImplementedError('sys.implementation.cache_tag is None')
-    almost_filename = ''.join([(base if base else rest), sep, tag])
-    if optimization is None:
-        if sys.flags.optimize == 0:
-            optimization = ''
-        else:
-            optimization = sys.flags.optimize
-    optimization = str(optimization)
-    if optimization != '':
-        if not optimization.isalnum():
-            raise ValueError('{!r} is not alphanumeric'.format(optimization))
-        almost_filename = '{}.{}{}'.format(almost_filename, _OPT, optimization)
-    return _path_join(head, _PYCACHE, almost_filename + BYTECODE_SUFFIXES[0])
+    return "{}c".format(_os.fspath(path))
 
 
 def source_from_cache(path):
@@ -256,29 +216,7 @@ def source_from_cache(path):
     sys.implementation.cache_tag is None then NotImplementedError is raised.
 
     """
-    if sys.implementation.cache_tag is None:
-        raise NotImplementedError('sys.implementation.cache_tag is None')
-    path = _os.fspath(path)
-    head, pycache_filename = _path_split(path)
-    head, pycache = _path_split(head)
-    if pycache != _PYCACHE:
-        raise ValueError('{} not bottom-level directory in '
-                         '{!r}'.format(_PYCACHE, path))
-    dot_count = pycache_filename.count('.')
-    if dot_count not in {2, 3}:
-        raise ValueError('expected only 2 or 3 dots in '
-                         '{!r}'.format(pycache_filename))
-    elif dot_count == 3:
-        optimization = pycache_filename.rsplit('.', 2)[-2]
-        if not optimization.startswith(_OPT):
-            raise ValueError("optimization portion of filename does not start "
-                             "with {!r}".format(_OPT))
-        opt_level = optimization[len(_OPT):]
-        if not opt_level.isalnum():
-            raise ValueError("optimization level {!r} is not an alphanumeric "
-                             "value".format(optimization))
-    base_filename = pycache_filename.partition('.')[0]
-    return _path_join(head, base_filename + SOURCE_SUFFIXES[0])
+    return _os.fspath(path)[:-1]
 
 
 def _get_sourcefile(bytecode_path):
@@ -291,21 +229,15 @@ def _get_sourcefile(bytecode_path):
     if len(bytecode_path) == 0:
         return None
     rest, _, extension = bytecode_path.rpartition('.')
-    if not rest or extension.lower()[-3:-1] != 'py':
+    if not rest or extension.lower()[-3:] != 'pyc':
         return bytecode_path
-    try:
-        source_path = source_from_cache(bytecode_path)
-    except (NotImplementedError, ValueError):
-        source_path = bytecode_path[:-1]
+    source_path = bytecode_path[:-1]
     return source_path if _path_isfile(source_path) else bytecode_path
 
 
 def _get_cached(filename):
     if filename.endswith(tuple(SOURCE_SUFFIXES)):
-        try:
-            return cache_from_source(filename)
-        except NotImplementedError:
-            pass
+         return cache_from_source(filename)
     elif filename.endswith(tuple(BYTECODE_SUFFIXES)):
         return filename
     else:
