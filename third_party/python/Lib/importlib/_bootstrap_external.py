@@ -644,20 +644,6 @@ class SourceFileLoader(FileLoader, SourceLoader):
                                         exc)
 
 
-class SourcelessFileLoader(FileLoader, _LoaderBasics):
-    """Loader which handles sourceless file imports."""
-
-    def get_code(self, fullname):
-        path = self.get_filename(fullname)
-        data = self.get_data(path)
-        bytes_data = _validate_bytecode_header(data, name=fullname, path=path)
-        return _compile_bytecode(bytes_data, name=fullname, bytecode_path=path)
-
-    def get_source(self, fullname):
-        """Return None as there is no source code."""
-        return None
-
-
 # Filled in by _setup().
 EXTENSION_SUFFIXES = []
 
@@ -1152,6 +1138,7 @@ def _setup(_bootstrap_module):
         "_write_atomic",
         "_compile_bytecode",
         "_validate_bytecode_header",
+        "SourcelessFileLoader",
     ):
         self_mod_dict[port] = _imp_dict[port]
     for name in (

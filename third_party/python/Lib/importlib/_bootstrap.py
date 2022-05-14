@@ -305,11 +305,13 @@ class _installed_safely:
 
     def __exit__(self, *args):
         spec = self._spec
-        if any(arg is not None for arg in args):
-            sys.modules.pop(spec.name, None)
+        spec._initializing = False
+        for arg in args:
+            if arg is not None:
+                sys.modules.pop(spec.name, None)
+                return
         else:
             _verbose_message('import {!r} # {!r}', spec.name, spec.loader)
-        spec._initializing = False
 
 
 class ModuleSpec:
