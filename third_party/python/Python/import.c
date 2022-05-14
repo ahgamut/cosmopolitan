@@ -2348,9 +2348,13 @@ static PyObject* SFLObject_richcompare(PyObject *self, PyObject *other, int op)
         // this is equivalent to comparing self.__class__
         Py_RETURN_NOTIMPLEMENTED;
     }
-    PyObject **self_dict = _PyObject_GetDictPtr(self);   // if the type check passed, this can't be null
-    PyObject **other_dict = _PyObject_GetDictPtr(other); // if the type check passed, this can't be null
-    return PyObject_RichCompare(*self_dict, *other_dict, op);
+    if(strncmp(((SourcelessFileLoader*)self)->name,((SourcelessFileLoader*)other)->name,((SourcelessFileLoader*)self)->namelen)) {
+        Py_RETURN_FALSE;
+    }
+    if(strncmp(((SourcelessFileLoader*)self)->path,((SourcelessFileLoader*)other)->path,((SourcelessFileLoader*)self)->pathlen)) {
+        Py_RETURN_FALSE;
+    }
+    Py_RETURN_TRUE;
 }
 
 static PyObject* SFLObject_get_source(SourcelessFileLoader *self, PyObject *arg) {
@@ -2415,11 +2419,8 @@ static PyObject* SFLObject_get_data(SourcelessFileLoader *self, PyObject *arg) {
         return res;
     }
     // TODO: these two allocations can be combined into one
-    data = _gc(xslurp(name, &datalen));
-    res = PyUnicode_FromStringAndSize(data, datalen);
-    if (res == NULL) {
-        PyErr_NoMemory();
-    }
+    data = xslurp(name, &datalen);
+    res = PyBytes_FromStringAndSize(data, (Py_ssize_t)stinfo.st_size);
     return res;
 }
 
@@ -2554,7 +2555,7 @@ static PyTypeObject SourcelessFileLoaderType = {
     SFLObject_methods,                          /*tp_methods*/
     0,                          /*tp_members*/
     0,                          /*tp_getset*/
-    0, /* see PyInit_xx */      /*tp_base*/
+    0,                          /*tp_base*/
     0,                          /*tp_dict*/
     0,                          /*tp_descr_get*/
     0,                          /*tp_descr_set*/
