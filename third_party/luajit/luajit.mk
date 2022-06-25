@@ -261,4 +261,3 @@ $(THIRD_PARTY_LUAJIT_OBJS_S):			\
 .PHONY: o/$(MODE)/third_party/luajit
 o/$(MODE)/third_party/luajit:				\
 		$(THIRD_PARTY_LUAJIT_BINS)
-		# $(THIRD_PARTY_LUAJIT_CHECKS)
