@@ -30,6 +30,8 @@ THIRD_PARTY_DABBAJSON_COMS = o/$(MODE)/third_party/dabbajson/runner.com
 THIRD_PARTY_DABBAJSON_BINS = \
 		$(THIRD_PARTY_DABBAJSON_COMS) \
 		$(THIRD_PARTY_DABBAJSON_COMS:%=%.dbg)
+THIRD_PARTY_DABBAJSON_RUNS = \
+		$(THIRD_PARTY_DABBAJSON_COMS:%=%.runs)
 
 THIRD_PARTY_DABBAJSON_A_DIRECTDEPS =					\
 	LIBC_INTRIN								\
@@ -68,6 +70,10 @@ o/$(MODE)/third_party/dabbajson/runner.com.dbg:	\
 		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
 
+o/$(MODE)/third_party/dabbajson/runner.com.runs: \
+	o/$(MODE)/third_party/dabbajson/runner.com
+	@$(COMPILE) -ACHECK -tT$@ $<
+
 THIRD_PARTY_DABBAJSON_LIBS = $(foreach x,$(THIRD_PARTY_DABBAJSON_ARTIFACTS),$($(x)))
 THIRD_PARTY_DABBAJSON_SRCS = $(foreach x,$(THIRD_PARTY_DABBAJSON_ARTIFACTS),$($(x)_SRCS))
 THIRD_PARTY_DABBAJSON_HDRS = $(foreach x,$(THIRD_PARTY_DABBAJSON_ARTIFACTS),$($(x)_HDRS))
@@ -76,5 +82,5 @@ THIRD_PARTY_DABBAJSON_OBJS = $(foreach x,$(THIRD_PARTY_DABBAJSON_ARTIFACTS),$($(
 
 .PHONY: o/$(MODE)/third_party/dabbajson
 o/$(MODE)/third_party/dabbajson:					\
-		$(THIRD_PARTY_DABBAJSON_BINS)
+		$(THIRD_PARTY_DABBAJSON_RUNS)
 
