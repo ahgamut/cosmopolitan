@@ -9,7 +9,7 @@
 
 int FileWriteDJInternal_Double(const DJValue *value, FILE *fp) {
   assert(DJValueIS_Double(*value));
-  return fprintf(fp, "%lf", UNBOX_DJValueAsDouble(*value));
+  return fprintf(fp, "%lg", UNBOX_DJValueAsDouble(*value));
 }
 
 int FileWriteDJInternal_Null(const DJValue *value, FILE *fp) {
@@ -90,7 +90,7 @@ int WriteDJValueToFile(const DJValue *value, FILE *fp) {
 int BufferWriteDJInternal_Double(const DJValue *value, char *buf,
                                  size_t buflen) {
   assert(DJValueIS_Double(*value));
-  return snprintf(buf, buflen, "%lf", UNBOX_DJValueAsDouble(*value));
+  return snprintf(buf, buflen, "%lg", UNBOX_DJValueAsDouble(*value));
 }
 
 int BufferWriteDJInternal_Null(const DJValue *value, char *buf, size_t buflen) {
