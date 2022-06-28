@@ -3,31 +3,34 @@
 #include "libc/stdio/stdio.h"
 
 typedef enum __DJValueType {
-  DJV_NUMBER = 0,
+  DJV_DOUBLE = 0,
   DJV_NULL = 1,
   DJV_TRUE = 2,
   DJV_FALSE = 3,
-  DJV_STRING = 4,
-  DJV_ARRAY = 5,
-  DJV_OBJECT = 6,
-  DJV_CONVERSIONERROR = 7
+  DJV_INTEGER = 4,
+  DJV_STRING = 5,
+  DJV_ARRAY = 6,
+  DJV_OBJECT = 7,
 } DJValueType;
 
 typedef struct __DJValue DJValue;
 DJValueType GetTypeOfDJValue(const DJValue *);
 
 /* while extracting from DJValue, no allocations/copies are made */
-int DJValueToNumber(const DJValue *, double *);
+int DJValueToDouble(const DJValue *, double *);
+int DJValueToInteger(const DJValue *, int64_t *);
 int DJValueToString(const DJValue *, char **, size_t *);
 int DJValueToArray(const DJValue *, DJValue ***, size_t *);
-int DJValueToObject(const DJValue *, char ***, size_t **, DJValue ***, size_t *);
+int DJValueToObject(const DJValue *, char ***, size_t **, DJValue ***,
+                    size_t *);
 int DJValueToBool(const DJValue *, bool *);
 bool DJValueIsTrue(const DJValue *);
 bool DJValueIsFalse(const DJValue *);
 bool DJValueIsNull(const DJValue *);
 
 /* when creating a DJValue, allocations/copies are made */
-DJValue *NumberToDJValue(const double number);
+DJValue *DoubleToDJValue(const double number);
+DJValue *IntegerToDJValue(const int64_t number);
 DJValue *StringToDJValue(const char *, const size_t);
 DJValue *ArrayToDJValue(const DJValue **, const size_t);
 DJValue *ObjectToDJValue(const char **, const size_t *, const DJValue **,

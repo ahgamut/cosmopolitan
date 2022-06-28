@@ -8,9 +8,9 @@ int main(int argc, char *argv[]) {
   const char *keys[] = {"hi", "this", "is", "a", "sample", "json"};
   const size_t keylens[] = {2, 4, 2, 1, 6, 4};
   const DJValue *values[] = {
-      NumberToDJValue(3.14), StringToDJValue("string", 6),
+      DoubleToDJValue(-3.14), StringToDJValue("string", 6),
       NullToDJValue(),       BoolToDJValue(true),
-      BoolToDJValue(false),  NumberToDJValue(23.4)};
+      BoolToDJValue(false),  IntegerToDJValue(345)};
 
   char buf[BUFFERSIZE] = {0};
 

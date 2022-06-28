@@ -7,9 +7,9 @@
 
 /* handle DJValue writes into a FILE pointer */
 
-int FileWriteDJInternal_Number(const DJValue *value, FILE *fp) {
-  assert(DJValueIS_Number(*value));
-  return fprintf(fp, "%lf", UNBOX_DJValueAsNumber(*value));
+int FileWriteDJInternal_Double(const DJValue *value, FILE *fp) {
+  assert(DJValueIS_Double(*value));
+  return fprintf(fp, "%lf", UNBOX_DJValueAsDouble(*value));
 }
 
 int FileWriteDJInternal_Null(const DJValue *value, FILE *fp) {
@@ -24,6 +24,12 @@ int FileWriteDJInternal_Bool(const DJValue *value, FILE *fp) {
   } else {
     return fprintf(fp, "false");
   }
+}
+
+int FileWriteDJInternal_Integer(const DJValue *value, FILE *fp) {
+  assert(DJValueIS_Integer(*value));
+  int64_t *ptr = UNBOX_DJValueAsInteger(*value);
+  return fprintf(fp, "%ld", *ptr);
 }
 
 int FileWriteDJInternal_String(const DJValue *value, FILE *fp) {
@@ -65,14 +71,14 @@ int FileWriteDJInternal_Error(const DJValue *value, FILE *fp) {
 }
 
 static int (*_dj_internal_filewriters[])(const DJValue *value, FILE *fp) = {
-    FileWriteDJInternal_Number, /* DJV_NUMBER = 0 */
-    FileWriteDJInternal_Null,   /* DJV_NULL = 1 */
-    FileWriteDJInternal_Bool,   /* DJV_TRUE = 2 */
-    FileWriteDJInternal_Bool,   /* DJV_FALSE = 3 */
-    FileWriteDJInternal_String, /* DJV_STRING = 4 */
-    FileWriteDJInternal_Array,  /* DJV_ARRAY = 5 */
-    FileWriteDJInternal_Object, /* DJV_OBJECT = 6 */
-    FileWriteDJInternal_Error,  /* DJV_CONVERSIONERROR = 7 */
+    FileWriteDJInternal_Double,  /* DJV_DOUBLE = 0 */
+    FileWriteDJInternal_Null,    /* DJV_NULL = 1 */
+    FileWriteDJInternal_Bool,    /* DJV_TRUE = 2 */
+    FileWriteDJInternal_Bool,    /* DJV_FALSE = 3 */
+    FileWriteDJInternal_Integer, /* DJV_INTEGER = 4 */
+    FileWriteDJInternal_String,  /* DJV_STRING = 5 */
+    FileWriteDJInternal_Array,   /* DJV_ARRAY = 6 */
+    FileWriteDJInternal_Object,  /* DJV_OBJECT = 7 */
 };
 
 int WriteDJValueToFile(const DJValue *value, FILE *fp) {
@@ -81,10 +87,10 @@ int WriteDJValueToFile(const DJValue *value, FILE *fp) {
 
 /* handle DJValue writes into an allocated buffer */
 
-int BufferWriteDJInternal_Number(const DJValue *value, char *buf,
+int BufferWriteDJInternal_Double(const DJValue *value, char *buf,
                                  size_t buflen) {
-  assert(DJValueIS_Number(*value));
-  return snprintf(buf, buflen, "%lf", UNBOX_DJValueAsNumber(*value));
+  assert(DJValueIS_Double(*value));
+  return snprintf(buf, buflen, "%lf", UNBOX_DJValueAsDouble(*value));
 }
 
 int BufferWriteDJInternal_Null(const DJValue *value, char *buf, size_t buflen) {
@@ -99,6 +105,13 @@ int BufferWriteDJInternal_Bool(const DJValue *value, char *buf, size_t buflen) {
   } else {
     return snprintf(buf, buflen, "false");
   }
+}
+
+int BufferWriteDJInternal_Integer(const DJValue *value, char *buf,
+                                  size_t buflen) {
+  assert(DJValueIS_Integer(*value));
+  int64_t *ptr = UNBOX_DJValueAsInteger(*value);
+  return snprintf(buf, buflen, "%ld", *ptr);
 }
 
 int BufferWriteDJInternal_String(const DJValue *value, char *buf,
@@ -183,14 +196,14 @@ int BufferWriteDJInternal_Error(const DJValue *value, char *buf,
 
 static int (*_dj_internal_bufferwriters[])(const DJValue *value, char *buf,
                                            size_t buflen) = {
-    BufferWriteDJInternal_Number, /* DJV_NUMBER = 0 */
-    BufferWriteDJInternal_Null,   /* DJV_NULL = 1 */
-    BufferWriteDJInternal_Bool,   /* DJV_TRUE = 2 */
-    BufferWriteDJInternal_Bool,   /* DJV_FALSE = 3 */
-    BufferWriteDJInternal_String, /* DJV_STRING = 4 */
-    BufferWriteDJInternal_Array,  /* DJV_ARRAY = 5 */
-    BufferWriteDJInternal_Object, /* DJV_OBJECT = 6 */
-    BufferWriteDJInternal_Error,  /* DJV_CONVERSIONERROR = 7 */
+    BufferWriteDJInternal_Double,  /* DJV_DOUBLE = 0 */
+    BufferWriteDJInternal_Null,    /* DJV_NULL = 1 */
+    BufferWriteDJInternal_Bool,    /* DJV_TRUE = 2 */
+    BufferWriteDJInternal_Bool,    /* DJV_FALSE = 3 */
+    BufferWriteDJInternal_Integer, /* DJV_INTEGER = 4 */
+    BufferWriteDJInternal_String,  /* DJV_STRING = 5 */
+    BufferWriteDJInternal_Array,   /* DJV_ARRAY = 6 */
+    BufferWriteDJInternal_Object,  /* DJV_OBJECT = 7 */
 };
 
 int WriteDJValueToBuffer(const DJValue *value, char *buf, size_t buflen) {
