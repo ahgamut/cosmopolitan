@@ -1,6 +1,5 @@
 #include "libc/stdio/stdio.h"
 #include "third_party/dabbajson/dabbajson.h"
-#include "third_party/dabbajson/dabbajson.internal.h"
 
 int main(int argc, char *argv[]) {
   const char *keys[] = {"hi", "this", "is", "a", "sample", "json"};
@@ -9,11 +8,6 @@ int main(int argc, char *argv[]) {
                        NullToDJValue(),       BoolToDJValue(true),
                        BoolToDJValue(false),  NumberToDJValue(23.4)};
   
-  for(int i=0; i<6; i++) {
-      printf("%lx %d ", values[i]->__raw, GetTypeOfDJValue(values[i]));
-      WriteDJValueToFile(values[i], stdout);
-      printf("\n");
-  }
   DJValue *obj = ObjectToDJValue(keys, keylens, values, 6);
   WriteDJValueToFile(obj, stdout);
   FreeDJValue(obj);
