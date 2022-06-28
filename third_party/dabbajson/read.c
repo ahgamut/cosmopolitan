@@ -195,7 +195,7 @@ int _FileReadDJInternal_Array(FILE *fp, int depth, DJValue **result) {
   stopbracket = peek(fp);
   while (!feof(fp) && status == 0 && stopbracket != ']') {
     status = _ReadDJValueFromFile(fp, depth + 1, &(tmp->value));
-    if(status) break;
+    if (status) break;
     tmp->next = DJA_New();
     tmp = tmp->next;
     num_elements += 1;
@@ -340,12 +340,16 @@ int _ReadDJValueFromFile(FILE *fp, int depth, DJValue **result) {
 }
 
 int ReadDJValueFromFile(FILE *fp, DJValue **result) {
-  if (peek(fp) == '[')
-    return _FileReadDJInternal_Array(fp, 0, result);
-  else if (peek(fp) == '{')
-    return _FileReadDJInternal_Object(fp, 0, result);
-  else
-    return -1;
+  int status = 0;
+  status = _ReadDJValueFromFile(fp, 0, result);
+  if (status == -1 || !*result ||
+      (!DJValueIS_Object(**result) && !DJValueIS_Array(**result))) {
+    if (*result) {
+      FreeDJValue(*result);
+      *result = NULL;
+    }
+  }
+  return status;
 }
 
 /* handle DJValue reads from an existing buffer */
