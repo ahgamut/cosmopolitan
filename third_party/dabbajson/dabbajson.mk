@@ -13,7 +13,10 @@ THIRD_PARTY_DABBAJSON_A = \
 	o/$(MODE)/third_party/dabbajson/dabbajson.a
 
 THIRD_PARTY_DABBAJSON_A_FILES := $(wildcard third_party/dabbajson/*)
-THIRD_PARTY_DABBAJSON_A_SRCS_C = third_party/dabbajson/dabbajson.c
+THIRD_PARTY_DABBAJSON_A_SRCS_C = \
+	third_party/dabbajson/dabbajson.c \
+	third_party/dabbajson/write.c
+
 THIRD_PARTY_DABBAJSON_A_HDRS = $(filter %.h,$(THIRD_PARTY_DABBAJSON_A_FILES))
 
 THIRD_PARTY_DABBAJSON_A_OBJS =						\

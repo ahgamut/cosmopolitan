@@ -44,4 +44,7 @@ DJValue *DuplicateDJValue(const DJValue *);
 /* writes DJValue as JSON to file */
 int WriteDJValueToFile(const DJValue *, FILE *);
 
+/* writes DJValue as JSON into allocated buffer */
+int WriteDJValueToBuffer(const DJValue *, char *buf, size_t buflen);
+
 #endif /* THIRDPARTY_DABBAJSON_H */
