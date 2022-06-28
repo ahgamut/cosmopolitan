@@ -15,11 +15,14 @@ THIRD_PARTY_DABBAJSON_A = \
 THIRD_PARTY_DABBAJSON_A_FILES := $(wildcard third_party/dabbajson/*)
 THIRD_PARTY_DABBAJSON_A_SRCS_C = \
 	third_party/dabbajson/dabbajson.c \
+	third_party/dabbajson/read.c \
 	third_party/dabbajson/write.c
 
 THIRD_PARTY_DABBAJSON_A_HDRS = $(filter %.h,$(THIRD_PARTY_DABBAJSON_A_FILES))
+THIRD_PARTY_DABBAJSON_A_SAMPLES = $(filter %.json,$(THIRD_PARTY_DABBAJSON_A_FILES))
 
 THIRD_PARTY_DABBAJSON_A_OBJS =						\
+	$(THIRD_PARTY_DABBAJSON_A_SAMPLES:%=o/$(MODE)/%.zip.o)	\
 	$(THIRD_PARTY_DABBAJSON_A_SRCS_C:%.c=o/$(MODE)/%.o)
 
 THIRD_PARTY_DABBAJSON_A_CHECKS =						\
@@ -43,7 +46,8 @@ THIRD_PARTY_DABBAJSON_A_DIRECTDEPS =					\
 	LIBC_FMT								\
 	LIBC_SYSV								\
 	LIBC_STR								\
-	LIBC_STUBS
+	LIBC_STUBS								\
+	THIRD_PARTY_GDTOA
 
 THIRD_PARTY_DABBAJSON_A_DEPS :=						\
 	$(call uniq,$(foreach x,$(THIRD_PARTY_DABBAJSON_A_DIRECTDEPS),$($(x))))

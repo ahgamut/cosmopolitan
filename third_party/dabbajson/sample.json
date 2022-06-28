@@ -1,0 +1,22 @@
+{
+    "hello": [
+        "abcdef",
+        true,
+        false,
+        null,
+        22,
+        3.14159,
+        [
+            1,
+            null,
+            "pls"
+        ],
+        {
+            "a": 2
+        }
+    ],
+    "pls": null,
+    "this": "is",
+    "json": 100,
+    "parsing": true
+}

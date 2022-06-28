@@ -19,10 +19,10 @@ int FileWriteDJInternal_Null(const DJValue *value, FILE *fp) {
 
 int FileWriteDJInternal_Bool(const DJValue *value, FILE *fp) {
   assert(DJValueIS_True(*value) || DJValueIS_False(*value));
-  if (DJValueIS_True(*value)) {
-    return fprintf(fp, "true");
-  } else {
+  if (DJValueIS_False(*value)) {
     return fprintf(fp, "false");
+  } else {
+    return fprintf(fp, "true");
   }
 }
 
