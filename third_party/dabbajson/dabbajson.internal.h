@@ -5,6 +5,8 @@
 typedef struct __DJArray DJArray;
 typedef struct __DJObject DJObject;
 typedef struct __DJString DJString;
+typedef struct __DJArrayElement DJArrayElement;
+typedef struct __DJObjectElement DJObjectElement;
 
 struct __DJString {
   char *ptr;
@@ -19,12 +21,32 @@ struct __DJValue {
   };
 };
 
+struct __DJObjectElement {
+  char *key;
+  DJValue *value;
+  size_t keylen;
+  struct __DJObjectElement *next;
+};
+
+DJObjectElement *DJO_New();
+void DJO_FreeLinked(DJObjectElement *);
+size_t DJO_CountLinked(DJObjectElement *);
+
 struct __DJObject {
   char **keys;
   DJValue **values;
   size_t *keylens;
   size_t len;
 };
+
+struct __DJArrayElement {
+  DJValue *value;
+  struct __DJArrayElement *next;
+};
+
+DJArrayElement *DJA_New();
+void DJA_FreeLinked(DJArrayElement *);
+size_t DJA_CountLinked(DJArrayElement *);
 
 struct __DJArray {
   DJValue **values;
@@ -44,7 +66,8 @@ struct __DJArray {
 #define DJValueIS_Null(x)   (((x).__raw & DJValueNullTAG) == DJValueNullTAG)
 #define DJValueIS_True(x)   (((x).__raw & DJValueTrueTAG) == DJValueTrueTAG)
 #define DJValueIS_False(x)  (((x).__raw & DJValueFalseTAG) == DJValueFalseTAG)
-#define DJValueIS_Integer(x)  (((x).__raw & DJValueIntegerTAG) == DJValueIntegerTAG)
+#define DJValueIS_Integer(x) \
+  (((x).__raw & DJValueIntegerTAG) == DJValueIntegerTAG)
 #define DJValueIS_String(x) (((x).__raw & DJValueStringTAG) == DJValueStringTAG)
 #define DJValueIS_Object(x) (((x).__raw & DJValueObjectTAG) == DJValueObjectTAG)
 #define DJValueIS_Array(x)  (((x).__raw & DJValueArrayTAG) == DJValueArrayTAG)
@@ -56,11 +79,11 @@ struct __DJArray {
   ((DJValueType)((x).__raw > DJValueDoubleTAG ? (0x0007 & (x).__raw >> 48) : 0))
 #define UNBOX_DJValueAsPTR(x) ((x).__raw & 0x0000ffffffffffffULL)
 
-#define UNBOX_DJValueAsDouble(x) ((double)((x).number))
+#define UNBOX_DJValueAsDouble(x)  ((double)((x).number))
 #define UNBOX_DJValueAsInteger(x) ((int64_t *)(UNBOX_DJValueAsPTR(x)))
-#define UNBOX_DJValueAsString(x) ((DJString *)(UNBOX_DJValueAsPTR(x)))
-#define UNBOX_DJValueAsArray(x)  ((DJArray *)(UNBOX_DJValueAsPTR(x)))
-#define UNBOX_DJValueAsObject(x) ((DJObject *)(UNBOX_DJValueAsPTR(x)))
+#define UNBOX_DJValueAsString(x)  ((DJString *)(UNBOX_DJValueAsPTR(x)))
+#define UNBOX_DJValueAsArray(x)   ((DJArray *)(UNBOX_DJValueAsPTR(x)))
+#define UNBOX_DJValueAsObject(x)  ((DJObject *)(UNBOX_DJValueAsPTR(x)))
 
 #define BOX_DoubleIntoDJValue(number, v) ((v).number = number)
 #define BOX_IntegerIntoDJValue(ptr, v) \

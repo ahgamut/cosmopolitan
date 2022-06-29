@@ -1,9 +1,8 @@
-#include "third_party/dabbajson/dabbajson.h"
-
 #include "libc/assert.h"
 #include "libc/log/log.h"
 #include "libc/mem/mem.h"
 #include "libc/stdio/stdio.h"
+#include "third_party/dabbajson/dabbajson.h"
 #include "third_party/dabbajson/dabbajson.internal.h"
 
 DJValueType GetTypeOfDJValue(const DJValue *value) {
@@ -148,12 +147,12 @@ void FreeDJInternal_Dummy(DJValue *value) {
 }
 
 void FreeDJInternal_Integer(DJValue *value) {
-    assert(DJValueIS_Integer(*value));
-    int64_t *ptr = UNBOX_DJValueAsInteger(*value);
-    if (ptr) {
-        free(ptr);
-        BOX_IntegerIntoDJValue(NULL, *value);
-    }
+  assert(DJValueIS_Integer(*value));
+  int64_t *ptr = UNBOX_DJValueAsInteger(*value);
+  if (ptr) {
+    free(ptr);
+    BOX_IntegerIntoDJValue(NULL, *value);
+  }
 }
 
 void FreeDJInternal_String(DJValue *value) {
@@ -198,19 +197,19 @@ void FreeDJInternal_Error(DJValue *value) {
   DIEF("attempted to free an invalid value");
 }
 
-static void (*_dj_internal_cleaners[])(DJValue *value) = {
-    FreeDJInternal_Dummy,  /* DJV_DOUBLE = 0 */
-    FreeDJInternal_Dummy,  /* DJV_NULL = 1 */
-    FreeDJInternal_Dummy,  /* DJV_TRUE = 2 */
-    FreeDJInternal_Dummy,  /* DJV_FALSE = 3 */
-    FreeDJInternal_Integer,/* DJV_INTEGER = 4 */
-    FreeDJInternal_String, /* DJV_STRING = 5 */
-    FreeDJInternal_Array,  /* DJV_ARRAY = 6 */
-    FreeDJInternal_Object, /* DJV_OBJECT = 7 */
+static void (*_dj_cleaners[])(DJValue *value) = {
+    FreeDJInternal_Dummy,   /* DJV_DOUBLE = 0 */
+    FreeDJInternal_Dummy,   /* DJV_NULL = 1 */
+    FreeDJInternal_Dummy,   /* DJV_TRUE = 2 */
+    FreeDJInternal_Dummy,   /* DJV_FALSE = 3 */
+    FreeDJInternal_Integer, /* DJV_INTEGER = 4 */
+    FreeDJInternal_String,  /* DJV_STRING = 5 */
+    FreeDJInternal_Array,   /* DJV_ARRAY = 6 */
+    FreeDJInternal_Object,  /* DJV_OBJECT = 7 */
 };
 
 void FreeDJValue(DJValue *value) {
-  (_dj_internal_cleaners[UNBOX_DJValueTypeONLY(*value)])(value);
+  (_dj_cleaners[UNBOX_DJValueTypeONLY(*value)])(value);
   free(value);
 }
 
@@ -259,17 +258,17 @@ DJValue *DuplicateDJInternal_Error(const DJValue *value) {
   return NULL;
 }
 
-static DJValue* (*_dj_internal_duplicators[])(const DJValue *value) = {
-    DuplicateDJInternal_Double, /* DJV_DOUBLE = 0 */
-    DuplicateDJInternal_Null,   /* DJV_NULL = 1 */
-    DuplicateDJInternal_Bool,   /* DJV_TRUE = 2 */
-    DuplicateDJInternal_Bool,   /* DJV_FALSE = 3 */
+static DJValue *(*_dj_duplicators[])(const DJValue *value) = {
+    DuplicateDJInternal_Double,  /* DJV_DOUBLE = 0 */
+    DuplicateDJInternal_Null,    /* DJV_NULL = 1 */
+    DuplicateDJInternal_Bool,    /* DJV_TRUE = 2 */
+    DuplicateDJInternal_Bool,    /* DJV_FALSE = 3 */
     DuplicateDJInternal_Integer, /* DJV_INTEGER = 4 */
-    DuplicateDJInternal_String, /* DJV_STRING = 5 */
-    DuplicateDJInternal_Array,  /* DJV_ARRAY = 6 */
-    DuplicateDJInternal_Object, /* DJV_OBJECT = 7 */
+    DuplicateDJInternal_String,  /* DJV_STRING = 5 */
+    DuplicateDJInternal_Array,   /* DJV_ARRAY = 6 */
+    DuplicateDJInternal_Object,  /* DJV_OBJECT = 7 */
 };
 
 DJValue *DuplicateDJValue(const DJValue *value) {
-  return (_dj_internal_duplicators[UNBOX_DJValueTypeONLY(*value)])(value);
+  return (_dj_duplicators[UNBOX_DJValueTypeONLY(*value)])(value);
 }

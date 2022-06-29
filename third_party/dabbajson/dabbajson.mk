@@ -15,8 +15,11 @@ THIRD_PARTY_DABBAJSON_A = \
 THIRD_PARTY_DABBAJSON_A_FILES := $(wildcard third_party/dabbajson/*)
 THIRD_PARTY_DABBAJSON_A_SRCS_C = \
 	third_party/dabbajson/dabbajson.c \
+	third_party/dabbajson/element.c \
 	third_party/dabbajson/read.c \
-	third_party/dabbajson/write.c
+	third_party/dabbajson/bufread.c \
+	third_party/dabbajson/write.c	\
+	third_party/dabbajson/bufwrite.c
 
 THIRD_PARTY_DABBAJSON_A_HDRS = $(filter %.h,$(THIRD_PARTY_DABBAJSON_A_FILES))
 THIRD_PARTY_DABBAJSON_A_SAMPLES = $(filter %.json,$(THIRD_PARTY_DABBAJSON_A_FILES))
