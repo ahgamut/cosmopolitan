@@ -10,7 +10,12 @@
 int FileWriteDJInternal_Double(const DJValue *value, FILE *fp) {
   assert(DJPtrIS_Double(value));
   DJValue answer = {.__raw = (uint64_t)(value)};
-  return fprintf(fp, "%lg", answer.number);
+  if (0.0 == answer.number - (int64_t)(answer.number)) {
+    /* print a .0 so that it is read as double */
+    return fprintf(fp, "%lg.0", answer.number);
+  } else {
+    return fprintf(fp, "%lg", answer.number);
+  }
 }
 
 int FileWriteDJInternal_Null(const DJValue *value, FILE *fp) {

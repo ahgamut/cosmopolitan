@@ -11,7 +11,12 @@ int BufferWriteDJInternal_Double(const DJValue *value, char *buf,
                                  size_t buflen) {
   assert(DJPtrIS_Double(value));
   DJValue answer = {.__raw = (uint64_t)(value)};
-  return snprintf(buf, buflen, "%lg", answer.number);
+  if (0.0 == answer.number - (int64_t)(answer.number)) {
+    /* print a .0 so that it is read as double */
+    return snprintf(buf, buflen, "%lg.0", answer.number);
+  } else {
+    return snprintf(buf, buflen, "%lg", answer.number);
+  }
 }
 
 int BufferWriteDJInternal_Null(const DJValue *value, char *buf, size_t buflen) {

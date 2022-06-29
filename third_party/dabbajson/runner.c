@@ -12,7 +12,7 @@ int main(int argc, char *argv[]) {
   const char *keys[] = {"hi", "this", "is", "a", "sample", "json"};
   const size_t keylens[] = {2, 4, 2, 1, 6, 4};
   const DJValue *values[] = {
-      DoubleToDJValue(-3.14), StringToDJValue(STRINGANDSIZE("str\\\"ng")),
+      DoubleToDJValue(-3.0), StringToDJValue(STRINGANDSIZE("str\\\"ng")),
       NullToDJValue(),        BoolToDJValue(true),
       BoolToDJValue(false),   IntegerToDJValue(345)};
 
