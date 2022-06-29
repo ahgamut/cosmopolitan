@@ -32,7 +32,7 @@ DJObjectElement *DJO_New();
 size_t DJO_CountLinked(const DJObjectElement *);
 /* frees values */
 void DJO_FreeLinked(DJObjectElement *);
-DJValue * ObjectElementsToDJValue(DJObjectElement *, size_t);
+DJValue *ObjectElementsToDJValue(DJObjectElement *, size_t);
 
 struct __DJObject {
   char **keys;
@@ -57,46 +57,51 @@ struct __DJArray {
   size_t len;
 };
 
-#define DJValueDoubleTAG  0xfff8000000000000ULL
-#define DJValueNullTAG    0xfff9000000000000ULL
-#define DJValueTrueTAG    0xfffa000000000000ULL
-#define DJValueFalseTAG   0xfffb000000000000ULL
-#define DJValueIntegerTAG 0xfffc000000000000ULL
-#define DJValueStringTAG  0xfffd000000000000ULL
-#define DJValueArrayTAG   0xfffe000000000000ULL
-#define DJValueObjectTAG  0xffff000000000000ULL
+/* we're actually going to do the NaN-boxing on a DJValue* instead of the
+ * DJValue. This means randomly trying to dereference a DJValue* may boom,
+ * but then again, anybody using dabbajson.h shouldn't be able to do that,
+ * because the external header doesn't tell you how big a DJValue actually is. 
+ * (of course you can always force a segfault by recasting to another pointer
+ * and then dereferencing it, but that's why this is an internal header.) */
 
-#define DJValueIS_Double(x) (((x).__raw & DJValueDoubleTAG) <= DJValueDoubleTAG)
-#define DJValueIS_Null(x)   (((x).__raw ^ DJValueNullTAG) == 0)
-#define DJValueIS_True(x)   (((x).__raw ^ DJValueTrueTAG) == 0)
-#define DJValueIS_False(x)  (((x).__raw ^ DJValueFalseTAG) == 0)
-#define DJValueIS_Integer(x) \
-  (((x).__raw & DJValueIntegerTAG) == DJValueIntegerTAG)
-#define DJValueIS_String(x) (((x).__raw & DJValueStringTAG) == DJValueStringTAG)
-#define DJValueIS_Object(x) (((x).__raw & DJValueObjectTAG) == DJValueObjectTAG)
-#define DJValueIS_Array(x)  (((x).__raw & DJValueArrayTAG) == DJValueArrayTAG)
+#define DJPtrDoubleTAG  0xfff8000000000000ULL
+#define DJPtrNullTAG    0xfff9000000000000ULL
+#define DJPtrTrueTAG    0xfffa000000000000ULL
+#define DJPtrFalseTAG   0xfffb000000000000ULL
+#define DJPtrIntegerTAG 0xfffc000000000000ULL
+#define DJPtrStringTAG  0xfffd000000000000ULL
+#define DJPtrArrayTAG   0xfffe000000000000ULL
+#define DJPtrObjectTAG  0xffff000000000000ULL
 
-#define DJValueIS_ActuallyPTR(x) \
-  (((x).__raw & DJValueIntegerTAG) >= DJValueIntegerTAG)
+#define DJPtrIS_Double(x) ((((uint64_t)((x))) & DJPtrDoubleTAG) <= DJPtrDoubleTAG)
+#define DJPtrIS_Null(x)   ((((uint64_t)((x))) ^ DJPtrNullTAG) == 0)
+#define DJPtrIS_True(x)   ((((uint64_t)((x))) ^ DJPtrTrueTAG) == 0)
+#define DJPtrIS_False(x)  ((((uint64_t)((x))) ^ DJPtrFalseTAG) == 0)
+#define DJPtrIS_Integer(x) \
+  ((((uint64_t)((x))) & DJPtrIntegerTAG) == DJPtrIntegerTAG)
+#define DJPtrIS_String(x) ((((uint64_t)((x))) & DJPtrStringTAG) == DJPtrStringTAG)
+#define DJPtrIS_Object(x) ((((uint64_t)((x))) & DJPtrObjectTAG) == DJPtrObjectTAG)
+#define DJPtrIS_Array(x)  ((((uint64_t)((x))) & DJPtrArrayTAG) == DJPtrArrayTAG)
 
-#define UNBOX_DJValueTypeONLY(x) \
-  ((DJValueType)((x).__raw > DJValueDoubleTAG ? (0x0007 & (x).__raw >> 48) : 0))
-#define UNBOX_DJValueAsPTR(x) ((x).__raw & 0x0000ffffffffffffULL)
+#define DJPtrIS_ActuallyPTR(x) \
+  ((((uint64_t)((x))) & DJPtrIntegerTAG) >= DJPtrIntegerTAG)
 
-#define UNBOX_DJValueAsDouble(x)  ((double)((x).number))
-#define UNBOX_DJValueAsInteger(x) ((int64_t *)(UNBOX_DJValueAsPTR(x)))
-#define UNBOX_DJValueAsString(x)  ((DJString *)(UNBOX_DJValueAsPTR(x)))
-#define UNBOX_DJValueAsArray(x)   ((DJArray *)(UNBOX_DJValueAsPTR(x)))
-#define UNBOX_DJValueAsObject(x)  ((DJObject *)(UNBOX_DJValueAsPTR(x)))
+#define UNBOX_DJPtrTypeONLY(x) \
+  ((DJValueType)(((uint64_t)((x))) > DJPtrDoubleTAG ? (0x0007 & (((uint64_t)((x))) >> 48)) : 0))
+#define UNBOX_DJPtrLOWER48(x) (((uint64_t)((x))) & 0x0000ffffffffffffULL)
 
-#define BOX_DoubleIntoDJValue(number, v) ((v).number = number)
-#define BOX_IntegerIntoDJValue(ptr, v) \
-  ((v).__raw = ((uint64_t)((ptr))) | DJValueIntegerTAG)
-#define BOX_StringIntoDJValue(ptr, v) \
-  ((v).__raw = ((uint64_t)((ptr))) | DJValueStringTAG)
-#define BOX_ArrayIntoDJValue(ptr, v) \
-  ((v).__raw = ((uint64_t)((ptr))) | DJValueArrayTAG)
-#define BOX_ObjectIntoDJValue(ptr, v) \
-  ((v).__raw = ((uint64_t)((ptr))) | DJValueObjectTAG)
+#define UNBOX_DJPtrAsInteger(x) ((int64_t *)(UNBOX_DJPtrLOWER48(x)))
+#define UNBOX_DJPtrAsString(x)  ((DJString *)(UNBOX_DJPtrLOWER48(x)))
+#define UNBOX_DJPtrAsArray(x)   ((DJArray *)(UNBOX_DJPtrLOWER48(x)))
+#define UNBOX_DJPtrAsObject(x)  ((DJObject *)(UNBOX_DJPtrLOWER48(x)))
+
+#define BOX_IntegerIntoDJPtr(ptr, v) \
+  ((v) = (DJValue*)(((uint64_t)((ptr))) | DJPtrIntegerTAG))
+#define BOX_StringIntoDJPtr(ptr, v) \
+  ((v) = (DJValue*)(((uint64_t)((ptr))) | DJPtrStringTAG))
+#define BOX_ArrayIntoDJPtr(ptr, v) \
+  ((v) = (DJValue*)(((uint64_t)((ptr))) | DJPtrArrayTAG))
+#define BOX_ObjectIntoDJPtr(ptr, v) \
+  ((v) = (DJValue*)(((uint64_t)((ptr))) | DJPtrObjectTAG))
 
 #endif /* THIRDPARTY_DABBAJSON_INTERNAL_H */

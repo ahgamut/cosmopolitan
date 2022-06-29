@@ -9,18 +9,19 @@
 
 int BufferWriteDJInternal_Double(const DJValue *value, char *buf,
                                  size_t buflen) {
-  assert(DJValueIS_Double(*value));
-  return snprintf(buf, buflen, "%lg", UNBOX_DJValueAsDouble(*value));
+  assert(DJPtrIS_Double(value));
+  DJValue answer = {.__raw = (uint64_t)(value)};
+  return snprintf(buf, buflen, "%lg", answer.number);
 }
 
 int BufferWriteDJInternal_Null(const DJValue *value, char *buf, size_t buflen) {
-  assert(DJValueIS_Null(*value));
+  assert(DJPtrIS_Null(value));
   return snprintf(buf, buflen, "null");
 }
 
 int BufferWriteDJInternal_Bool(const DJValue *value, char *buf, size_t buflen) {
-  assert(DJValueIS_True(*value) || DJValueIS_False(*value));
-  if (DJValueIS_True(*value)) {
+  assert(DJPtrIS_True(value) || DJPtrIS_False(value));
+  if (DJPtrIS_True(value)) {
     return snprintf(buf, buflen, "true");
   } else {
     return snprintf(buf, buflen, "false");
@@ -29,22 +30,22 @@ int BufferWriteDJInternal_Bool(const DJValue *value, char *buf, size_t buflen) {
 
 int BufferWriteDJInternal_Integer(const DJValue *value, char *buf,
                                   size_t buflen) {
-  assert(DJValueIS_Integer(*value));
-  int64_t *ptr = UNBOX_DJValueAsInteger(*value);
+  assert(DJPtrIS_Integer(value));
+  int64_t *ptr = UNBOX_DJPtrAsInteger(value);
   return snprintf(buf, buflen, "%ld", *ptr);
 }
 
 int BufferWriteDJInternal_String(const DJValue *value, char *buf,
                                  size_t buflen) {
-  assert(DJValueIS_String(*value));
-  DJString *str = UNBOX_DJValueAsString(*value);
+  assert(DJPtrIS_String(value));
+  DJString *str = UNBOX_DJPtrAsString(value);
   return snprintf(buf, buflen, "\"%s\"", str->ptr);
 }
 
 int BufferWriteDJInternal_Array(const DJValue *value, char *buf,
                                 size_t buflen) {
-  assert(DJValueIS_Array(*value));
-  DJArray *arr = UNBOX_DJValueAsArray(*value);
+  assert(DJPtrIS_Array(value));
+  DJArray *arr = UNBOX_DJPtrAsArray(value);
   int ans = 0;
   int written = 0;
 
@@ -74,8 +75,8 @@ int BufferWriteDJInternal_Array(const DJValue *value, char *buf,
 
 int BufferWriteDJInternal_Object(const DJValue *value, char *buf,
                                  size_t buflen) {
-  assert(DJValueIS_Object(*value));
-  DJObject *obj = UNBOX_DJValueAsObject(*value);
+  assert(DJPtrIS_Object(value));
+  DJObject *obj = UNBOX_DJPtrAsObject(value);
   int ans = 0;
   int written = 0;
 
@@ -127,5 +128,5 @@ static int (*_dj_bufferwriters[])(const DJValue *value, char *buf,
 };
 
 int WriteDJValueToBuffer(const DJValue *value, char *buf, size_t buflen) {
-  return (_dj_bufferwriters[UNBOX_DJValueTypeONLY(*value)])(value, buf, buflen);
+  return (_dj_bufferwriters[UNBOX_DJPtrTypeONLY(value)])(value, buf, buflen);
 }

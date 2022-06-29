@@ -8,18 +8,19 @@
 /* handle DJValue writes into a FILE pointer */
 
 int FileWriteDJInternal_Double(const DJValue *value, FILE *fp) {
-  assert(DJValueIS_Double(*value));
-  return fprintf(fp, "%lg", UNBOX_DJValueAsDouble(*value));
+  assert(DJPtrIS_Double(value));
+  DJValue answer = {.__raw = (uint64_t)(value)};
+  return fprintf(fp, "%lg", answer.number);
 }
 
 int FileWriteDJInternal_Null(const DJValue *value, FILE *fp) {
-  assert(DJValueIS_Null(*value));
+  assert(DJPtrIS_Null(value));
   return fprintf(fp, "null");
 }
 
 int FileWriteDJInternal_Bool(const DJValue *value, FILE *fp) {
-  assert(DJValueIS_True(*value) || DJValueIS_False(*value));
-  if (DJValueIS_False(*value)) {
+  assert(DJPtrIS_True(value) || DJPtrIS_False(value));
+  if (DJPtrIS_False(value)) {
     return fprintf(fp, "false");
   } else {
     return fprintf(fp, "true");
@@ -27,20 +28,20 @@ int FileWriteDJInternal_Bool(const DJValue *value, FILE *fp) {
 }
 
 int FileWriteDJInternal_Integer(const DJValue *value, FILE *fp) {
-  assert(DJValueIS_Integer(*value));
-  int64_t *ptr = UNBOX_DJValueAsInteger(*value);
+  assert(DJPtrIS_Integer(value));
+  int64_t *ptr = UNBOX_DJPtrAsInteger(value);
   return fprintf(fp, "%ld", *ptr);
 }
 
 int FileWriteDJInternal_String(const DJValue *value, FILE *fp) {
-  assert(DJValueIS_String(*value));
-  DJString *str = UNBOX_DJValueAsString(*value);
+  assert(DJPtrIS_String(value));
+  DJString *str = UNBOX_DJPtrAsString(value);
   return fprintf(fp, "\"%s\"", str->ptr);
 }
 
 int FileWriteDJInternal_Array(const DJValue *value, FILE *fp) {
-  assert(DJValueIS_Array(*value));
-  DJArray *arr = UNBOX_DJValueAsArray(*value);
+  assert(DJPtrIS_Array(value));
+  DJArray *arr = UNBOX_DJPtrAsArray(value);
   int ans = 0;
   ans += fprintf(fp, "[");
   for (size_t i = 0; i < arr->len; i++) {
@@ -52,8 +53,8 @@ int FileWriteDJInternal_Array(const DJValue *value, FILE *fp) {
 }
 
 int FileWriteDJInternal_Object(const DJValue *value, FILE *fp) {
-  assert(DJValueIS_Object(*value));
-  DJObject *obj = UNBOX_DJValueAsObject(*value);
+  assert(DJPtrIS_Object(value));
+  DJObject *obj = UNBOX_DJPtrAsObject(value);
   int ans = 0;
   ans += fprintf(fp, "{");
   for (size_t i = 0; i < obj->len; i++) {
@@ -82,5 +83,5 @@ static int (*_dj_filewriters[])(const DJValue *value, FILE *fp) = {
 };
 
 int WriteDJValueToFile(const DJValue *value, FILE *fp) {
-  return (_dj_filewriters[UNBOX_DJValueTypeONLY(*value)])(value, fp);
+  return (_dj_filewriters[UNBOX_DJPtrTypeONLY(value)])(value, fp);
 }

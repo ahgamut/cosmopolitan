@@ -6,25 +6,26 @@
 #include "third_party/dabbajson/dabbajson.internal.h"
 
 DJValueType GetTypeOfDJValue(const DJValue *value) {
-  return UNBOX_DJValueTypeONLY(*value);
+  return UNBOX_DJPtrTypeONLY(value);
 }
 
 int DJValueToDouble(const DJValue *value, double *number) {
-  if (!DJValueIS_Double(*value)) return -1;
-  *number = UNBOX_DJValueAsDouble(*value);
+  if (!DJPtrIS_Double(value)) return -1;
+  DJValue x = {.__raw = (uint64_t)(value)};
+  *number = x.number;
   return 0;
 }
 
 int DJValueToInteger(const DJValue *value, int64_t *number) {
-  if (!DJValueIS_Integer(*value)) return -1;
-  *number = *(UNBOX_DJValueAsInteger(*value));
+  if (!DJPtrIS_Integer(value)) return -1;
+  *number = *(UNBOX_DJPtrAsInteger(value));
   return 0;
 }
 
 int DJValueToString(const DJValue *value, char **ptr, size_t *len) {
   DJString *str;
-  if (!DJValueIS_String(*value)) return -1;
-  str = UNBOX_DJValueAsString(*value);
+  if (!DJPtrIS_String(value)) return -1;
+  str = UNBOX_DJPtrAsString(value);
   // str is always non-NULL because the typecheck passed
   *ptr = str->ptr;
   *len = str->len;
@@ -33,8 +34,8 @@ int DJValueToString(const DJValue *value, char **ptr, size_t *len) {
 
 int DJValueToArray(const DJValue *value, DJValue ***values, size_t *len) {
   DJArray *arr;
-  if (!DJValueIS_Array(*value)) return -1;
-  arr = UNBOX_DJValueAsArray(*value);
+  if (!DJPtrIS_Array(value)) return -1;
+  arr = UNBOX_DJPtrAsArray(value);
   // arr is always non-NULL because the typecheck passed
   *values = arr->values;
   *len = arr->len;
@@ -44,8 +45,8 @@ int DJValueToArray(const DJValue *value, DJValue ***values, size_t *len) {
 int DJValueToObject(const DJValue *value, char ***keys, size_t **keylens,
                     DJValue ***values, size_t *len) {
   DJObject *obj;
-  if (!DJValueIS_Object(*value)) return -1;
-  obj = UNBOX_DJValueAsObject(*value);
+  if (!DJPtrIS_Object(value)) return -1;
+  obj = UNBOX_DJPtrAsObject(value);
   // obj is always non-NULL because the typecheck passed
   *keys = obj->keys;
   *values = obj->values;
@@ -55,10 +56,10 @@ int DJValueToObject(const DJValue *value, char ***keys, size_t **keylens,
 }
 
 int DJValueToBool(const DJValue *value, bool *b) {
-  if (DJValueIS_True(*value)) {
+  if (DJPtrIS_True(value)) {
     *b = true;
     return 0;
-  } else if (DJValueIS_False(*value)) {
+  } else if (DJPtrIS_False(value)) {
     *b = false;
     return 0;
   } else {
@@ -67,67 +68,65 @@ int DJValueToBool(const DJValue *value, bool *b) {
 }
 
 bool DJValueIsNull(const DJValue *value) {
-  return DJValueIS_Null(*value);
+  return DJPtrIS_Null(value);
 }
 
 bool DJValueIsTrue(const DJValue *value) {
-  return DJValueIS_True(*value);
+  return DJPtrIS_True(value);
 }
 
 bool DJValueIsFalse(const DJValue *value) {
-  return DJValueIS_False(*value);
+  return DJPtrIS_False(value);
 }
 
 DJValue *DoubleToDJValue(const double number) {
-  DJValue *answer = malloc(sizeof(DJValue));
-  BOX_DoubleIntoDJValue(number, *answer);
-  return answer;
+  DJValue answer = {.number = number};
+  return (DJValue*)(answer.__raw);
 }
 
 DJValue *IntegerToDJValue(const int64_t number) {
   int64_t *copy = malloc(sizeof(int64_t));
-  DJValue *answer = malloc(sizeof(DJValue));
+  DJValue *answer;
   *copy = number;
-  BOX_IntegerIntoDJValue(copy, *answer);
+  BOX_IntegerIntoDJPtr(copy, answer);
   return answer;
 }
 
 DJValue *BoolToDJValue(const bool b) {
-  DJValue *answer = malloc(sizeof(DJValue));
-  answer->__raw = b ? DJValueTrueTAG : DJValueFalseTAG;
+  DJValue *answer;
+  answer = (DJValue*)(b ? DJPtrTrueTAG : DJPtrFalseTAG);
   return answer;
 }
 
 DJValue *NullToDJValue() {
-  DJValue *answer = malloc(sizeof(DJValue));
-  answer->__raw = DJValueNullTAG;
+  DJValue *answer = (DJValue*)(DJPtrNullTAG);
   return answer;
 }
 
 DJValue *StringToDJValue(const char *ptr, const size_t len) {
-  DJValue *answer = malloc(sizeof(DJValue));
+  DJValue *answer = NULL;
   DJString *str = malloc(sizeof(DJString));
   str->ptr = strndup(ptr, len);
   str->len = len;
-  BOX_StringIntoDJValue(str, *answer);
+  BOX_StringIntoDJPtr(str, answer);
   return answer;
 }
 
 DJValue *ArrayToDJValue(const DJValue **values, const size_t len) {
-  DJValue *answer = malloc(sizeof(DJValue));
+  DJValue *answer = NULL;
   DJArray *arr = malloc(sizeof(DJArray));
   arr->len = len;
   arr->values = malloc(sizeof(DJValue *) * len);
   for (size_t i = 0; i < len; i++) {
     arr->values[i] = DuplicateDJValue(values[i]);
   }
-  BOX_ArrayIntoDJValue(arr, *answer);
+  BOX_ArrayIntoDJPtr(arr, answer);
   return answer;
 }
 
 DJValue *ObjectToDJValue(const char **keys, const size_t *keylens,
                          const DJValue **values, const size_t len) {
-  DJValue *answer = malloc(sizeof(DJValue));
+  DJValue *answer = NULL;
   DJObject *obj = malloc(sizeof(DJObject));
   obj->len = len;
   obj->keys = malloc(sizeof(char *) * len);
@@ -138,7 +137,7 @@ DJValue *ObjectToDJValue(const char **keys, const size_t *keylens,
     obj->keylens[i] = keylens[i];
     obj->values[i] = DuplicateDJValue(values[i]);
   }
-  BOX_ObjectIntoDJValue(obj, *answer);
+  BOX_ObjectIntoDJPtr(obj, answer);
   return answer;
 }
 
@@ -147,27 +146,27 @@ void FreeDJInternal_Dummy(DJValue *value) {
 }
 
 void FreeDJInternal_Integer(DJValue *value) {
-  assert(DJValueIS_Integer(*value));
-  int64_t *ptr = UNBOX_DJValueAsInteger(*value);
+  assert(DJPtrIS_Integer(value));
+  int64_t *ptr = UNBOX_DJPtrAsInteger(value);
   if (ptr) {
     free(ptr);
-    BOX_IntegerIntoDJValue(NULL, *value);
   }
 }
 
 void FreeDJInternal_String(DJValue *value) {
-  assert(DJValueIS_String(*value));
-  DJString *str = UNBOX_DJValueAsString(*value);
+  assert(DJPtrIS_String(value));
+  DJString *str = UNBOX_DJPtrAsString(value);
   if (str->ptr) {
     free(str->ptr);
     str->ptr = NULL;
     str->len = 0;
   }
+  free(str);
 }
 
 void FreeDJInternal_Array(DJValue *value) {
-  assert(DJValueIS_Array(*value));
-  DJArray *arr = UNBOX_DJValueAsArray(*value);
+  assert(DJPtrIS_Array(value));
+  DJArray *arr = UNBOX_DJPtrAsArray(value);
   if (arr->values) {
     for (size_t i = 0; i < arr->len; i++) {
       FreeDJValue(arr->values[i]);
@@ -176,11 +175,12 @@ void FreeDJInternal_Array(DJValue *value) {
     arr->values = NULL;
     arr->len = 0;
   }
+  free(arr);
 }
 
 void FreeDJInternal_Object(DJValue *value) {
-  assert(DJValueIS_Object(*value));
-  DJObject *obj = UNBOX_DJValueAsObject(*value);
+  assert(DJPtrIS_Object(value));
+  DJObject *obj = UNBOX_DJPtrAsObject(value);
   if (obj->values) {
     for (size_t i = 0; i < obj->len; i++) {
       FreeDJValue(obj->values[i]);
@@ -191,6 +191,7 @@ void FreeDJInternal_Object(DJValue *value) {
     free(obj->keylens);
     obj->len = 0;
   }
+  free(obj);
 }
 
 void FreeDJInternal_Error(DJValue *value) {
@@ -209,46 +210,46 @@ static void (*_dj_cleaners[])(DJValue *value) = {
 };
 
 void FreeDJValue(DJValue *value) {
-  (_dj_cleaners[UNBOX_DJValueTypeONLY(*value)])(value);
-  free(value);
+  (_dj_cleaners[UNBOX_DJPtrTypeONLY(value)])(value);
 }
 
 DJValue *DuplicateDJInternal_Bool(const DJValue *value) {
-  assert(DJValueIS_True(*value) || DJValueIS_False(*value));
-  return BoolToDJValue(DJValueIS_True(*value));
+  assert(DJPtrIS_True(value) || DJPtrIS_False(value));
+  return BoolToDJValue(DJPtrIS_True(value));
 }
 
 DJValue *DuplicateDJInternal_Double(const DJValue *value) {
-  assert(DJValueIS_Double(*value));
-  return DoubleToDJValue(UNBOX_DJValueAsDouble(*value));
+  assert(DJPtrIS_Double(value));
+  DJValue x = {.__raw = (uint64_t)(value)};
+  return DoubleToDJValue(x.number);
 }
 
 DJValue *DuplicateDJInternal_Null(const DJValue *value) {
-  assert(DJValueIS_Null(*value));
+  assert(DJPtrIS_Null(value));
   return NullToDJValue();
 }
 
 DJValue *DuplicateDJInternal_Integer(const DJValue *value) {
-  assert(DJValueIS_Integer(*value));
-  int64_t *ptr = UNBOX_DJValueAsInteger(*value);
+  assert(DJPtrIS_Integer(value));
+  int64_t *ptr = UNBOX_DJPtrAsInteger(value);
   return IntegerToDJValue(*ptr);
 }
 
 DJValue *DuplicateDJInternal_String(const DJValue *value) {
-  assert(DJValueIS_String(*value));
-  DJString *str = UNBOX_DJValueAsString(*value);
+  assert(DJPtrIS_String(value));
+  DJString *str = UNBOX_DJPtrAsString(value);
   return StringToDJValue(str->ptr, str->len);
 }
 
 DJValue *DuplicateDJInternal_Array(const DJValue *value) {
-  assert(DJValueIS_Array(*value));
-  DJArray *arr = UNBOX_DJValueAsArray(*value);
+  assert(DJPtrIS_Array(value));
+  DJArray *arr = UNBOX_DJPtrAsArray(value);
   return ArrayToDJValue((const DJValue **)arr->values, arr->len);
 }
 
 DJValue *DuplicateDJInternal_Object(const DJValue *value) {
-  assert(DJValueIS_Object(*value));
-  DJObject *obj = UNBOX_DJValueAsObject(*value);
+  assert(DJPtrIS_Object(value));
+  DJObject *obj = UNBOX_DJPtrAsObject(value);
   return ObjectToDJValue((const char **)obj->keys, (const size_t *)obj->keylens,
                          (const DJValue **)obj->values, obj->len);
 }
@@ -270,5 +271,5 @@ static DJValue *(*_dj_duplicators[])(const DJValue *value) = {
 };
 
 DJValue *DuplicateDJValue(const DJValue *value) {
-  return (_dj_duplicators[UNBOX_DJValueTypeONLY(*value)])(value);
+  return (_dj_duplicators[UNBOX_DJPtrTypeONLY(value)])(value);
 }

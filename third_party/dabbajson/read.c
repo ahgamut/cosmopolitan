@@ -100,7 +100,7 @@ int _FileReadDJInternal_String(FILE *fp, int depth, DJValue **result) {
   str->len = buflen;
 
   answer = malloc(sizeof(DJValue));
-  BOX_StringIntoDJValue(str, *answer);
+  BOX_StringIntoDJPtr(str, answer);
   *result = answer;
   return 0;
 }
@@ -176,7 +176,7 @@ int _FileReadDJInternal_Object(FILE *fp, int depth, DJValue **result) {
     if (status) break;
     status = _FileReadDJInternal_String(fp, depth + 1, &tempkey);
     if (status) break;
-    tempstr = UNBOX_DJValueAsString(*tempkey);
+    tempstr = UNBOX_DJPtrAsString(tempkey);
     tmp->key = tempstr->ptr;
     tmp->keylen = tempstr->len;
     status = FileReadWhitespaceUntilOneOf(fp, ":");
@@ -256,7 +256,7 @@ int ReadDJValueFromFile(FILE *fp, DJValue **result) {
   int status = 0;
   status = _ReadDJValueFromFile(fp, 0, result);
   if (status == -1 || !*result ||
-      (!DJValueIS_Object(**result) && !DJValueIS_Array(**result))) {
+      (!DJPtrIS_Object(*result) && !DJPtrIS_Array(*result))) {
     if (*result) {
       FreeDJValue(*result);
       *result = NULL;

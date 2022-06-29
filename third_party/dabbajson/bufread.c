@@ -91,7 +91,7 @@ int _BufferReadDJInternal_String(const char *buf, const size_t buflen,
   if (*index >= buflen) return -1;
 
   answer = StringToDJValue(buf + *index - count, count);
-  str = UNBOX_DJValueAsString(*answer);
+  str = UNBOX_DJPtrAsString(answer);
   if (str->len) {
     str->ptr[str->len - 1] = '\0';
   }
@@ -177,7 +177,7 @@ int _BufferReadDJInternal_Object(const char *buf, const size_t buflen,
     status =
         _BufferReadDJInternal_String(buf, buflen, index, depth + 1, &tempkey);
     if (status) break;
-    tempstr = UNBOX_DJValueAsString(*tempkey);
+    tempstr = UNBOX_DJPtrAsString(tempkey);
     tmp->key = tempstr->ptr;
     tmp->keylen = tempstr->len;
     status = ReadWhitespaceUntilOneOf(buf, buflen, index, ":");
@@ -264,7 +264,7 @@ int ReadDJValueFromBuffer(const char *buf, const size_t buflen,
   size_t index = 0;
   status = _ReadDJValueFromBuffer(buf, buflen, &index, 0, result);
   if (status == -1 || !*result ||
-      (!DJValueIS_Object(**result) && !DJValueIS_Array(**result))) {
+      (!DJPtrIS_Object(*result) && !DJPtrIS_Array(*result))) {
     if (*result) {
       FreeDJValue(*result);
       *result = NULL;

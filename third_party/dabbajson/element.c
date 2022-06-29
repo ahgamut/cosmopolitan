@@ -29,7 +29,7 @@ size_t DJA_CountLinked(const DJArrayElement *elem) {
 
 DJValue *ArrayElementsToDJValue(DJArrayElement *head, size_t num_elements) {
   /* create the DJValue from the DJArrayElement linked list */
-  DJValue *answer = malloc(sizeof(DJValue));
+  DJValue *answer = NULL;
   DJArray *arr = malloc(sizeof(DJArray));
   DJArrayElement *tmp;
   arr->len = num_elements;
@@ -42,7 +42,7 @@ DJValue *ArrayElementsToDJValue(DJArrayElement *head, size_t num_elements) {
      * they are being std::move'd into the DJArray */
     free(tmp);
   }
-  BOX_ArrayIntoDJValue(arr, *answer);
+  BOX_ArrayIntoDJPtr(arr, answer);
   return answer;
 }
 
@@ -70,7 +70,7 @@ size_t DJO_CountLinked(const DJObjectElement *elem) {
 
 DJValue *ObjectElementsToDJValue(DJObjectElement *head, size_t num_elements) {
   /* create the DJValue from the DJObjectElement linked list */
-  DJValue *answer = malloc(sizeof(DJValue));
+  DJValue *answer = NULL;
   DJObject *obj = malloc(sizeof(DJObject));
   DJObjectElement *tmp;
 
@@ -88,6 +88,6 @@ DJValue *ObjectElementsToDJValue(DJObjectElement *head, size_t num_elements) {
      * they are being std::move'd into the DJObject */
     free(tmp);
   }
-  BOX_ObjectIntoDJValue(obj, *answer);
+  BOX_ObjectIntoDJPtr(obj, answer);
   return answer;
 }
