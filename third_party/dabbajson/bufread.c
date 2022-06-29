@@ -57,7 +57,8 @@ int _BufferReadDJInternal_Number(const char *buf, const size_t buflen,
     }
   }
   if (*index >= buflen) return -1;
-  if (!strchr(buf2, '.') || !strchr(valid, 'e') || !strchr(valid, 'E')) {
+  if (!strchr(buf2, '.') && !strchr(buf2, 'e') && !strchr(buf2, 'E')) {
+    /* string does not contain .eE so likely int */
     *result = IntegerToDJValue(strtoll(buf2, NULL, 10));
   } else {
     *result = DoubleToDJValue(strtod(buf2, NULL));
@@ -78,11 +79,14 @@ int _BufferReadDJInternal_String(const char *buf, const size_t buflen,
   count = 1;
   (*index)++;
 
-  while (*index < buflen && ((stopquote = buf[*index]) != '\"') &&
-         prev != '\\') {
+  while (*index < buflen &&
+         !(((stopquote = buf[*index]) == '\"') && prev != '\\')) {
     count += 1;
+    prev = stopquote;
     (*index)++;
   }
+  /* *index is at ", increment once to be ready at the next char,
+   * and also have an additional char in buffer for '\0' */
   (*index)++;
   if (*index >= buflen) return -1;
 

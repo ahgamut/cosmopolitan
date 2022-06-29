@@ -6,11 +6,13 @@
 STATIC_YOINK("third_party/dabbajson/sample.json");
 #define BUFFERSIZE 128
 
+#define STRINGANDSIZE(x) x,sizeof(x)
+
 int main(int argc, char *argv[]) {
   const char *keys[] = {"hi", "this", "is", "a", "sample", "json"};
   const size_t keylens[] = {2, 4, 2, 1, 6, 4};
   const DJValue *values[] = {
-      DoubleToDJValue(-3.14), StringToDJValue("string", 6),
+      DoubleToDJValue(-3.14), StringToDJValue(STRINGANDSIZE("str\\\"ng")),
       NullToDJValue(),        BoolToDJValue(true),
       BoolToDJValue(false),   IntegerToDJValue(345)};
 

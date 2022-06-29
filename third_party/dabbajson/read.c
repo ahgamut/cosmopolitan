@@ -58,7 +58,8 @@ int _FileReadDJInternal_Number(FILE *fp, int depth, DJValue **result) {
     }
   }
   if (feof(fp) || ferror(fp)) return -1;
-  if (!strchr(buf, '.') || !strchr(valid, 'e') || !strchr(valid, 'E')) {
+  if (!strchr(buf, '.') && !strchr(buf, 'e') && !strchr(buf, 'E')) {
+    /* string does not contain .eE so likely int */
     *result = IntegerToDJValue(strtoll(buf, NULL, 10));
   } else {
     *result = DoubleToDJValue(strtod(buf, NULL));
@@ -79,8 +80,9 @@ int _FileReadDJInternal_String(FILE *fp, int depth, DJValue **result) {
   prev = startquote;
   count = 1;
 
-  while (!feof(fp) && ((stopquote = fgetc(fp)) != '\"') && prev != '\\') {
+  while (!feof(fp) && !(((stopquote = fgetc(fp)) == '\"') && prev != '\\')) {
     count += 1;
+    prev = stopquote;
   }
   fseek(fp, -count, SEEK_CUR);
   buflen = count;
