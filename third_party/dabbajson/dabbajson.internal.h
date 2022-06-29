@@ -67,9 +67,9 @@ struct __DJArray {
 #define DJValueObjectTAG  0xffff000000000000ULL
 
 #define DJValueIS_Double(x) (((x).__raw & DJValueDoubleTAG) <= DJValueDoubleTAG)
-#define DJValueIS_Null(x)   (((x).__raw & DJValueNullTAG) == DJValueNullTAG)
-#define DJValueIS_True(x)   (((x).__raw & DJValueTrueTAG) == DJValueTrueTAG)
-#define DJValueIS_False(x)  (((x).__raw & DJValueFalseTAG) == DJValueFalseTAG)
+#define DJValueIS_Null(x)   (((x).__raw ^ DJValueNullTAG) == 0)
+#define DJValueIS_True(x)   (((x).__raw ^ DJValueTrueTAG) == 0)
+#define DJValueIS_False(x)  (((x).__raw ^ DJValueFalseTAG) == 0)
 #define DJValueIS_Integer(x) \
   (((x).__raw & DJValueIntegerTAG) == DJValueIntegerTAG)
 #define DJValueIS_String(x) (((x).__raw & DJValueStringTAG) == DJValueStringTAG)

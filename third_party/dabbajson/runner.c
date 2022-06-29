@@ -28,10 +28,10 @@ int main(int argc, char *argv[]) {
   }
 
   DJValue *obj2 = NULL;
-  char buf3[] = "[4, 2.1, true, false, null, \"abc\", {\"a\":null}]";
-  ReadDJValueFromBuffer(buf3, strlen(buf3), &obj2);
+  ReadDJValueFromBuffer(buf, res, &obj2);
   res = WriteDJValueToBuffer(obj2, buf2, sizeof(buf2));
   assert(buf2[BUFFERSIZE - 1] == '\0');
+  assert(!strcmp(buf, buf2));
   printf("%s\n(%d bytes written into buffer)\n", buf2,
          res >= BUFFERSIZE ? BUFFERSIZE : res);
 
