@@ -29,8 +29,10 @@ struct __DJObjectElement {
 };
 
 DJObjectElement *DJO_New();
+size_t DJO_CountLinked(const DJObjectElement *);
+/* frees values */
 void DJO_FreeLinked(DJObjectElement *);
-size_t DJO_CountLinked(DJObjectElement *);
+DJValue * ObjectElementsToDJValue(DJObjectElement *, size_t);
 
 struct __DJObject {
   char **keys;
@@ -45,8 +47,10 @@ struct __DJArrayElement {
 };
 
 DJArrayElement *DJA_New();
+size_t DJA_CountLinked(const DJArrayElement *);
+/* frees values */
 void DJA_FreeLinked(DJArrayElement *);
-size_t DJA_CountLinked(DJArrayElement *);
+DJValue *ArrayElementsToDJValue(DJArrayElement *, size_t);
 
 struct __DJArray {
   DJValue **values;

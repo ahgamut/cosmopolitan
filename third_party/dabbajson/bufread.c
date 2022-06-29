@@ -143,21 +143,7 @@ int _BufferReadDJInternal_Array(const char *buf, const size_t buflen,
   }
 
   if (status == 0) {
-    /* create the DJValue from the DJArrayElement linked list */
-    DJValue *answer = malloc(sizeof(DJValue));
-    DJArray *arr = malloc(sizeof(DJArray));
-    arr->len = num_elements;
-    arr->values = malloc(sizeof(DJValue *) * arr->len);
-    for (size_t i = 0; i < num_elements; i++) {
-      arr->values[i] = head->value;
-      tmp = head;
-      head = head->next;
-      /* we are not freeing the attributes of tmp because
-       * they are being std::move'd into the DJArray */
-      free(tmp);
-    }
-    BOX_ArrayIntoDJValue(arr, *answer);
-    *result = answer;
+    *result = ArrayElementsToDJValue(head, num_elements);
   } else {
     /* failed somewhere, so delete anything you may have allocated */
     DJA_FreeLinked(head);
@@ -206,25 +192,7 @@ int _BufferReadDJInternal_Object(const char *buf, const size_t buflen,
   }
 
   if (status == 0) {
-    /* create the DJValue from the DJObjectElement linked list */
-    DJValue *answer = malloc(sizeof(DJValue));
-    DJObject *obj = malloc(sizeof(DJObject));
-    obj->len = num_elements;
-    obj->keylens = malloc(sizeof(size_t) * obj->len);
-    obj->keys = malloc(sizeof(char *) * obj->len);
-    obj->values = malloc(sizeof(DJValue *) * obj->len);
-    for (size_t i = 0; i < num_elements; i++) {
-      obj->values[i] = head->value;
-      obj->keys[i] = head->key;
-      obj->keylens[i] = head->keylen;
-      tmp = head;
-      head = head->next;
-      /* we are not freeing the attributes of tmp because
-       * they are being std::move'd into the DJObject */
-      free(tmp);
-    }
-    BOX_ObjectIntoDJValue(obj, *answer);
-    *result = answer;
+    *result = ObjectElementsToDJValue(head, num_elements);
   } else {
     /* failed somewhere, so delete anything you may have allocated */
     DJO_FreeLinked(head);

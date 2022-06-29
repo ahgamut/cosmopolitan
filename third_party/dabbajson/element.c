@@ -22,9 +22,28 @@ void DJA_FreeLinked(DJArrayElement *elem) {
   free(elem);
 }
 
-size_t DJA_CountLinked(DJArrayElement *elem) {
+size_t DJA_CountLinked(const DJArrayElement *elem) {
   if (!elem || !elem->value) return 0;
   return 1 + DJA_CountLinked(elem->next);
+}
+
+DJValue *ArrayElementsToDJValue(DJArrayElement *head, size_t num_elements) {
+  /* create the DJValue from the DJArrayElement linked list */
+  DJValue *answer = malloc(sizeof(DJValue));
+  DJArray *arr = malloc(sizeof(DJArray));
+  DJArrayElement *tmp;
+  arr->len = num_elements;
+  arr->values = malloc(sizeof(DJValue *) * arr->len);
+  for (size_t i = 0; i < num_elements; i++) {
+    arr->values[i] = head->value;
+    tmp = head;
+    head = head->next;
+    /* we are not freeing the attributes of tmp because
+     * they are being std::move'd into the DJArray */
+    free(tmp);
+  }
+  BOX_ArrayIntoDJValue(arr, *answer);
+  return answer;
 }
 
 DJObjectElement *DJO_New() {
@@ -44,7 +63,31 @@ void DJO_FreeLinked(DJObjectElement *elem) {
   free(elem);
 }
 
-size_t DJO_CountLinked(DJObjectElement *elem) {
+size_t DJO_CountLinked(const DJObjectElement *elem) {
   if (!elem || !elem->value || !elem->key || !elem->keylen) return 0;
   return 1 + DJO_CountLinked(elem->next);
+}
+
+DJValue *ObjectElementsToDJValue(DJObjectElement *head, size_t num_elements) {
+  /* create the DJValue from the DJObjectElement linked list */
+  DJValue *answer = malloc(sizeof(DJValue));
+  DJObject *obj = malloc(sizeof(DJObject));
+  DJObjectElement *tmp;
+
+  obj->len = num_elements;
+  obj->keylens = malloc(sizeof(size_t) * obj->len);
+  obj->keys = malloc(sizeof(char *) * obj->len);
+  obj->values = malloc(sizeof(DJValue *) * obj->len);
+  for (size_t i = 0; i < num_elements; i++) {
+    obj->values[i] = head->value;
+    obj->keys[i] = head->key;
+    obj->keylens[i] = head->keylen;
+    tmp = head;
+    head = head->next;
+    /* we are not freeing the attributes of tmp because
+     * they are being std::move'd into the DJObject */
+    free(tmp);
+  }
+  BOX_ObjectIntoDJValue(obj, *answer);
+  return answer;
 }
