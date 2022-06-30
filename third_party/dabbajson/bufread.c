@@ -145,6 +145,9 @@ int _BufferReadDJInternal_Array(const char *buf, const size_t buflen,
     stopbracket = buf[*index];
     (*index)++;
   }
+  if (num_elements == 0) {
+      (*index)++; /* we only peeked at ']', so read it out */
+  }
 
   if (status == 0) {
     *result = ArrayElementsToDJValue(head, num_elements);
@@ -193,6 +196,9 @@ int _BufferReadDJInternal_Object(const char *buf, const size_t buflen,
     status = ReadWhitespaceUntilOneOf(buf, buflen, index, ",}");
     stopbracket = buf[*index];
     (*index)++;
+  }
+  if (num_elements == 0) {
+      (*index)++; /* we only peeked at '}', so read it out */
   }
 
   if (status == 0) {

@@ -147,6 +147,9 @@ int _FileReadDJInternal_Array(FILE *fp, int depth, DJValue **result) {
     status = FileReadWhitespaceUntilOneOf(fp, ",]");
     stopbracket = fgetc(fp);
   }
+  if (num_elements == 0) {
+      fgetc(fp); /* we only peeked at ']', so read it out */
+  }
 
   if (status == 0) {
     *result = ArrayElementsToDJValue(head, num_elements);
@@ -189,6 +192,9 @@ int _FileReadDJInternal_Object(FILE *fp, int depth, DJValue **result) {
     num_elements += 1;
     status = FileReadWhitespaceUntilOneOf(fp, ",}");
     stopbracket = fgetc(fp);
+  }
+  if (num_elements == 0) {
+      fgetc(fp); /* we only peeked at '}', so read it out */
   }
 
   if (status == 0) {
