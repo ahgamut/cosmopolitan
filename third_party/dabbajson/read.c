@@ -73,7 +73,7 @@ int _FileReadDJInternal_String(FILE *fp, int depth, DJValue **result) {
   char *buf;
   size_t buflen;
   DJString *str;
-  DJValue *answer;
+  DJValue *answer = NULL;
 
   long count = 0;
   if ((startquote = fgetc(fp)) != '\"') return -1;
@@ -99,7 +99,6 @@ int _FileReadDJInternal_String(FILE *fp, int depth, DJValue **result) {
   str->ptr = buf;
   str->len = buflen;
 
-  answer = malloc(sizeof(DJValue));
   BOX_StringIntoDJPtr(str, answer);
   *result = answer;
   return 0;
