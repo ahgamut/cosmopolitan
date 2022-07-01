@@ -6,20 +6,33 @@
 #include "third_party/dabbajson/dabbajson.internal.h"
 
 DJValueType GetTypeOfDJValue(const DJValue *value) {
-  return UNBOX_DJPtrTypeONLY(value);
+  static DJValueType actual_tags[] = {
+      DJV_DOUBLE,  DJV_NULL,  DJV_BOOL,
+      DJV_INTEGER, /* -2^47 to 2^47-1, no malloc */
+      DJV_INTEGER, /* "big" int64_t, calls malloc */
+      DJV_STRING,  DJV_ARRAY, DJV_OBJECT};
+  return actual_tags[UNBOX_DJPtrTypeONLY(value)];
 }
 
 int DJValueToDouble(const DJValue *value, double *number) {
   if (!DJPtrIS_Double(value)) return -1;
-  DJValue x = {.__raw = (uint64_t)(value)};
+  DJValue x = {.raw_u64 = (uint64_t)(value)};
   *number = x.number;
   return 0;
 }
 
 int DJValueToInteger(const DJValue *value, int64_t *number) {
-  if (!DJPtrIS_Integer(value)) return -1;
-  *number = *(UNBOX_DJPtrAsInteger(value));
-  return 0;
+  if (DJPtrIS_MiniInt(value)) {
+    /* MiniInt is not via pointer */
+    *number = (UNBOX_DJPtrAsMiniInt(value));
+    return 0;
+  } else if (DJPtrIS_Integer(value)) {
+    /* Integer is via pointer */
+    *number = *(UNBOX_DJPtrAsInteger(value));
+    return 0;
+  } else {
+    return -1;
+  }
 }
 
 int DJValueToString(const DJValue *value, char **ptr, size_t *len) {
@@ -81,12 +94,17 @@ bool DJValueIsFalse(const DJValue *value) {
 
 DJValue *DoubleToDJValue(const double number) {
   DJValue answer = {.number = number};
-  return (DJValue*)(answer.__raw);
+  return (DJValue*)(answer.raw_u64);
 }
 
 DJValue *IntegerToDJValue(const int64_t number) {
-  int64_t *copy = malloc(sizeof(int64_t));
-  DJValue *answer;
+  int64_t *copy;
+  DJValue *answer = NULL;
+  if (FITS_IN_MiniInt(number)) {
+    BOX_MiniIntIntoDJPtr(number, answer);
+    return answer;
+  }
+  copy = malloc(sizeof(int64_t));
   *copy = number;
   BOX_IntegerIntoDJPtr(copy, answer);
   return answer;
@@ -142,7 +160,7 @@ DJValue *ObjectToDJValue(const char **keys, const size_t *keylens,
 }
 
 void FreeDJInternal_Dummy(DJValue *value) {
-  /* doubles, bools, null, have nothing inside to be freed */
+  /* doubles, bools, null, mini-ints have nothing inside to be freed */
 }
 
 void FreeDJInternal_Integer(DJValue *value) {
@@ -199,14 +217,14 @@ void FreeDJInternal_Error(DJValue *value) {
 }
 
 static void (*_dj_cleaners[])(DJValue *value) = {
-    FreeDJInternal_Dummy,   /* DJV_DOUBLE = 0 */
-    FreeDJInternal_Dummy,   /* DJV_NULL = 1 */
-    FreeDJInternal_Dummy,   /* DJV_TRUE = 2 */
-    FreeDJInternal_Dummy,   /* DJV_FALSE = 3 */
-    FreeDJInternal_Integer, /* DJV_INTEGER = 4 */
-    FreeDJInternal_String,  /* DJV_STRING = 5 */
-    FreeDJInternal_Array,   /* DJV_ARRAY = 6 */
-    FreeDJInternal_Object,  /* DJV_OBJECT = 7 */
+    FreeDJInternal_Dummy,   /* Double */
+    FreeDJInternal_Dummy,   /* Null */
+    FreeDJInternal_Dummy,   /* Bool */
+    FreeDJInternal_Dummy,   /* MiniInt */
+    FreeDJInternal_Integer, /* Integer */
+    FreeDJInternal_String,  /* DJString* */
+    FreeDJInternal_Array,   /* DJArray* */
+    FreeDJInternal_Object,  /* DJObject* */
 };
 
 void FreeDJValue(DJValue *value) {
@@ -220,13 +238,19 @@ DJValue *DuplicateDJInternal_Bool(const DJValue *value) {
 
 DJValue *DuplicateDJInternal_Double(const DJValue *value) {
   assert(DJPtrIS_Double(value));
-  DJValue x = {.__raw = (uint64_t)(value)};
+  DJValue x = {.raw_u64 = (uint64_t)(value)};
   return DoubleToDJValue(x.number);
 }
 
 DJValue *DuplicateDJInternal_Null(const DJValue *value) {
   assert(DJPtrIS_Null(value));
   return NullToDJValue();
+}
+
+DJValue *DuplicateDJInternal_MiniInt(const DJValue *value) {
+  assert(DJPtrIS_MiniInt(value));
+  int64_t number = UNBOX_DJPtrAsMiniInt(value);
+  return IntegerToDJValue(number);
 }
 
 DJValue *DuplicateDJInternal_Integer(const DJValue *value) {
@@ -260,14 +284,14 @@ DJValue *DuplicateDJInternal_Error(const DJValue *value) {
 }
 
 static DJValue *(*_dj_duplicators[])(const DJValue *value) = {
-    DuplicateDJInternal_Double,  /* DJV_DOUBLE = 0 */
-    DuplicateDJInternal_Null,    /* DJV_NULL = 1 */
-    DuplicateDJInternal_Bool,    /* DJV_TRUE = 2 */
-    DuplicateDJInternal_Bool,    /* DJV_FALSE = 3 */
-    DuplicateDJInternal_Integer, /* DJV_INTEGER = 4 */
-    DuplicateDJInternal_String,  /* DJV_STRING = 5 */
-    DuplicateDJInternal_Array,   /* DJV_ARRAY = 6 */
-    DuplicateDJInternal_Object,  /* DJV_OBJECT = 7 */
+    DuplicateDJInternal_Double,  /* Double */
+    DuplicateDJInternal_Null,    /* Null */
+    DuplicateDJInternal_Bool,    /* Bool */
+    DuplicateDJInternal_MiniInt, /* MiniInt */
+    DuplicateDJInternal_Integer, /* Integer */
+    DuplicateDJInternal_String,  /* DJString* */
+    DuplicateDJInternal_Array,   /* DJArray* */
+    DuplicateDJInternal_Object,  /* DJObject* */
 };
 
 DJValue *DuplicateDJValue(const DJValue *value) {

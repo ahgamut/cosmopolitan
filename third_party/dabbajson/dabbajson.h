@@ -5,12 +5,12 @@
 typedef enum __DJValueType {
   DJV_DOUBLE = 0,
   DJV_NULL = 1,
-  DJV_TRUE = 2,
-  DJV_FALSE = 3,
-  DJV_INTEGER = 4,
-  DJV_STRING = 5,
-  DJV_ARRAY = 6,
-  DJV_OBJECT = 7,
+  DJV_BOOL = 2,
+  DJV_INTEGER = 3,
+  DJV_STRING = 4,
+  DJV_ARRAY = 5,
+  DJV_OBJECT = 6,
+  DJV_ERROR = 7,
 } DJValueType;
 
 typedef struct __DJValue DJValue;

@@ -10,7 +10,7 @@
 int BufferWriteDJInternal_Double(const DJValue *value, char *buf,
                                  size_t buflen) {
   assert(DJPtrIS_Double(value));
-  DJValue answer = {.__raw = (uint64_t)(value)};
+  DJValue answer = {.raw_u64 = (uint64_t)(value)};
   if (0.0 == answer.number - (int64_t)(answer.number)) {
     /* print a .0 so that it is read as double */
     return snprintf(buf, buflen, "%lg.0", answer.number);
@@ -31,6 +31,13 @@ int BufferWriteDJInternal_Bool(const DJValue *value, char *buf, size_t buflen) {
   } else {
     return snprintf(buf, buflen, "false");
   }
+}
+
+int BufferWriteDJInternal_MiniInt(const DJValue *value, char *buf,
+                                  size_t buflen) {
+  assert(DJPtrIS_MiniInt(value));
+  int64_t val = UNBOX_DJPtrAsMiniInt(value);
+  return snprintf(buf, buflen, "%ld", val);
 }
 
 int BufferWriteDJInternal_Integer(const DJValue *value, char *buf,
@@ -122,14 +129,14 @@ int BufferWriteDJInternal_Error(const DJValue *value, char *buf,
 
 static int (*_dj_bufferwriters[])(const DJValue *value, char *buf,
                                   size_t buflen) = {
-    BufferWriteDJInternal_Double,  /* DJV_DOUBLE = 0 */
-    BufferWriteDJInternal_Null,    /* DJV_NULL = 1 */
-    BufferWriteDJInternal_Bool,    /* DJV_TRUE = 2 */
-    BufferWriteDJInternal_Bool,    /* DJV_FALSE = 3 */
-    BufferWriteDJInternal_Integer, /* DJV_INTEGER = 4 */
-    BufferWriteDJInternal_String,  /* DJV_STRING = 5 */
-    BufferWriteDJInternal_Array,   /* DJV_ARRAY = 6 */
-    BufferWriteDJInternal_Object,  /* DJV_OBJECT = 7 */
+    BufferWriteDJInternal_Double,  /* Double */
+    BufferWriteDJInternal_Null,    /* Null */
+    BufferWriteDJInternal_Bool,    /* Bool */
+    BufferWriteDJInternal_MiniInt, /* MiniInt */
+    BufferWriteDJInternal_Integer, /* Integer */
+    BufferWriteDJInternal_String,  /* DJString* */
+    BufferWriteDJInternal_Array,   /* DJArray* */
+    BufferWriteDJInternal_Object,  /* DJObject* */
 };
 
 int WriteDJValueToBuffer(const DJValue *value, char *buf, size_t buflen) {

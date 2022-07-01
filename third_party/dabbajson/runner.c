@@ -14,13 +14,16 @@ int main(int argc, char *argv[]) {
   const DJValue *values[] = {
       DoubleToDJValue(-3.0), StringToDJValue(STRINGANDSIZE("str\\\"ng")),
       NullToDJValue(),        BoolToDJValue(true),
-      BoolToDJValue(false),   IntegerToDJValue(345),
+      BoolToDJValue(false),   IntegerToDJValue(-345),
       ArrayToDJValue(NULL, 0), ObjectToDJValue(NULL, NULL, NULL, 0),
   };
 
   char buf[BUFFERSIZE] = {0};
   char buf2[BUFFERSIZE] = {0};
 
+  int64_t sample = 0;
+  assert(0 == DJValueToInteger(values[5], &sample));
+  assert(sample == -345);
   DJValue *obj = ObjectToDJValue(keys, keylens, values, 8);
   int res = WriteDJValueToBuffer(obj, buf, BUFFERSIZE);
   assert(buf[BUFFERSIZE - 1] == '\0');

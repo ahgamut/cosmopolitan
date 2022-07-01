@@ -9,7 +9,7 @@
 
 int FileWriteDJInternal_Double(const DJValue *value, FILE *fp) {
   assert(DJPtrIS_Double(value));
-  DJValue answer = {.__raw = (uint64_t)(value)};
+  DJValue answer = {.raw_u64 = (uint64_t)(value)};
   if (0.0 == answer.number - (int64_t)(answer.number)) {
     /* print a .0 so that it is read as double */
     return fprintf(fp, "%lg.0", answer.number);
@@ -30,6 +30,12 @@ int FileWriteDJInternal_Bool(const DJValue *value, FILE *fp) {
   } else {
     return fprintf(fp, "true");
   }
+}
+
+int FileWriteDJInternal_MiniInt(const DJValue *value, FILE *fp) {
+  assert(DJPtrIS_MiniInt(value));
+  int64_t val = UNBOX_DJPtrAsMiniInt(value);
+  return fprintf(fp, "%ld", val);
 }
 
 int FileWriteDJInternal_Integer(const DJValue *value, FILE *fp) {
@@ -77,14 +83,14 @@ int FileWriteDJInternal_Error(const DJValue *value, FILE *fp) {
 }
 
 static int (*_dj_filewriters[])(const DJValue *value, FILE *fp) = {
-    FileWriteDJInternal_Double,  /* DJV_DOUBLE = 0 */
-    FileWriteDJInternal_Null,    /* DJV_NULL = 1 */
-    FileWriteDJInternal_Bool,    /* DJV_TRUE = 2 */
-    FileWriteDJInternal_Bool,    /* DJV_FALSE = 3 */
-    FileWriteDJInternal_Integer, /* DJV_INTEGER = 4 */
-    FileWriteDJInternal_String,  /* DJV_STRING = 5 */
-    FileWriteDJInternal_Array,   /* DJV_ARRAY = 6 */
-    FileWriteDJInternal_Object,  /* DJV_OBJECT = 7 */
+    FileWriteDJInternal_Double,  /* Double */
+    FileWriteDJInternal_Null,    /* Null */
+    FileWriteDJInternal_Bool,    /* Bool */
+    FileWriteDJInternal_MiniInt, /* MiniInt */
+    FileWriteDJInternal_Integer, /* Integer */
+    FileWriteDJInternal_String,  /* DJString* */
+    FileWriteDJInternal_Array,   /* DJArray* */
+    FileWriteDJInternal_Object,  /* DJObject* */
 };
 
 int WriteDJValueToFile(const DJValue *value, FILE *fp) {
