@@ -207,8 +207,8 @@ int _FileReadDJInternal_Object(FILE *fp, int depth, DJValue **result) {
 
 int _ReadDJValueFromFile(FILE *fp, int depth, DJValue **result) {
   char ch;
-  int stuck = 0;
-  while (!feof(fp) && (depth > 0 || stuck != -1)) {
+  int status = depth >= DJVALUE_MAXIMUM_RECURSION_DEPTH ? -1 : 0;
+  while (!feof(fp) && status != -1) {
     ch = peek(fp);
     switch (ch) {
       case ' ':
@@ -242,26 +242,25 @@ int _ReadDJValueFromFile(FILE *fp, int depth, DJValue **result) {
       case '{':  // object
         return _FileReadDJInternal_Object(fp, depth, result);
       default:
-        stuck = -1;  // error
+        status = -1;  // error
     }
   }
   if (depth > 0) {
-    stuck = -1;
+    status = -1;
   } else if (!feof(fp)) {
     /* I read a valid JSON from the file, but it still has some stuff left */
-    stuck = -1;
+    status = -1;
   }
-  if (stuck != 0) {
+  if (status != 0) {
     /* do some cleanup here if necessary */
   }
-  return stuck;
+  return status;
 }
 
 int ReadDJValueFromFile(FILE *fp, DJValue **result) {
   int status = 0;
   status = _ReadDJValueFromFile(fp, 0, result);
-  if (status == -1 || !*result ||
-      (!DJPtrIS_Object(*result) && !DJPtrIS_Array(*result))) {
+  if (status == -1 || !*result) {
     if (*result) {
       FreeDJValue(*result);
       *result = NULL;

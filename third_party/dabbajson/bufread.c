@@ -213,8 +213,8 @@ int _BufferReadDJInternal_Object(const char *buf, const size_t buflen,
 int _ReadDJValueFromBuffer(const char *buf, const size_t buflen, size_t *index,
                            int depth, DJValue **result) {
   char ch;
-  int stuck = 0;
-  while (*index < buflen && (depth > 0 || stuck != -1)) {
+  int status = depth >= DJVALUE_MAXIMUM_RECURSION_DEPTH ? -1 : 0;
+  while (*index < buflen && status != -1) {
     ch = buf[*index];
     switch (ch) {
       case ' ':
@@ -248,20 +248,20 @@ int _ReadDJValueFromBuffer(const char *buf, const size_t buflen, size_t *index,
       case '{':  // object
         return _BufferReadDJInternal_Object(buf, buflen, index, depth, result);
       default:
-        stuck = -1;  // error
+        status = -1;  // error
         break;
     }
   }
   if (depth > 0) {
-    stuck = -1;
+    status = -1;
   } else if (*index < buflen) {
     /* I read a valid JSON from the file, but it still has some stuff left */
-    stuck = -1;
+    status = -1;
   }
-  if (stuck != 0) {
+  if (status != 0) {
     /* do some cleanup here if necessary */
   }
-  return stuck;
+  return status;
 }
 
 int ReadDJValueFromBuffer(const char *buf, const size_t buflen,
@@ -269,8 +269,7 @@ int ReadDJValueFromBuffer(const char *buf, const size_t buflen,
   int status = 0;
   size_t index = 0;
   status = _ReadDJValueFromBuffer(buf, buflen, &index, 0, result);
-  if (status == -1 || !*result ||
-      (!DJPtrIS_Object(*result) && !DJPtrIS_Array(*result))) {
+  if (status == -1 || !*result) {
     if (*result) {
       FreeDJValue(*result);
       *result = NULL;
