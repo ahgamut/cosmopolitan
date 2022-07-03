@@ -47,8 +47,8 @@ DJValue *DuplicateDJValue(const DJValue *);
 /* writes DJValue as JSON to file */
 int WriteDJValueToFile(const DJValue *, FILE *);
 
-/* writes DJValue as JSON into allocated buffer */
-int WriteDJValueToBuffer(const DJValue *, char *, size_t);
+/* writes DJValue as JSON by allocating buffer */
+ssize_t WriteDJValueToBuffer(const DJValue *, char **);
 
 /* read JSON from file into a DJValue */
 int ReadDJValueFromFile(FILE *, DJValue **);
