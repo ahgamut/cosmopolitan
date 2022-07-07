@@ -23,11 +23,13 @@ THIRD_PARTY_DABBAJSON_A_SRCS_C = \
 
 THIRD_PARTY_DABBAJSON_A_HDRS = $(filter %.h,$(THIRD_PARTY_DABBAJSON_A_FILES))
 
-THIRD_PARTY_DABBAJSON_A_TEST_FILES := $(wildcard third_party/dabbajson/test/*)
-THIRD_PARTY_DABBAJSON_A_SAMPLES = $(filter %.json,$(THIRD_PARTY_DABBAJSON_A_TEST_FILES))
+THIRD_PARTY_DABBAJSON_TEST_FILES := $(wildcard third_party/dabbajson/test/*)
+THIRD_PARTY_DABBAJSON_SAMPLES = $(filter %.json,$(THIRD_PARTY_DABBAJSON_TEST_FILES))
+
+THIRD_PARTY_DABBAJSON_SAMPLES_OBJS = \
+	$(THIRD_PARTY_DABBAJSON_A_SAMPLES:%=o/$(MODE)/%.zip.o)
 
 THIRD_PARTY_DABBAJSON_A_OBJS =						\
-	$(THIRD_PARTY_DABBAJSON_A_SAMPLES:%=o/$(MODE)/%.zip.o)	\
 	$(THIRD_PARTY_DABBAJSON_A_SRCS_C:%.c=o/$(MODE)/%.o)
 
 THIRD_PARTY_DABBAJSON_A_CHECKS =						\
@@ -73,17 +75,18 @@ $(THIRD_PARTY_DABBAJSON_A_OBJS):						\
 			-ffunction-sections					\
 			-fdata-sections
 
-o/$(MODE)/third_party/dabbajson/test/sample.com.dbg:	\
+o/$(MODE)/third_party/dabbajson/test/%.com.dbg:	\
 		$(THIRD_PARTY_DABBAJSON_A_DEPS)				\
 		$(THIRD_PARTY_DABBAJSON_A)				\
 		o/$(MODE)/third_party/dabbajson/test/helper.o			\
-		o/$(MODE)/third_party/dabbajson/test/sample.o			\
+		o/$(MODE)/third_party/dabbajson/test/%.o				\
+		o/$(MODE)/third_party/dabbajson/test/%.json.zip.o		\
 		$(CRT)								\
 		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
 
-o/$(MODE)/third_party/dabbajson/test/sample.com.runs: \
-	o/$(MODE)/third_party/dabbajson/test/sample.com
+o/$(MODE)/third_party/dabbajson/test/%.com.runs: \
+	o/$(MODE)/third_party/dabbajson/test/%.com
 	@$(COMPILE) -ACHECK -tT$@ $<
 
 THIRD_PARTY_DABBAJSON_LIBS = $(foreach x,$(THIRD_PARTY_DABBAJSON_ARTIFACTS),$($(x)))
