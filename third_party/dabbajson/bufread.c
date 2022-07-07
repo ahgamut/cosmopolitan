@@ -86,16 +86,40 @@ int _BufferReadDJInternal_String(const char *buf, const size_t buflen,
   while (*index < buflen &&
          !(((current = buf[*index]) == '\"') && previous != '\\')) {
     count += 1;
-    appendd(&(str->ptr), &current, 1);
     previous = current;
     (*index)++;
+    if (previous == '\\' && 1 + (*index) < buflen) {
+      current = buf[*index];
+      (*index)++;
+      switch (current) {
+        case 't':
+          appendd(&(str->ptr), "\t", 1);
+          break;
+        case 'b':
+          appendd(&(str->ptr), "\b", 1);
+          break;
+        case 'f':
+          appendd(&(str->ptr), "\f", 1);
+          break;
+        case 'r':
+          appendd(&(str->ptr), "\r", 1);
+          break;
+        case 'n':
+          appendd(&(str->ptr), "\n", 1);
+          break;
+        default:
+          appendd(&(str->ptr), &current, 1);
+      }
+    } else {
+      appendd(&(str->ptr), &current, 1);
+    }
   }
   /* *index is at ", increment once to be ready at the next char */
   (*index)++;
   if (*index >= buflen) {
-      free(str->ptr);
-      free(str);
-      return -1;
+    free(str->ptr);
+    free(str);
+    return -1;
   }
 
   str->len = count;

@@ -11,12 +11,13 @@ reference: https://www.json.org/json-en.html
 
 TODOs:
 
-- [ ] implement reading strings as unicode instead of ASCII
+- [ ] implement reading/writing utf-8 characters
 - [ ] add tests
 - [ ] a better lexer/parser logic for reading JSON?
 - [ ] recursive access via varargs? (`a[1]["b"][2] --> GetDJValueRecursive(obj, "dsd", 1, "b", 2)`)
 - [ ] implement equality operator?
-- [ ] use linked list for array/records instead of ptr+length? 
+- [ ] use linked list for array instead of ptr+length?
+- [ ] use hash table for records instead of ptr,ptr,length?
 - [ ] allow insertion/deletion into array/records?
 - [ ] NaN boxing side-effects?
 - [x] reduce memory allocations by boxing on `DJValue*`

@@ -80,10 +80,33 @@ int _FileReadDJInternal_String(FILE *fp, int depth, DJValue **result) {
   previous = current;
   count = 0;
 
-  while (!feof(fp) && !(((current = fgetc(fp)) == '\"') && current != '\\')) {
-    appendd(&buf, &current, 1);
+  while (!feof(fp) && !(((current = fgetc(fp)) == '\"'))) {
     count += 1;
     previous = current;
+    if (previous == '\\') {
+      current = fgetc(fp);
+      switch (current) {
+        case 't':
+          appendd(&buf, "\t", 1);
+          break;
+        case 'b':
+          appendd(&buf, "\b", 1);
+          break;
+        case 'f':
+          appendd(&buf, "\f", 1);
+          break;
+        case 'r':
+          appendd(&buf, "\r", 1);
+          break;
+        case 'n':
+          appendd(&buf, "\n", 1);
+          break;
+        default:
+          appendd(&buf, &current, 1);
+      }
+    } else {
+      appendd(&buf, &current, 1);
+    }
   }
   buflen = count;
 

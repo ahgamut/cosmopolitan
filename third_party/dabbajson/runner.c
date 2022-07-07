@@ -12,9 +12,9 @@ int main(int argc, char *argv[]) {
   const char *keys[] = {"hi", "this", "is", "a", "sample", "json", "el", "eo"};
   const size_t keylens[] = {2, 4, 2, 1, 6, 4, 2, 2};
   const DJValue *values[] = {
-      DoubleToDJValue(-3.0),   StringToDJValue(STRINGANDSIZE("str\\\"ng")),
+      DoubleToDJValue(-3.0),   StringToDJValue(STRINGANDSIZE("str\\\"\n\r\t\b\fng")),
       NullToDJValue(),         BoolToDJValue(true),
-      BoolToDJValue(false),    IntegerToDJValue(-345),
+      BoolToDJValue(false),    IntegerToDJValue(-35),
       ArrayToDJValue(NULL, 0), ObjectToDJValue(NULL, NULL, NULL, 0),
   };
 
@@ -24,7 +24,7 @@ int main(int argc, char *argv[]) {
   ssize_t res = 0;
 
   assert(0 == DJValueToInteger(values[5], &sample));
-  assert(sample == -345);
+  assert(sample == -35);
   DJValue *obj = ObjectToDJValue(keys, keylens, values, 8);
   res = WriteDJValueToBuffer(obj, &buf);
   assert(res != -1 && buf != NULL);
@@ -40,6 +40,8 @@ int main(int argc, char *argv[]) {
   assert(res != -1 && buf2 != NULL);
   assert(!strcmp(buf, buf2));
   printf("%s\n(%d bytes written into buffer)\n", buf2, res);
+  WriteDJValueToFile(obj2, stdout);
+  printf("\n");
 
   FILE *fp = fopen("/zip/third_party/dabbajson/sample.json", "r");
   DJValue *x = NULL;

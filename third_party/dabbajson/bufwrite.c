@@ -45,10 +45,54 @@ ssize_t BufferWriteDJInternal_Integer(const DJValue *value, char **buf) {
   return appendf(buf, "%ld", *ptr);
 }
 
+static ssize_t EscapeStringAndWrite(const char *ptr, const size_t len, char **buf) {
+  ssize_t answer = 2;
+  char escaped[2] = {0};
+  escaped[0] = '\\';
+
+  appendd(buf, "\"", 1);
+  if (len != 0 && ptr != NULL) {
+    /* TODO: why do i need both len and null check here */
+    for (size_t i = 0; i < len && ptr[i] != '\0'; i++) {
+      switch (ptr[i]) {
+        case '"':
+        case '\\':
+          escaped[1] = ptr[i];
+          answer += appendd(buf, &escaped, 2);
+          break;
+        case '\n':
+          escaped[1] = 'n';
+          answer += appendd(buf, &escaped, 2);
+          break;
+        case '\r':
+          escaped[1] = 'r';
+          answer += appendd(buf, &escaped, 2);
+          break;
+        case '\f':
+          escaped[1] = 'f';
+          answer += appendd(buf, &escaped, 2);
+          break;
+        case '\t':
+          escaped[1] = 't';
+          answer += appendd(buf, &escaped, 2);
+          break;
+        case '\b':
+          escaped[1] = 'b';
+          answer += appendd(buf, &escaped, 2);
+          break;
+        default:
+          answer += appendd(buf, &(ptr[i]), 1);
+      }
+    }
+  }
+  appendd(buf, "\"", 1);
+  return answer;
+}
+
 ssize_t BufferWriteDJInternal_String(const DJValue *value, char **buf) {
   assert(DJPtrIS_String(value));
   DJString *str = UNBOX_DJPtrAsString(value);
-  return appendf(buf, "\"%s\"", str->len > 0 ? str->ptr : "");
+  return EscapeStringAndWrite(str->ptr, str->len, buf);
 }
 
 ssize_t BufferWriteDJInternal_Array(const DJValue *value, char **buf) {
@@ -83,7 +127,9 @@ ssize_t BufferWriteDJInternal_Object(const DJValue *value, char **buf) {
   ans += written;
 
   for (size_t i = 0; i < obj->len; i++) {
-    if ((written = appendf(buf, "\"%s\":", obj->keys[i] ? obj->keys[i] : "")) == -1) return -1;
+    if ((written = EscapeStringAndWrite(obj->keys[i], obj->keylens[i], buf)) == -1) return -1;
+    ans += written;
+    if ((written = appendd(buf, ":", 1)) == -1) return -1;
     ans += written;
     if ((written = WriteDJValueToBuffer(obj->values[i], buf)) == -1) return -1;
     ans += written;
