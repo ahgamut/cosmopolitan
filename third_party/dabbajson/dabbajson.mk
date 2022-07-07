@@ -49,6 +49,7 @@ THIRD_PARTY_DABBAJSON_A_DIRECTDEPS =					\
 	LIBC_FMT								\
 	LIBC_SYSV								\
 	LIBC_STR								\
+	LIBC_UNICODE							\
 	LIBC_STUBS								\
 	THIRD_PARTY_GDTOA
 

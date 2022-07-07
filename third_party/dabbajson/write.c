@@ -46,45 +46,57 @@ int FileWriteDJInternal_Integer(const DJValue *value, FILE *fp) {
 
 static int EscapeStringAndWrite(const char *ptr, const size_t len, FILE *fp) {
   int answer = 2;
+  wchar_t utfval = 0;
+  int utflen = 0;
   fputc('"', fp);
   if (len != 0 && ptr != NULL) {
     /* TODO: why do i need both len and null check here */
     for (size_t i = 0; i < len && ptr[i] != '\0'; i++) {
-      switch (ptr[i]) {
-        case '"':
-        case '\\':
-          fputc('\\', fp);
-          fputc(ptr[i], fp);
-          answer += 2;
-          break;
-        case '\n':
-          fputc('\\', fp);
-          fputc('n', fp);
-          answer += 2;
-          break;
-        case '\r':
-          fputc('\\', fp);
-          fputc('r', fp);
-          answer += 2;
-          break;
-        case '\f':
-          fputc('\\', fp);
-          fputc('f', fp);
-          answer += 2;
-          break;
-        case '\t':
-          fputc('\\', fp);
-          fputc('t', fp);
-          answer += 2;
-          break;
-        case '\b':
-          fputc('\\', fp);
-          fputc('b', fp);
-          answer += 2;
-          break;
-        default:
-          fputc(ptr[i], fp);
-          answer += 1;
+      if (ptr[i] < 0) {
+        utflen = mbtowc(&utfval, &(ptr[i]), len - i);
+        if (utflen > 0) {
+          i += utflen - 1;
+          answer += fprintf(fp, "\\u%04x", utfval);
+        } else {
+          DIEF("unable to write utf-8 value %s (%s)\n", &(ptr[i]), strerror(errno));
+        }
+      } else {
+        switch (ptr[i]) {
+          case '"':
+          case '\\':
+            fputc('\\', fp);
+            fputc(ptr[i], fp);
+            answer += 2;
+            break;
+          case '\n':
+            fputc('\\', fp);
+            fputc('n', fp);
+            answer += 2;
+            break;
+          case '\r':
+            fputc('\\', fp);
+            fputc('r', fp);
+            answer += 2;
+            break;
+          case '\f':
+            fputc('\\', fp);
+            fputc('f', fp);
+            answer += 2;
+            break;
+          case '\t':
+            fputc('\\', fp);
+            fputc('t', fp);
+            answer += 2;
+            break;
+          case '\b':
+            fputc('\\', fp);
+            fputc('b', fp);
+            answer += 2;
+            break;
+          default:
+            fputc(ptr[i], fp);
+            answer += 1;
+        }
       }
     }
   }

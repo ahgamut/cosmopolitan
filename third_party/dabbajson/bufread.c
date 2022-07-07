@@ -74,6 +74,11 @@ int _BufferReadDJInternal_String(const char *buf, const size_t buflen,
   DJValue *answer;
   size_t count = 0;
 
+  char utfkey[5] = {0};
+  char *utfend;
+  wchar_t utfval = 0;
+  long written = 0;
+
   if (*index >= buflen || (current = buf[*index]) != '\"') return -1;
   previous = current;
   count = 1;
@@ -107,6 +112,23 @@ int _BufferReadDJInternal_String(const char *buf, const size_t buflen,
         case 'n':
           appendd(&(str->ptr), "\n", 1);
           break;
+        case 'u':
+          if (*index + 4 < buflen) {
+            memmove(utfkey, &(buf[*index]), 4);
+            utfval = strtoul(utfkey, &utfend, 16);
+            *index += 4;
+            if (utfend == &(utfkey[4])) {
+              written = wctomb(utfkey, utfval);
+              if (written != -1) {
+                utfkey[written] = '\0';
+                appendd(&(str->ptr), utfkey, written);
+                count += written - 1;
+                break;
+              }
+            }
+          }
+          goto failure;
+          break;
         default:
           appendd(&(str->ptr), &current, 1);
       }
@@ -116,16 +138,17 @@ int _BufferReadDJInternal_String(const char *buf, const size_t buflen,
   }
   /* *index is at ", increment once to be ready at the next char */
   (*index)++;
-  if (*index >= buflen) {
-    free(str->ptr);
-    free(str);
-    return -1;
-  }
+  if (*index >= buflen) goto failure;
 
   str->len = count;
   BOX_StringIntoDJPtr(str, answer);
   *result = answer;
   return 0;
+
+failure:
+  free(str->ptr);
+  free(str);
+  return -1;
 }
 
 int ReadWhitespaceUntilOneOf(const char *buf, const size_t buflen,

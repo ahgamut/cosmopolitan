@@ -8,16 +8,15 @@ STATIC_YOINK("third_party/dabbajson/sample.json");
 
 #define STRINGANDSIZE(x) x,sizeof(x)
 
-int main(int argc, char *argv[]) {
+void CheckLocalObject() {
   const char *keys[] = {"hi", "this", "is", "a", "sample", "json", "el", "eo"};
   const size_t keylens[] = {2, 4, 2, 1, 6, 4, 2, 2};
   const DJValue *values[] = {
-      DoubleToDJValue(-3.0),   StringToDJValue(STRINGANDSIZE("str\\\"\n\r\t\b\fng")),
+      DoubleToDJValue(-3.0),   StringToDJValue(STRINGANDSIZE("str\u03b1\\\"\n\r\t\b\fng")),
       NullToDJValue(),         BoolToDJValue(true),
       BoolToDJValue(false),    IntegerToDJValue(-35),
       ArrayToDJValue(NULL, 0), ObjectToDJValue(NULL, NULL, NULL, 0),
   };
-
   char *buf = NULL;
   char *buf2 = NULL;
   int64_t sample = 0;
@@ -38,21 +37,40 @@ int main(int argc, char *argv[]) {
   assert(-1 != ReadDJValueFromBuffer(buf, res, &obj2));
   res = WriteDJValueToBuffer(obj2, &buf2);
   assert(res != -1 && buf2 != NULL);
-  assert(!strcmp(buf, buf2));
   printf("%s\n(%d bytes written into buffer)\n", buf2, res);
-  WriteDJValueToFile(obj2, stdout);
-  printf("\n");
+  assert(!strcmp(buf, buf2));
+  if (buf) free(buf);
+  if (buf2) free(buf2);
+}
 
+void CheckFileRead() {
   FILE *fp = fopen("/zip/third_party/dabbajson/sample.json", "r");
   DJValue *x = NULL;
   assert(-1 != ReadDJValueFromFile(fp, &x));
   WriteDJValueToFile(x, stdout);
   printf("\n");
-  FreeDJValue(x);
   fclose(fp);
 
-  if (buf) free(buf);
-  if (buf2) free(buf2);
+  char **keys;
+  DJValue **values;
+  size_t *keylens;
+  size_t len;
 
+  char *ape;
+  size_t apelen;
+  assert(-1 != DJValueToObject(x, &keys, &keylens, &values, &len));
+  assert(-1 != DJValueToString(values[0], &ape, &apelen));
+  printf("%s: %s\n", keys[0], ape);
+
+  char *buf3 = NULL;
+  int res = WriteDJValueToBuffer(x, &buf3);
+  assert(res != -1 && buf3 != NULL);
+  printf("%s\n(%d bytes written into buffer)\n", buf3, res);
+  FreeDJValue(x);
+}
+
+int main(int argc, char *argv[]) {
+  CheckLocalObject();
+  CheckFileRead();
   return 0;
 }

@@ -75,7 +75,12 @@ int _FileReadDJInternal_String(FILE *fp, int depth, DJValue **result) {
   DJString *str;
   DJValue *answer = NULL;
 
+  char utfkey[5] = {0};
+  char *utfend;
+  wchar_t utfval = 0;
+
   long count = 0;
+  long written = 0;
   if ((current = fgetc(fp)) != '\"') return -1;
   previous = current;
   count = 0;
@@ -101,6 +106,21 @@ int _FileReadDJInternal_String(FILE *fp, int depth, DJValue **result) {
         case 'n':
           appendd(&buf, "\n", 1);
           break;
+        case 'u':
+          if (fread(utfkey, sizeof(char), 4, fp) == 4) {
+            utfval = strtoul(utfkey, &utfend, 16);
+            if (utfend == &(utfkey[4])) {
+              written = wctomb(utfkey, utfval);
+              if (written != -1) {
+                utfkey[written] = '\0';
+                appendd(&buf, utfkey, written);
+                count += written - 1;
+                break;
+              }
+            }
+          }
+          free(buf);
+          return -1;
         default:
           appendd(&buf, &current, 1);
       }

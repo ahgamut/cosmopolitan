@@ -45,43 +45,56 @@ ssize_t BufferWriteDJInternal_Integer(const DJValue *value, char **buf) {
   return appendf(buf, "%ld", *ptr);
 }
 
-static ssize_t EscapeStringAndWrite(const char *ptr, const size_t len, char **buf) {
+static ssize_t EscapeStringAndWrite(const char *ptr, const size_t len,
+                                    char **buf) {
   ssize_t answer = 2;
   char escaped[2] = {0};
   escaped[0] = '\\';
+  wchar_t utfval = 0;
+  int utflen = 0;
 
   appendd(buf, "\"", 1);
   if (len != 0 && ptr != NULL) {
     /* TODO: why do i need both len and null check here */
     for (size_t i = 0; i < len && ptr[i] != '\0'; i++) {
-      switch (ptr[i]) {
-        case '"':
-        case '\\':
-          escaped[1] = ptr[i];
-          answer += appendd(buf, &escaped, 2);
-          break;
-        case '\n':
-          escaped[1] = 'n';
-          answer += appendd(buf, &escaped, 2);
-          break;
-        case '\r':
-          escaped[1] = 'r';
-          answer += appendd(buf, &escaped, 2);
-          break;
-        case '\f':
-          escaped[1] = 'f';
-          answer += appendd(buf, &escaped, 2);
-          break;
-        case '\t':
-          escaped[1] = 't';
-          answer += appendd(buf, &escaped, 2);
-          break;
-        case '\b':
-          escaped[1] = 'b';
-          answer += appendd(buf, &escaped, 2);
-          break;
-        default:
-          answer += appendd(buf, &(ptr[i]), 1);
+      if (ptr[i] < 0) {
+        utflen = mbtowc(&utfval, &(ptr[i]), len - i);
+        if (utflen > 0) {
+          i += utflen - 1;
+          answer += appendf(buf, "\\u%04x", utfval);
+        } else {
+          DIEF("unable to write utf-8 value %s (%s)\n", &(ptr[i]), strerror(errno));
+        }
+      } else {
+        switch (ptr[i]) {
+          case '"':
+          case '\\':
+            escaped[1] = ptr[i];
+            answer += appendd(buf, &escaped, 2);
+            break;
+          case '\n':
+            escaped[1] = 'n';
+            answer += appendd(buf, &escaped, 2);
+            break;
+          case '\r':
+            escaped[1] = 'r';
+            answer += appendd(buf, &escaped, 2);
+            break;
+          case '\f':
+            escaped[1] = 'f';
+            answer += appendd(buf, &escaped, 2);
+            break;
+          case '\t':
+            escaped[1] = 't';
+            answer += appendd(buf, &escaped, 2);
+            break;
+          case '\b':
+            escaped[1] = 'b';
+            answer += appendd(buf, &escaped, 2);
+            break;
+          default:
+            answer += appendd(buf, &(ptr[i]), 1);
+        }
       }
     }
   }
