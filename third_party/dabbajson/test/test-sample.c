@@ -25,8 +25,8 @@ void CheckLocalObject() {
 }
 
 void CheckFileRead() {
-  STATIC_YOINK("third_party/dabbajson/test/sample.json");
-  FILE *fp = fopen("/zip/third_party/dabbajson/test/sample.json", "r");
+  STATIC_YOINK("third_party/dabbajson/test/test-sample.json");
+  FILE *fp = fopen("/zip/third_party/dabbajson/test/test-sample.json", "r");
   DJValue *x = NULL;
   assert(-1 != ReadDJValueFromFile(fp, &x));
   WriteDJValueToFile(x, stdout);

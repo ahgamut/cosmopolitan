@@ -10,14 +10,4 @@ void CheckBufferConversion(DJValue *);
 void CheckFileReadSuccess(const char *);
 void CheckFileReadFailure(const char *);
 
-#define CHECKFILEREADSUCCESS(x) {\
-    STATIC_YOINK(x);\
-    CheckFileReadSuccess(x);\
-}
-
-#define CHECKFILEREADFAILURE(x) {\
-    STATIC_YOINK(x);\
-    CheckFileReadFailure(x);\
-}
-
 #endif
