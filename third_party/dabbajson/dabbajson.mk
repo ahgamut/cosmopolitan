@@ -22,7 +22,9 @@ THIRD_PARTY_DABBAJSON_A_SRCS_C = \
 	third_party/dabbajson/bufwrite.c
 
 THIRD_PARTY_DABBAJSON_A_HDRS = $(filter %.h,$(THIRD_PARTY_DABBAJSON_A_FILES))
-THIRD_PARTY_DABBAJSON_A_SAMPLES = $(filter %.json,$(THIRD_PARTY_DABBAJSON_A_FILES))
+
+THIRD_PARTY_DABBAJSON_A_TEST_FILES := $(wildcard third_party/dabbajson/test/*)
+THIRD_PARTY_DABBAJSON_A_SAMPLES = $(filter %.json,$(THIRD_PARTY_DABBAJSON_A_TEST_FILES))
 
 THIRD_PARTY_DABBAJSON_A_OBJS =						\
 	$(THIRD_PARTY_DABBAJSON_A_SAMPLES:%=o/$(MODE)/%.zip.o)	\
@@ -32,7 +34,8 @@ THIRD_PARTY_DABBAJSON_A_CHECKS =						\
 	$(THIRD_PARTY_DABBAJSON_A).pkg					\
 	$(THIRD_PARTY_DABBAJSON_A_HDRS:%=o/$(MODE)/%.ok)
 
-THIRD_PARTY_DABBAJSON_COMS = o/$(MODE)/third_party/dabbajson/runner.com
+THIRD_PARTY_DABBAJSON_COMS = \
+	o/$(MODE)/third_party/dabbajson/test/sample.com
 THIRD_PARTY_DABBAJSON_BINS = \
 		$(THIRD_PARTY_DABBAJSON_COMS) \
 		$(THIRD_PARTY_DABBAJSON_COMS:%=%.dbg)
@@ -70,16 +73,17 @@ $(THIRD_PARTY_DABBAJSON_A_OBJS):						\
 			-ffunction-sections					\
 			-fdata-sections
 
-o/$(MODE)/third_party/dabbajson/runner.com.dbg:	\
+o/$(MODE)/third_party/dabbajson/test/sample.com.dbg:	\
 		$(THIRD_PARTY_DABBAJSON_A_DEPS)				\
 		$(THIRD_PARTY_DABBAJSON_A)				\
-		o/$(MODE)/third_party/dabbajson/runner.o			\
+		o/$(MODE)/third_party/dabbajson/test/helper.o			\
+		o/$(MODE)/third_party/dabbajson/test/sample.o			\
 		$(CRT)								\
 		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
 
-o/$(MODE)/third_party/dabbajson/runner.com.runs: \
-	o/$(MODE)/third_party/dabbajson/runner.com
+o/$(MODE)/third_party/dabbajson/test/sample.com.runs: \
+	o/$(MODE)/third_party/dabbajson/test/sample.com
 	@$(COMPILE) -ACHECK -tT$@ $<
 
 THIRD_PARTY_DABBAJSON_LIBS = $(foreach x,$(THIRD_PARTY_DABBAJSON_ARTIFACTS),$($(x)))

@@ -1,7 +1,4 @@
-#include "libc/assert.h"
-#include "libc/str/str.h"
-#include "libc/stdio/stdio.h"
-#include "third_party/dabbajson/dabbajson.h"
+#include "third_party/dabbajson/test/helper.h"
 
 #define BUFFERSIZE 128
 
@@ -16,56 +13,37 @@ void CheckLocalObject() {
       BoolToDJValue(false),    IntegerToDJValue(-35),
       ArrayToDJValue(NULL, 0), ObjectToDJValue(NULL, NULL, NULL, 0),
   };
-  char *buf = NULL;
-  char *buf2 = NULL;
   int64_t sample = 0;
-  ssize_t res = 0;
-
   assert(0 == DJValueToInteger(values[5], &sample));
   assert(sample == -35);
   DJValue *obj = ObjectToDJValue(keys, keylens, values, 8);
-  res = WriteDJValueToBuffer(obj, &buf);
-  assert(res != -1 && buf != NULL);
-  printf("%s\n(%d bytes written into buffer)\n", buf, res);
+  CheckBufferConversion(obj);
   FreeDJValue(obj);
   for (int i = 0; i < 6; i++) {
     FreeDJValue(values[i]);
   }
-
-  DJValue *obj2 = NULL;
-  assert(-1 != ReadDJValueFromBuffer(buf, res, &obj2));
-  res = WriteDJValueToBuffer(obj2, &buf2);
-  assert(res != -1 && buf2 != NULL);
-  printf("%s\n(%d bytes written into buffer)\n", buf2, res);
-  assert(!strcmp(buf, buf2));
-  if (buf) free(buf);
-  if (buf2) free(buf2);
 }
 
 void CheckFileRead() {
-  STATIC_YOINK("third_party/dabbajson/sample.json");
-  FILE *fp = fopen("/zip/third_party/dabbajson/sample.json", "r");
+  STATIC_YOINK("third_party/dabbajson/test/sample.json");
+  FILE *fp = fopen("/zip/third_party/dabbajson/test/sample.json", "r");
   DJValue *x = NULL;
   assert(-1 != ReadDJValueFromFile(fp, &x));
   WriteDJValueToFile(x, stdout);
   printf("\n");
   fclose(fp);
 
+  CheckBufferConversion(x);
+  
   char **keys;
   DJValue **values;
   size_t *keylens;
   size_t len;
-
   char *ape;
   size_t apelen;
   assert(-1 != DJValueToObject(x, &keys, &keylens, &values, &len));
   assert(-1 != DJValueToString(values[0], &ape, &apelen));
   printf("%s: %s\n", keys[0], ape);
-
-  char *buf3 = NULL;
-  int res = WriteDJValueToBuffer(x, &buf3);
-  assert(res != -1 && buf3 != NULL);
-  printf("%s\n(%d bytes written into buffer)\n", buf3, res);
   FreeDJValue(x);
 }
 
