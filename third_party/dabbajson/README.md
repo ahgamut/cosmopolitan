@@ -11,9 +11,10 @@ reference: https://www.json.org/json-en.html
 
 TODOs:
 
-- [ ] implement reading/writing utf-8 characters
+- [x] implement reading/writing utf-8 characters
 - [ ] add tests
 - [ ] a better lexer/parser logic for reading JSON?
+- [ ] separate integer type necessary or just cast from `double`?
 - [ ] recursive access via varargs? (`a[1]["b"][2] --> GetDJValueRecursive(obj, "dsd", 1, "b", 2)`)
 - [ ] implement equality operator?
 - [ ] use linked list for array instead of ptr+length?

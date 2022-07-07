@@ -179,14 +179,15 @@ int _BufferReadDJInternal_Array(const char *buf, const size_t buflen,
   DJArrayElement *tmp = head;
   size_t num_elements = 0;
   int status = 0;
-  char current = '\0';
 
-  if (*index > buflen || (current = buf[*index]) != '[') {
+  if (*index > buflen || buf[*index] != '[') {
     status = -1;
   }
   (*index)++;
-  current = buf[*index];
-  while (*index < buflen && status == 0 && current != ']') {
+  while (*index < buflen && strchr(" \t\n\r", buf[*index])) {
+      (*index)++;
+  }
+  while (*index < buflen && status == 0 && buf[*index] != ']') {
     status =
         _ReadDJValueFromBuffer(buf, buflen, index, depth + 1, &(tmp->value));
     if (status) break;
@@ -194,7 +195,6 @@ int _BufferReadDJInternal_Array(const char *buf, const size_t buflen,
     tmp = tmp->next;
     num_elements += 1;
     status = ReadWhitespaceUntilOneOf(buf, buflen, index, ",]");
-    current = buf[*index];
     (*index)++;
   }
   if (num_elements == 0) {
@@ -219,14 +219,15 @@ int _BufferReadDJInternal_Object(const char *buf, const size_t buflen,
 
   size_t num_elements = 0;
   int status = 0;
-  char current = '\0';
 
-  if (*index > buflen || (current = buf[*index]) != '{') {
+  if (*index > buflen || buf[*index] != '{') {
     status = -1;
   }
   (*index)++;
-  current = buf[*index];
-  while (*index < buflen && status == 0 && current != '}') {
+  while (*index < buflen && strchr(" \t\n\r", buf[*index])) {
+      (*index)++;
+  }
+  while (*index < buflen && status == 0 && buf[*index] != '}') {
     status = ReadWhitespaceUntilOneOf(buf, buflen, index, "\"");
     if (status) break;
     status =
@@ -237,7 +238,6 @@ int _BufferReadDJInternal_Object(const char *buf, const size_t buflen,
     tmp->keylen = tempstr->len;
     status = ReadWhitespaceUntilOneOf(buf, buflen, index, ":");
     if (status) break;
-    current = buf[*index];
     (*index)++;
     status =
         _ReadDJValueFromBuffer(buf, buflen, index, depth + 1, &(tmp->value));
@@ -246,7 +246,6 @@ int _BufferReadDJInternal_Object(const char *buf, const size_t buflen,
     tmp = tmp->next;
     num_elements += 1;
     status = ReadWhitespaceUntilOneOf(buf, buflen, index, ",}");
-    current = buf[*index];
     (*index)++;
   }
   if (num_elements == 0) {

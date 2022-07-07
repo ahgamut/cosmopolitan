@@ -177,6 +177,7 @@ int _FileReadDJInternal_Array(FILE *fp, int depth, DJValue **result) {
     status = -1;
   }
   current = peek(fp);
+  while (!feof(fp) && strchr(" \t\n\r", current)) {fgetc(fp); current = peek(fp);}
   while (!feof(fp) && status == 0 && current != ']') {
     status = _ReadDJValueFromFile(fp, depth + 1, &(tmp->value));
     if (status) break;
@@ -213,6 +214,7 @@ int _FileReadDJInternal_Object(FILE *fp, int depth, DJValue **result) {
     status = -1;
   }
   current = peek(fp);
+  while (!feof(fp) && strchr(" \t\n\r", current)) {fgetc(fp); current = peek(fp);}
   while (!feof(fp) && status == 0 && current != '}') {
     status = FileReadWhitespaceUntilOneOf(fp, "\"");
     if (status) break;

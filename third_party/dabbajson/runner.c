@@ -3,7 +3,6 @@
 #include "libc/stdio/stdio.h"
 #include "third_party/dabbajson/dabbajson.h"
 
-STATIC_YOINK("third_party/dabbajson/sample.json");
 #define BUFFERSIZE 128
 
 #define STRINGANDSIZE(x) x,sizeof(x)
@@ -44,6 +43,7 @@ void CheckLocalObject() {
 }
 
 void CheckFileRead() {
+  STATIC_YOINK("third_party/dabbajson/sample.json");
   FILE *fp = fopen("/zip/third_party/dabbajson/sample.json", "r");
   DJValue *x = NULL;
   assert(-1 != ReadDJValueFromFile(fp, &x));
