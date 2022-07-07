@@ -48,7 +48,7 @@ ssize_t BufferWriteDJInternal_Integer(const DJValue *value, char **buf) {
 ssize_t BufferWriteDJInternal_String(const DJValue *value, char **buf) {
   assert(DJPtrIS_String(value));
   DJString *str = UNBOX_DJPtrAsString(value);
-  return appendf(buf, "\"%s\"", str->ptr);
+  return appendf(buf, "\"%s\"", str->len > 0 ? str->ptr : "");
 }
 
 ssize_t BufferWriteDJInternal_Array(const DJValue *value, char **buf) {
@@ -83,7 +83,7 @@ ssize_t BufferWriteDJInternal_Object(const DJValue *value, char **buf) {
   ans += written;
 
   for (size_t i = 0; i < obj->len; i++) {
-    if ((written = appendf(buf, "\"%s\":", obj->keys[i])) == -1) return -1;
+    if ((written = appendf(buf, "\"%s\":", obj->keys[i] ? obj->keys[i] : "")) == -1) return -1;
     ans += written;
     if ((written = WriteDJValueToBuffer(obj->values[i], buf)) == -1) return -1;
     ans += written;

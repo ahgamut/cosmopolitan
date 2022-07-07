@@ -3,6 +3,7 @@
 #include "libc/fmt/conv.h"
 #include "libc/fmt/fmt.h"
 #include "libc/log/log.h"
+#include "libc/stdio/append.internal.h"
 #include "libc/stdio/stdio.h"
 #include "third_party/dabbajson/dabbajson.h"
 #include "third_party/dabbajson/dabbajson.internal.h"
@@ -71,29 +72,34 @@ int _BufferReadDJInternal_String(const char *buf, const size_t buflen,
   char previous, current;
   DJString *str;
   DJValue *answer;
-
   size_t count = 0;
+
   if (*index >= buflen || (current = buf[*index]) != '\"') return -1;
   previous = current;
   count = 1;
   (*index)++;
 
+  str = malloc(sizeof(DJString));
+  str->ptr = NULL;
+  str->len = 0;
+
   while (*index < buflen &&
          !(((current = buf[*index]) == '\"') && previous != '\\')) {
     count += 1;
+    appendd(&(str->ptr), &current, 1);
     previous = current;
     (*index)++;
   }
-  /* *index is at ", increment once to be ready at the next char,
-   * and also have an additional char in buffer for '\0' */
+  /* *index is at ", increment once to be ready at the next char */
   (*index)++;
-  if (*index >= buflen) return -1;
-
-  answer = StringToDJValue(buf + *index - count, count);
-  str = UNBOX_DJPtrAsString(answer);
-  if (str->len) {
-    str->ptr[str->len - 1] = '\0';
+  if (*index >= buflen) {
+      free(str->ptr);
+      free(str);
+      return -1;
   }
+
+  str->len = count;
+  BOX_StringIntoDJPtr(str, answer);
   *result = answer;
   return 0;
 }

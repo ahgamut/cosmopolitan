@@ -3,6 +3,7 @@
 #include "libc/fmt/conv.h"
 #include "libc/fmt/fmt.h"
 #include "libc/log/log.h"
+#include "libc/stdio/append.internal.h"
 #include "libc/stdio/stdio.h"
 #include "third_party/dabbajson/dabbajson.h"
 #include "third_party/dabbajson/dabbajson.internal.h"
@@ -69,7 +70,7 @@ int _FileReadDJInternal_Number(FILE *fp, int depth, DJValue **result) {
 
 int _FileReadDJInternal_String(FILE *fp, int depth, DJValue **result) {
   char current, previous;
-  char *buf;
+  char *buf = NULL;
   size_t buflen;
   DJString *str;
   DJValue *answer = NULL;
@@ -77,17 +78,14 @@ int _FileReadDJInternal_String(FILE *fp, int depth, DJValue **result) {
   long count = 0;
   if ((current = fgetc(fp)) != '\"') return -1;
   previous = current;
-  count = 1;
+  count = 0;
 
   while (!feof(fp) && !(((current = fgetc(fp)) == '\"') && current != '\\')) {
+    appendd(&buf, &current, 1);
     count += 1;
     previous = current;
   }
-  fseek(fp, -count, SEEK_CUR);
   buflen = count;
-  buf = malloc(sizeof(char) * buflen);
-  fread(buf, sizeof(char), buflen, fp);
-  buf[buflen - 1] = '\0';
 
   if (feof(fp) || ferror(fp)) {
     free(buf);

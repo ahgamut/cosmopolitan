@@ -47,7 +47,7 @@ int FileWriteDJInternal_Integer(const DJValue *value, FILE *fp) {
 int FileWriteDJInternal_String(const DJValue *value, FILE *fp) {
   assert(DJPtrIS_String(value));
   DJString *str = UNBOX_DJPtrAsString(value);
-  return fprintf(fp, "\"%s\"", str->ptr);
+  return fprintf(fp, "\"%s\"", str->len > 0 ? str->ptr : "");
 }
 
 int FileWriteDJInternal_Array(const DJValue *value, FILE *fp) {
@@ -69,7 +69,7 @@ int FileWriteDJInternal_Object(const DJValue *value, FILE *fp) {
   int ans = 0;
   ans += fprintf(fp, "{");
   for (size_t i = 0; i < obj->len; i++) {
-    ans += fprintf(fp, "\"%s\":", obj->keys[i]);
+    ans += fprintf(fp, "\"%s\":", obj->keys[i] ? obj->keys[i] : "");
     ans += WriteDJValueToFile(obj->values[i], fp);
     if (i != obj->len - 1) ans += fputc(',', fp);
   }
