@@ -68,21 +68,20 @@ int _BufferReadDJInternal_Number(const char *buf, const size_t buflen,
 
 int _BufferReadDJInternal_String(const char *buf, const size_t buflen,
                                  size_t *index, int depth, DJValue **result) {
-  char startquote, stopquote;
-  char prev;
+  char previous, current;
   DJString *str;
   DJValue *answer;
 
   size_t count = 0;
-  if (*index >= buflen || (startquote = buf[*index]) != '\"') return -1;
-  prev = startquote;
+  if (*index >= buflen || (current = buf[*index]) != '\"') return -1;
+  previous = current;
   count = 1;
   (*index)++;
 
   while (*index < buflen &&
-         !(((stopquote = buf[*index]) == '\"') && prev != '\\')) {
+         !(((current = buf[*index]) == '\"') && previous != '\\')) {
     count += 1;
-    prev = stopquote;
+    previous = current;
     (*index)++;
   }
   /* *index is at ", increment once to be ready at the next char,
@@ -123,18 +122,18 @@ int ReadWhitespaceUntilOneOf(const char *buf, const size_t buflen,
 
 int _BufferReadDJInternal_Array(const char *buf, const size_t buflen,
                                 size_t *index, int depth, DJValue **result) {
-  char startbracket, stopbracket = '\0';
   DJArrayElement *head = DJA_New();
   DJArrayElement *tmp = head;
   size_t num_elements = 0;
   int status = 0;
+  char current = '\0';
 
-  if (*index > buflen || (startbracket = buf[*index]) != '[') {
+  if (*index > buflen || (current = buf[*index]) != '[') {
     status = -1;
   }
   (*index)++;
-  stopbracket = buf[*index];
-  while (*index < buflen && status == 0 && stopbracket != ']') {
+  current = buf[*index];
+  while (*index < buflen && status == 0 && current != ']') {
     status =
         _ReadDJValueFromBuffer(buf, buflen, index, depth + 1, &(tmp->value));
     if (status) break;
@@ -142,7 +141,7 @@ int _BufferReadDJInternal_Array(const char *buf, const size_t buflen,
     tmp = tmp->next;
     num_elements += 1;
     status = ReadWhitespaceUntilOneOf(buf, buflen, index, ",]");
-    stopbracket = buf[*index];
+    current = buf[*index];
     (*index)++;
   }
   if (num_elements == 0) {
@@ -160,7 +159,6 @@ int _BufferReadDJInternal_Array(const char *buf, const size_t buflen,
 
 int _BufferReadDJInternal_Object(const char *buf, const size_t buflen,
                                  size_t *index, int depth, DJValue **result) {
-  char startbracket, stopbracket = '\0';
   DJObjectElement *head = DJO_New();
   DJObjectElement *tmp = head;
   DJValue *tempkey = NULL;
@@ -168,13 +166,14 @@ int _BufferReadDJInternal_Object(const char *buf, const size_t buflen,
 
   size_t num_elements = 0;
   int status = 0;
+  char current = '\0';
 
-  if (*index > buflen || (startbracket = buf[*index]) != '{') {
+  if (*index > buflen || (current = buf[*index]) != '{') {
     status = -1;
   }
   (*index)++;
-  stopbracket = buf[*index];
-  while (*index < buflen && status == 0 && stopbracket != '}') {
+  current = buf[*index];
+  while (*index < buflen && status == 0 && current != '}') {
     status = ReadWhitespaceUntilOneOf(buf, buflen, index, "\"");
     if (status) break;
     status =
@@ -185,7 +184,7 @@ int _BufferReadDJInternal_Object(const char *buf, const size_t buflen,
     tmp->keylen = tempstr->len;
     status = ReadWhitespaceUntilOneOf(buf, buflen, index, ":");
     if (status) break;
-    stopbracket = buf[*index];
+    current = buf[*index];
     (*index)++;
     status =
         _ReadDJValueFromBuffer(buf, buflen, index, depth + 1, &(tmp->value));
@@ -194,7 +193,7 @@ int _BufferReadDJInternal_Object(const char *buf, const size_t buflen,
     tmp = tmp->next;
     num_elements += 1;
     status = ReadWhitespaceUntilOneOf(buf, buflen, index, ",}");
-    stopbracket = buf[*index];
+    current = buf[*index];
     (*index)++;
   }
   if (num_elements == 0) {

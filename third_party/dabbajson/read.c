@@ -68,21 +68,20 @@ int _FileReadDJInternal_Number(FILE *fp, int depth, DJValue **result) {
 }
 
 int _FileReadDJInternal_String(FILE *fp, int depth, DJValue **result) {
-  char startquote, stopquote;
-  char prev;
+  char current, previous;
   char *buf;
   size_t buflen;
   DJString *str;
   DJValue *answer = NULL;
 
   long count = 0;
-  if ((startquote = fgetc(fp)) != '\"') return -1;
-  prev = startquote;
+  if ((current = fgetc(fp)) != '\"') return -1;
+  previous = current;
   count = 1;
 
-  while (!feof(fp) && !(((stopquote = fgetc(fp)) == '\"') && prev != '\\')) {
+  while (!feof(fp) && !(((current = fgetc(fp)) == '\"') && current != '\\')) {
     count += 1;
-    prev = stopquote;
+    previous = current;
   }
   fseek(fp, -count, SEEK_CUR);
   buflen = count;
@@ -127,24 +126,24 @@ int FileReadWhitespaceUntilOneOf(FILE *fp, const char *end) {
 }
 
 int _FileReadDJInternal_Array(FILE *fp, int depth, DJValue **result) {
-  char startbracket, stopbracket = '\0';
   DJArrayElement *head = DJA_New();
   DJArrayElement *tmp = head;
   size_t num_elements = 0;
   int status = 0;
+  char current = '\0';
 
-  if ((startbracket = fgetc(fp)) != '[') {
+  if ((current = fgetc(fp)) != '[') {
     status = -1;
   }
-  stopbracket = peek(fp);
-  while (!feof(fp) && status == 0 && stopbracket != ']') {
+  current = peek(fp);
+  while (!feof(fp) && status == 0 && current != ']') {
     status = _ReadDJValueFromFile(fp, depth + 1, &(tmp->value));
     if (status) break;
     tmp->next = DJA_New();
     tmp = tmp->next;
     num_elements += 1;
     status = FileReadWhitespaceUntilOneOf(fp, ",]");
-    stopbracket = fgetc(fp);
+    current = fgetc(fp);
   }
   if (num_elements == 0) {
       fgetc(fp); /* we only peeked at ']', so read it out */
@@ -160,7 +159,6 @@ int _FileReadDJInternal_Array(FILE *fp, int depth, DJValue **result) {
 }
 
 int _FileReadDJInternal_Object(FILE *fp, int depth, DJValue **result) {
-  char startbracket, stopbracket = '\0';
   DJObjectElement *head = DJO_New();
   DJObjectElement *tmp = head;
   DJValue *tempkey = NULL;
@@ -168,12 +166,13 @@ int _FileReadDJInternal_Object(FILE *fp, int depth, DJValue **result) {
 
   size_t num_elements = 0;
   int status = 0;
+  char current = '\0';
 
-  if ((startbracket = fgetc(fp)) != '{') {
+  if ((current = fgetc(fp)) != '{') {
     status = -1;
   }
-  stopbracket = peek(fp);
-  while (!feof(fp) && status == 0 && stopbracket != '}') {
+  current = peek(fp);
+  while (!feof(fp) && status == 0 && current != '}') {
     status = FileReadWhitespaceUntilOneOf(fp, "\"");
     if (status) break;
     status = _FileReadDJInternal_String(fp, depth + 1, &tempkey);
@@ -183,14 +182,14 @@ int _FileReadDJInternal_Object(FILE *fp, int depth, DJValue **result) {
     tmp->keylen = tempstr->len;
     status = FileReadWhitespaceUntilOneOf(fp, ":");
     if (status) break;
-    stopbracket = fgetc(fp);
+    current = fgetc(fp);
     status = _ReadDJValueFromFile(fp, depth + 1, &(tmp->value));
     if (status) break;
     tmp->next = DJO_New();
     tmp = tmp->next;
     num_elements += 1;
     status = FileReadWhitespaceUntilOneOf(fp, ",}");
-    stopbracket = fgetc(fp);
+    current = fgetc(fp);
   }
   if (num_elements == 0) {
       fgetc(fp); /* we only peeked at '}', so read it out */
