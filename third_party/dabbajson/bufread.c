@@ -57,12 +57,18 @@ int _BufferReadDJInternal_Number(const char *buf, const size_t buflen,
       buf2[i] = '\0';
     }
   }
+  p = NULL;
   if (*index >= buflen) return -1;
   if (!strchr(buf2, '.') && !strchr(buf2, 'e') && !strchr(buf2, 'E')) {
     /* string does not contain .eE so likely int */
-    *result = IntegerToDJValue(strtoll(buf2, NULL, 10));
+    if (buf2[0] == '0' && buf2[1] != '\0') return -1;
+    *result = IntegerToDJValue(strtoll(buf2, &p, 10));
   } else {
-    *result = DoubleToDJValue(strtod(buf2, NULL));
+    *result = DoubleToDJValue(strtod(buf2, &p));
+  }
+  if (p && *p != '\0') {
+      FreeDJValue(*result);
+      return -1;
   }
   return 0;
 }
@@ -93,10 +99,16 @@ int _BufferReadDJInternal_String(const char *buf, const size_t buflen,
     count += 1;
     previous = current;
     (*index)++;
+    if (previous < ' ') goto failure; // TODO: is this ok?
     if (previous == '\\' && 1 + (*index) < buflen) {
       current = buf[*index];
       (*index)++;
       switch (current) {
+        case '"':
+        case '\\':
+        case '/':
+          appendd(&(str->ptr), &current, 1);
+          break;
         case 't':
           appendd(&(str->ptr), "\t", 1);
           break;
@@ -130,7 +142,8 @@ int _BufferReadDJInternal_String(const char *buf, const size_t buflen,
           goto failure;
           break;
         default:
-          appendd(&(str->ptr), &current, 1);
+          printf("failed because of %c\n", current);
+          goto failure;
       }
     } else {
       appendd(&(str->ptr), &current, 1);
@@ -138,7 +151,6 @@ int _BufferReadDJInternal_String(const char *buf, const size_t buflen,
   }
   /* *index is at ", increment once to be ready at the next char */
   (*index)++;
-  if (*index >= buflen) goto failure;
 
   str->len = count;
   BOX_StringIntoDJPtr(str, answer);
@@ -170,7 +182,7 @@ int ReadWhitespaceUntilOneOf(const char *buf, const size_t buflen,
         return status;
     }
   }
-  return -1;
+  return 0;
 }
 
 int _BufferReadDJInternal_Array(const char *buf, const size_t buflen,
@@ -203,6 +215,7 @@ int _BufferReadDJInternal_Array(const char *buf, const size_t buflen,
   if (num_elements == 0) {
       (*index)++; /* we only peeked at ']', so read it out */
   }
+  if (current != ']') status = -1;
 
   if (status == 0) {
     *result = ArrayElementsToDJValue(head, num_elements);
@@ -257,6 +270,7 @@ int _BufferReadDJInternal_Object(const char *buf, const size_t buflen,
   if (num_elements == 0) {
       (*index)++; /* we only peeked at '}', so read it out */
   }
+  if (current != '}') status = -1;
 
   if (status == 0) {
     *result = ObjectElementsToDJValue(head, num_elements);
@@ -326,11 +340,15 @@ int ReadDJValueFromBuffer(const char *buf, const size_t buflen,
   int status = 0;
   size_t index = 0;
   status = _ReadDJValueFromBuffer(buf, buflen, &index, 0, result);
+  if (status == 0) {
+    status = ReadWhitespaceUntilOneOf(buf, buflen, &index, "");
+  }
   if (status == -1 || !*result) {
     if (*result) {
       FreeDJValue(*result);
       *result = NULL;
     }
+    status = -1;
   }
   return status;
 }

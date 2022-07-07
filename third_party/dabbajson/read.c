@@ -59,11 +59,17 @@ int _FileReadDJInternal_Number(FILE *fp, int depth, DJValue **result) {
     }
   }
   if (feof(fp) || ferror(fp)) return -1;
+  p = NULL;
   if (!strchr(buf, '.') && !strchr(buf, 'e') && !strchr(buf, 'E')) {
     /* string does not contain .eE so likely int */
-    *result = IntegerToDJValue(strtoll(buf, NULL, 10));
+    if (buf[0] == '0' && buf[1] != '\0') return -1;
+    *result = IntegerToDJValue(strtoll(buf, &p, 10));
   } else {
-    *result = DoubleToDJValue(strtod(buf, NULL));
+    *result = DoubleToDJValue(strtod(buf, &p));
+  }
+  if (p && *p != '\0') {
+      FreeDJValue(*result);
+      return -1;
   }
   return 0;
 }
@@ -88,9 +94,15 @@ int _FileReadDJInternal_String(FILE *fp, int depth, DJValue **result) {
   while (!feof(fp) && !(((current = fgetc(fp)) == '\"'))) {
     count += 1;
     previous = current;
+    if (previous < ' ') goto failure; // TODO: is this ok?
     if (previous == '\\') {
       current = fgetc(fp);
       switch (current) {
+        case '"':
+        case '\\':
+        case '/':
+          appendd(&buf, &current, 1);
+          break;
         case 't':
           appendd(&buf, "\t", 1);
           break;
@@ -119,10 +131,11 @@ int _FileReadDJInternal_String(FILE *fp, int depth, DJValue **result) {
               }
             }
           }
-          free(buf);
-          return -1;
+          goto failure;
+          break;
         default:
-          appendd(&buf, &current, 1);
+          printf("failed because of %c\n", current);
+          goto failure;
       }
     } else {
       appendd(&buf, &current, 1);
@@ -131,8 +144,7 @@ int _FileReadDJInternal_String(FILE *fp, int depth, DJValue **result) {
   buflen = count;
 
   if (feof(fp) || ferror(fp)) {
-    free(buf);
-    return -1;
+    goto failure;
   }
 
   str = malloc(sizeof(DJString));
@@ -142,6 +154,10 @@ int _FileReadDJInternal_String(FILE *fp, int depth, DJValue **result) {
   BOX_StringIntoDJPtr(str, answer);
   *result = answer;
   return 0;
+
+failure:
+  free(buf);
+  return -1;
 }
 
 int FileReadWhitespaceUntilOneOf(FILE *fp, const char *end) {
@@ -163,7 +179,7 @@ int FileReadWhitespaceUntilOneOf(FILE *fp, const char *end) {
         return status;
     }
   }
-  return -1;
+  return 0;
 }
 
 int _FileReadDJInternal_Array(FILE *fp, int depth, DJValue **result) {
@@ -190,6 +206,7 @@ int _FileReadDJInternal_Array(FILE *fp, int depth, DJValue **result) {
   if (num_elements == 0) {
       fgetc(fp); /* we only peeked at ']', so read it out */
   }
+  if (current != ']') status = -1;
 
   if (status == 0) {
     *result = ArrayElementsToDJValue(head, num_elements);
@@ -237,6 +254,7 @@ int _FileReadDJInternal_Object(FILE *fp, int depth, DJValue **result) {
   if (num_elements == 0) {
       fgetc(fp); /* we only peeked at '}', so read it out */
   }
+  if (current != '}') status = -1;
 
   if (status == 0) {
     *result = ObjectElementsToDJValue(head, num_elements);
@@ -302,11 +320,15 @@ int _ReadDJValueFromFile(FILE *fp, int depth, DJValue **result) {
 int ReadDJValueFromFile(FILE *fp, DJValue **result) {
   int status = 0;
   status = _ReadDJValueFromFile(fp, 0, result);
+  if (status == 0) {
+    status = FileReadWhitespaceUntilOneOf(fp, "");
+  }
   if (status == -1 || !*result) {
     if (*result) {
       FreeDJValue(*result);
       *result = NULL;
     }
+    status = -1;
   }
   return status;
 }
