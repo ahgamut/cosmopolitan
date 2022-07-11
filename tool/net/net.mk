@@ -211,7 +211,7 @@ o/$(MODE)/tool/net/demo/virtualbean.html.zip.o:					\
 			-B
 
 o/$(MODE)/tool/net/ljson.o:	\
-		-DSTACK_FRAME_UNLIMITED
+		CPPFLAGS += -DSTACK_FRAME_UNLIMITED
 
 o/$(MODE)/tool/net/redbean-demo.com.dbg:					\
 		$(TOOL_NET_DEPS)						\
