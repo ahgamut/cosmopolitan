@@ -25,7 +25,12 @@ THIRD_PARTY_DABBAJSON_A_HDRS = $(filter %.h,$(THIRD_PARTY_DABBAJSON_A_FILES))
 
 THIRD_PARTY_DABBAJSON_TEST_FILES := $(wildcard third_party/dabbajson/test/test-*)
 THIRD_PARTY_DABBAJSON_TEST_SRCS_C = $(filter %.c,$(THIRD_PARTY_DABBAJSON_TEST_FILES))
-THIRD_PARTY_DABBAJSON_SAMPLES = $(filter %.json,$(THIRD_PARTY_DABBAJSON_TEST_FILES))
+
+THIRD_PARTY_DABBAJSON_SAMPLES_PASS := $(wildcard third_party/dabbajson/test/pass/*)
+THIRD_PARTY_DABBAJSON_SAMPLES_FAIL := $(wildcard third_party/dabbajson/test/fail/*)
+THIRD_PARTY_DABBAJSON_SAMPLES = \
+	$(THIRD_PARTY_DABBAJSON_SAMPLES_PASS) \
+	$(THIRD_PARTY_DABBAJSON_SAMPLES_FAIL)
 
 THIRD_PARTY_DABBAJSON_SAMPLES_OBJS = \
 	$(THIRD_PARTY_DABBAJSON_A_SAMPLES:%=o/$(MODE)/%.zip.o)
@@ -43,7 +48,7 @@ THIRD_PARTY_DABBAJSON_BINS = \
 		$(THIRD_PARTY_DABBAJSON_COMS) \
 		$(THIRD_PARTY_DABBAJSON_COMS:%=%.dbg)
 THIRD_PARTY_DABBAJSON_RUNS = \
-		$(THIRD_PARTY_DABBAJSON_COMS:%=%.runs)
+		$(THIRD_PARTY_DABBAJSON_SAMPLES:%=o/$(MODE)/%.runs)
 
 THIRD_PARTY_DABBAJSON_A_DIRECTDEPS =					\
 	LIBC_INTRIN								\
@@ -81,14 +86,19 @@ o/$(MODE)/third_party/dabbajson/test/%.com.dbg:	\
 		$(THIRD_PARTY_DABBAJSON_A)				\
 		o/$(MODE)/third_party/dabbajson/test/helper.o			\
 		o/$(MODE)/third_party/dabbajson/test/%.o				\
-		o/$(MODE)/third_party/dabbajson/test/%.json.zip.o		\
 		$(CRT)								\
 		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
 
-o/$(MODE)/third_party/dabbajson/test/%.com.runs: \
-	o/$(MODE)/third_party/dabbajson/test/%.com
-	@$(COMPILE) -ACHECK -tT$@ $<
+o/$(MODE)/third_party/dabbajson/test/pass/%.json.runs: \
+	o/$(MODE)/third_party/dabbajson/test/test-passer.com	\
+	third_party/dabbajson/test/pass/%.json
+	@$(COMPILE) -ACHECK -tT$@ $^
+
+o/$(MODE)/third_party/dabbajson/test/fail/%.json.runs: \
+	o/$(MODE)/third_party/dabbajson/test/test-failer.com	\
+	third_party/dabbajson/test/fail/%.json
+	@$(COMPILE) -ACHECK -tT$@ $^
 
 THIRD_PARTY_DABBAJSON_LIBS = $(foreach x,$(THIRD_PARTY_DABBAJSON_ARTIFACTS),$($(x)))
 THIRD_PARTY_DABBAJSON_SRCS = $(foreach x,$(THIRD_PARTY_DABBAJSON_ARTIFACTS),$($(x)_SRCS))
