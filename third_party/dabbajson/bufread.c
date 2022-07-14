@@ -15,7 +15,7 @@ int _ReadDJValueFromBuffer(const char *buf, const size_t buflen, size_t *index,
 
 int _BufferReadDJInternal_Null(const char *buf, const size_t buflen,
                                size_t *index, int depth, DJValue **result) {
-  if (*index + 4 < buflen && !strncmp(buf + *index, "null", 4)) {
+  if ((*index) + 3 < buflen && !strncmp(buf + *index, "null", 4)) {
     *result = NullToDJValue();
     (*index) += 4;
     return 0;
@@ -25,7 +25,7 @@ int _BufferReadDJInternal_Null(const char *buf, const size_t buflen,
 
 int _BufferReadDJInternal_True(const char *buf, const size_t buflen,
                                size_t *index, int depth, DJValue **result) {
-  if (*index + 4 < buflen && !strncmp(buf + *index, "true", 4)) {
+  if ((*index) + 3 < buflen && !strncmp(buf + *index, "true", 4)) {
     *result = BoolToDJValue(true);
     (*index) += 4;
     return 0;
@@ -35,7 +35,7 @@ int _BufferReadDJInternal_True(const char *buf, const size_t buflen,
 
 int _BufferReadDJInternal_False(const char *buf, const size_t buflen,
                                 size_t *index, int depth, DJValue **result) {
-  if (*index + 5 < buflen && !strncmp(buf + *index, "false", 5)) {
+  if ((*index) + 4 < buflen && !strncmp(buf + *index, "false", 5)) {
     *result = BoolToDJValue(false);
     (*index) += 5;
     return 0;
@@ -58,7 +58,6 @@ int _BufferReadDJInternal_Number(const char *buf, const size_t buflen,
     }
   }
   p = NULL;
-  if (*index >= buflen) return -1;
   if (!strchr(buf2, '.') && !strchr(buf2, 'e') && !strchr(buf2, 'E')) {
     /* string does not contain .eE so likely int */
     if (buf2[0] == '0' && buf2[1] != '\0') return -1;
@@ -125,7 +124,7 @@ int _BufferReadDJInternal_String(const char *buf, const size_t buflen,
           appendd(&(str->ptr), "\n", 1);
           break;
         case 'u':
-          if (*index + 4 < buflen) {
+          if (*index + 3 < buflen) {
             memmove(utfkey, &(buf[*index]), 4);
             utfval = strtoul(utfkey, &utfend, 16);
             *index += 4;

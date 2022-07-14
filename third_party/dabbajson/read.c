@@ -58,7 +58,6 @@ int _FileReadDJInternal_Number(FILE *fp, int depth, DJValue **result) {
       buf[i] = '\0';
     }
   }
-  if (feof(fp) || ferror(fp)) return -1;
   p = NULL;
   if (!strchr(buf, '.') && !strchr(buf, 'e') && !strchr(buf, 'E')) {
     /* string does not contain .eE so likely int */
@@ -142,10 +141,6 @@ int _FileReadDJInternal_String(FILE *fp, int depth, DJValue **result) {
     }
   }
   buflen = count;
-
-  if (feof(fp) || ferror(fp)) {
-    goto failure;
-  }
 
   str = malloc(sizeof(DJString));
   str->ptr = buf;

@@ -58,7 +58,7 @@ int ReadDJValueFromBuffer(const char *, const size_t, DJValue **);
 
 /* maximum depth allowed in JSON */
 #ifndef DJVALUE_MAXIMUM_RECURSION_DEPTH
-#define DJVALUE_MAXIMUM_RECURSION_DEPTH 256
+#define DJVALUE_MAXIMUM_RECURSION_DEPTH 64
 #endif
 
 #endif /* THIRDPARTY_DABBAJSON_H */
