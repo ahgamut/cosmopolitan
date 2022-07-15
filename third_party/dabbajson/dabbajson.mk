@@ -29,13 +29,42 @@ THIRD_PARTY_DABBAJSON_TEST_SRCS_C = $(filter %.c,$(THIRD_PARTY_DABBAJSON_TEST_FI
 THIRD_PARTY_DABBAJSON_SAMPLES_PASS := $(wildcard third_party/dabbajson/test/pass/*)
 THIRD_PARTY_DABBAJSON_SAMPLES_EITHER := $(wildcard third_party/dabbajson/test/either/*)
 THIRD_PARTY_DABBAJSON_SAMPLES_FAIL := $(wildcard third_party/dabbajson/test/fail/*)
-THIRD_PARTY_DABBAJSON_SAMPLES = \
+THIRD_PARTY_DABBAJSON_SAMPLES_ALL = \
 	$(THIRD_PARTY_DABBAJSON_SAMPLES_PASS) \
 	$(THIRD_PARTY_DABBAJSON_SAMPLES_EITHER) \
 	$(THIRD_PARTY_DABBAJSON_SAMPLES_FAIL)
 
-THIRD_PARTY_DABBAJSON_SAMPLES_OBJS = \
-	$(THIRD_PARTY_DABBAJSON_A_SAMPLES:%=o/$(MODE)/%.zip.o)
+THIRD_PARTY_DABBAJSON_SAMPLES_NONCOMPLY = \
+	third_party/dabbajson/test/either/i_number_huge_exp.json	\
+	third_party/dabbajson/test/fail/n_multidigit_number_then_00.json \
+	third_party/dabbajson/test/fail/n_number_-01.json	\
+	third_party/dabbajson/test/fail/n_number_-2..json	\
+	third_party/dabbajson/test/fail/n_number_0.e1.json	\
+	third_party/dabbajson/test/fail/n_number_2.e+3.json	\
+	third_party/dabbajson/test/fail/n_number_2.e-3.json	\
+	third_party/dabbajson/test/fail/n_number_2.e3.json	\
+	third_party/dabbajson/test/fail/n_number_neg_int_starting_with_zero.json \
+	third_party/dabbajson/test/fail/n_number_neg_real_without_int_part.json \
+	third_party/dabbajson/test/fail/n_number_real_without_fractional_part.json \
+	third_party/dabbajson/test/fail/n_structure_null-byte-outside-string.json \
+	third_party/dabbajson/test/pass/y_string_accepted_surrogate_pair.json \
+	third_party/dabbajson/test/pass/y_string_accepted_surrogate_pairs.json \
+	third_party/dabbajson/test/pass/y_string_escaped_control_character.json \
+	third_party/dabbajson/test/pass/y_string_last_surrogates_1_and_2.json \
+	third_party/dabbajson/test/pass/y_string_nonCharacterInUTF-8_U+10FFFF.json \
+	third_party/dabbajson/test/pass/y_string_nonCharacterInUTF-8_U+FFFF.json \
+	third_party/dabbajson/test/pass/y_string_pi.json \
+	third_party/dabbajson/test/pass/y_string_reservedCharacterInUTF-8_U+1BFFF.json \
+	third_party/dabbajson/test/pass/y_string_surrogates_U+1D11E_MUSICAL_SYMBOL_G_CLEF.json \
+	third_party/dabbajson/test/pass/y_string_u+2028_line_sep.json \
+	third_party/dabbajson/test/pass/y_string_u+2029_par_sep.json \
+	third_party/dabbajson/test/pass/y_string_unicode_2.json \
+	third_party/dabbajson/test/pass/y_string_unicode_U+10FFFE_nonchar.json \
+	third_party/dabbajson/test/pass/y_string_unicode_U+1FFFE_nonchar.json \
+	third_party/dabbajson/test/pass/y_string_utf8.json
+
+THIRD_PARTY_DABBAJSON_SAMPLES = \
+	$(filter-out $(THIRD_PARTY_DABBAJSON_SAMPLES_NONCOMPLY),$(THIRD_PARTY_DABBAJSON_SAMPLES_ALL))
 
 THIRD_PARTY_DABBAJSON_A_OBJS =						\
 	$(THIRD_PARTY_DABBAJSON_A_SRCS_C:%.c=o/$(MODE)/%.o)

@@ -2,7 +2,7 @@
 
 void CheckFileRead(const char *filename) {
   FILE *fp = fopen(filename, "r");
-  assert(!fp);
+  assert(fp != NULL);
   int res = 0;
   DJValue *x = NULL;
   printf("Reading file %s:\n", filename);
