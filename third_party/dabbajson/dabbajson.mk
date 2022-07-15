@@ -115,5 +115,6 @@ THIRD_PARTY_DABBAJSON_OBJS = $(foreach x,$(THIRD_PARTY_DABBAJSON_ARTIFACTS),$($(
 
 .PHONY: o/$(MODE)/third_party/dabbajson
 o/$(MODE)/third_party/dabbajson:					\
+		$(THIRD_PARTY_DABBAJSON_BINS)				\
 		$(THIRD_PARTY_DABBAJSON_RUNS)
 

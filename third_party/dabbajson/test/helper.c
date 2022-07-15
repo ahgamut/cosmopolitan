@@ -22,6 +22,7 @@ void CheckBufferConversion(DJValue *x) {
 
 void CheckFileReadSuccess(const char *filename) {
   FILE *fp = fopen(filename, "r");
+  assert(!fp);
   DJValue *x = NULL;
   printf("Reading file %s:\n", filename);
   assert(-1 != ReadDJValueFromFile(fp, &x));
@@ -38,6 +39,7 @@ void CheckFileReadSuccess(const char *filename) {
 
 void CheckFileReadFailure(const char *filename) {
   FILE *fp = fopen(filename, "r");
+  assert(!fp);
   DJValue *x = NULL;
   printf("Reading file %s:\n", filename);
   assert(-1 == ReadDJValueFromFile(fp, &x));
