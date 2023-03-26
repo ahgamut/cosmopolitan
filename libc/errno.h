@@ -693,7 +693,7 @@ extern const errno_t EXFULL;
 #define EUCLEAN         SYMBOLIC(EUCLEAN)
 #define EUNATCH         SYMBOLIC(EUNATCH)
 #define EUSERS          SYMBOLIC(EUSERS)
-#define EWOULDBLOCK     SYMBOLIC(EAGAIN)
+#define EWOULDBLOCK     EAGAIN
 #define EXDEV           SYMBOLIC(EXDEV)
 #define EXFULL          SYMBOLIC(EXFULL)
 
