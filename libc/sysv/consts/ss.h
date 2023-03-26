@@ -1,5 +1,6 @@
 #ifndef COSMOPOLITAN_LIBC_SYSV_CONSTS_SS_H_
 #define COSMOPOLITAN_LIBC_SYSV_CONSTS_SS_H_
+#include "libc/runtime/symbolic.h"
 #if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 
@@ -11,6 +12,6 @@ COSMOPOLITAN_C_END_
 #define SIGSTKSZ    32768
 #define MINSIGSTKSZ 32768 /* xnu defines the highest minimum */
 #define SS_ONSTACK  1
-#define SS_DISABLE  SS_DISABLE
+#define SS_DISABLE  SYMBOLIC(SS_DISABLE)
 
 #endif /* COSMOPOLITAN_LIBC_SYSV_CONSTS_SS_H_ */
