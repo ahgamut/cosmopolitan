@@ -217,7 +217,9 @@ void pthread_testcancel(void);
 
 #if (__GNUC__ + 0) * 100 + (__GNUC_MINOR__ + 0) >= 407 && \
     !defined(__STRICT_ANSI__) && !defined(MODE_DBG)
+#ifndef EBUSY
 extern const errno_t EBUSY;
+#endif
 #define pthread_spin_lock(pSpin)                                           \
   ({                                                                       \
     pthread_spinlock_t *_s = pSpin;                                        \

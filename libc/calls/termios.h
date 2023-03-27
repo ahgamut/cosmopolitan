@@ -43,7 +43,6 @@ int tcgetwinsize(int, struct winsize *);
 ╚────────────────────────────────────────────────────────────────────────────│*/
 #if defined(__GNUC__) && !defined(__STRICT_ANSI__)
 
-/*
 #define tcsetattr(FD, OPT, TIO) tcsetattr_dispatch(FD, OPT, TIO)
 forceinline int tcsetattr_dispatch(int fd, int opt, const struct termios *tio) {
   if (__EQUIVALENT(opt, TCSANOW)) return ioctl(fd, TCSETS, (void *)tio);
@@ -56,7 +55,6 @@ forceinline int tcsetattr_dispatch(int fd, int opt, const struct termios *tio) {
 forceinline int tcgetattr_dispatch(int fd, const struct termios *tio) {
   return ioctl(fd, TCGETS, (void *)tio);
 }
-*/
 
 #endif /* GNUC && !ANSI */
 COSMOPOLITAN_C_END_

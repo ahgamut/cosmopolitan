@@ -5,12 +5,14 @@
 /* clang-format off */
 #define SYMBOLIC(NAME) NAME(%rip)
 #define LITERALLY(NAME) $NAME
+#define ACTUALLY(NAME) NAME(%rip)
 /* clang-format on */
 #else
-#ifndef SYMBOLIC
 #define SYMBOLIC(NAME) NAME
-#endif
 #define LITERALLY(NAME) NAME
+#ifndef ACTUALLY
+#define ACTUALLY(NAME) NAME
+#endif
 #endif
 
 #endif /* COSMOPOLITAN_LIBC_RUNTIME_SYMBOLIC_H_ */
