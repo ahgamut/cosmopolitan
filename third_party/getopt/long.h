@@ -4,6 +4,10 @@
 #error "don't mix getopt_long() with cosmo's getopt()"
 #endif
 
+#ifndef _GETOPT_H
+#define _GETOPT_H
+#endif
+
 #define no_argument       0
 #define required_argument 1
 #define optional_argument 2
