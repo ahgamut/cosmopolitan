@@ -16,13 +16,19 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "ape/sections.internal.h"
+#include "libc/calls/blockcancel.internal.h"
 #include "libc/calls/calls.h"
-#include "libc/calls/kntprioritycombos.internal.h"
+#include "libc/calls/syscall-sysv.internal.h"
+#include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/log/log.h"
 #include "libc/nexgen32e/x86feature.h"
 #include "libc/runtime/runtime.h"
+#include "libc/sysv/consts/at.h"
+#include "libc/sysv/consts/f.h"
 #include "libc/sysv/consts/mlock.h"
+#include "libc/sysv/consts/o.h"
 #include "libc/testlib/testlib.h"
 
 double g_avx2_juiceup_doubles_[4] forcealign(32);
@@ -36,14 +42,27 @@ void testlib_benchwarmup(void) {
         "vmovdqa\t%%ymm0,%0\n\t"
         "vzeroall"
         : "=m"(g_avx2_juiceup_quadwords_)
-        : "m"(g_avx2_juiceup_quadwords_), "r"(&_base[0]));
+        : "m"(g_avx2_juiceup_quadwords_), "r"(&__executable_start[0]));
     asm("vmovapd\t%1,%%ymm1\n\t"
         "vfmadd132pd\t(%2),%%ymm1,%%ymm1\n\t"
         "vmovapd\t%%ymm1,%0\n\t"
         "vzeroall"
         : "=m"(g_avx2_juiceup_doubles_)
-        : "m"(g_avx2_juiceup_doubles_), "r"(&_base[32]));
+        : "m"(g_avx2_juiceup_doubles_), "r"(&__executable_start[32]));
   }
+}
+
+void EnableCruiseControlForCool(void) {
+  int fd, micros = 10;
+  if (!IsLinux()) return;
+  BLOCK_CANCELLATIONS;
+  if ((fd = __sys_openat(AT_FDCWD, "/dev/cpu_dma_latency", O_WRONLY, 0)) !=
+      -1) {
+    sys_write(fd, &micros, sizeof(micros));
+    sys_fcntl(fd, F_DUPFD_CLOEXEC, 123, __sys_fcntl);
+    sys_close(fd);
+  }
+  ALLOW_CANCELLATIONS;
 }
 
 /**
@@ -52,14 +71,7 @@ void testlib_benchwarmup(void) {
  * @see BENCH()
  */
 void testlib_runallbenchmarks(void) {
-  int e;
-  e = errno;
-  _peekall();
-  if (!IsWindows()) {
-    mlockall(MCL_CURRENT);
-    nice(-1);
-  }
-  errno = e;
   __log_level = kLogWarn;
+  EnableCruiseControlForCool();
   testlib_runtestcases(__bench_start, __bench_end, testlib_benchwarmup);
 }

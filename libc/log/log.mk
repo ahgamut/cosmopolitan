@@ -6,9 +6,7 @@ PKGS += LIBC_LOG
 LIBC_LOG_ARTIFACTS += LIBC_LOG_A
 LIBC_LOG = $(LIBC_LOG_A_DEPS) $(LIBC_LOG_A)
 LIBC_LOG_A = o/$(MODE)/libc/log/log.a
-LIBC_LOG_A_FILES :=					\
-	$(wildcard libc/log/thunks/*)			\
-	$(wildcard libc/log/*)	
+LIBC_LOG_A_FILES := $(wildcard libc/log/*)
 LIBC_LOG_A_HDRS = $(filter %.h,$(LIBC_LOG_A_FILES))
 LIBC_LOG_A_SRCS_C = $(filter %.c,$(LIBC_LOG_A_FILES))
 LIBC_LOG_A_SRCS_S = $(filter %.S,$(LIBC_LOG_A_FILES))
@@ -26,7 +24,6 @@ LIBC_LOG_A_CHECKS =					\
 	$(LIBC_LOG_A_HDRS:%=o/$(MODE)/%.ok)
 
 LIBC_LOG_A_DIRECTDEPS =					\
-	LIBC_ALG					\
 	LIBC_CALLS					\
 	LIBC_ELF					\
 	LIBC_FMT					\
@@ -35,16 +32,16 @@ LIBC_LOG_A_DIRECTDEPS =					\
 	LIBC_NEXGEN32E					\
 	LIBC_NT_KERNEL32				\
 	LIBC_NT_NTDLL					\
-	LIBC_RAND					\
+	LIBC_PROC					\
 	LIBC_RUNTIME					\
 	LIBC_STDIO					\
 	LIBC_STR					\
-	LIBC_STUBS					\
 	LIBC_SYSV					\
 	LIBC_SYSV_CALLS					\
+	LIBC_THREAD					\
 	LIBC_TIME					\
 	LIBC_TINYMATH					\
-	LIBC_UNICODE					\
+	THIRD_PARTY_COMPILER_RT				\
 	THIRD_PARTY_DLMALLOC				\
 	THIRD_PARTY_GDTOA
 
@@ -59,28 +56,22 @@ $(LIBC_LOG_A).pkg:					\
 		$(LIBC_LOG_A_OBJS)			\
 		$(foreach x,$(LIBC_LOG_A_DIRECTDEPS),$($(x)_A).pkg)
 
-o/$(MODE)/libc/log/backtrace2.o				\
-o/$(MODE)/libc/log/backtrace3.o:			\
-		OVERRIDE_CFLAGS +=			\
-			-fno-sanitize=all
+# offer assurances about the stack safety of cosmo libc
+$(LIBC_LOG_A_OBJS): private COPTS += -Wframe-larger-than=4096 -Walloca-larger-than=4096
 
-o/$(MODE)/libc/log/checkfail.o:				\
-		OVERRIDE_CFLAGS +=			\
+$(LIBC_RUNTIME_A_OBJS): private				\
+		COPTS +=				\
+			-fno-sanitize=all		\
+			-Wframe-larger-than=4096	\
+			-Walloca-larger-than=4096
+
+o/$(MODE)/libc/log/checkfail.o: private			\
+		CFLAGS +=				\
 			-mgeneral-regs-only
 
-o/$(MODE)/libc/log/attachdebugger.o			\
-o/$(MODE)/libc/log/checkaligned.o			\
-o/$(MODE)/libc/log/checkfail.o				\
-o/$(MODE)/libc/log/checkfail_ndebug.o			\
-o/$(MODE)/libc/log/restoretty.o				\
-o/$(MODE)/libc/log/oncrash.o				\
-o/$(MODE)/libc/log/onkill.o				\
-o/$(MODE)/libc/log/startfatal.o				\
-o/$(MODE)/libc/log/startfatal_ndebug.o			\
-o/$(MODE)/libc/log/ubsan.o				\
-o/$(MODE)/libc/log/die.o:				\
-		OVERRIDE_CFLAGS +=			\
-			$(NO_MAGIC)
+o/$(MODE)/libc/log/watch.o: private			\
+		CFLAGS +=				\
+			-ffreestanding
 
 LIBC_LOG_LIBS = $(foreach x,$(LIBC_LOG_ARTIFACTS),$($(x)))
 LIBC_LOG_SRCS = $(foreach x,$(LIBC_LOG_ARTIFACTS),$($(x)_SRCS))

@@ -17,27 +17,23 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
-#include "libc/calls/strace.internal.h"
+#include "libc/intrin/strace.internal.h"
 #include "libc/nt/memory.h"
 #include "libc/nt/runtime.h"
 #include "libc/runtime/memtrack.internal.h"
 #include "libc/runtime/runtime.h"
 
-static inline noasan void *GetFrameAddr(int f) {
+static inline void *GetFrameAddr(int f) {
   intptr_t a;
   a = f;
   a *= FRAMESIZE;
   return (void *)a;
 }
 
-noasan void ReleaseMemoryNt(struct MemoryIntervals *mm, int l, int r) {
-  int i, ok;
-  size_t size;
-  char *addr, *last;
+void __release_memory_nt(struct MemoryIntervals *mm, int l, int r) {
+  int i;
   for (i = l; i <= r; ++i) {
-    addr = GetFrameAddr(mm->p[i].x);
-    last = GetFrameAddr(mm->p[i].y);
-    UnmapViewOfFile(addr);
+    UnmapViewOfFile(GetFrameAddr(mm->p[i].x));
     CloseHandle(mm->p[i].h);
   }
 }

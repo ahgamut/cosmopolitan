@@ -17,17 +17,27 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/internal.h"
-#include "libc/calls/strace.internal.h"
+#include "libc/calls/struct/fd.internal.h"
 #include "libc/dce.h"
 #include "libc/intrin/asan.internal.h"
+#include "libc/intrin/strace.internal.h"
 #include "libc/sock/internal.h"
 #include "libc/sock/sock.h"
-#include "libc/sock/sockdebug.h"
+#include "libc/sock/struct/sockaddr.h"
+#include "libc/sock/struct/sockaddr.internal.h"
 #include "libc/sock/syscall_fd.internal.h"
 #include "libc/sysv/errfuns.h"
 
 /**
- * Assigns local address and port number to socket.
+ * Assigns local address and port number to socket, e.g.
+ *
+ *     struct sockaddr_in in = {AF_INET, htons(12345), {htonl(0x7f000001)}};
+ *     int fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+ *     bind(fd, (struct sockaddr *)&in, sizeof(in));
+ *
+ * On Windows, Cosmopolitan's implementation of bind() takes care of
+ * always setting the WIN32-specific `SO_EXCLUSIVEADDRUSE` option on
+ * inet stream sockets in order to safeguard your servers from tests
  *
  * @param fd is the file descriptor returned by socket()
  * @param addr is usually the binary-encoded ip:port on which to listen
@@ -36,21 +46,25 @@
  * @error ENETDOWN, EPFNOSUPPORT, etc.
  * @asyncsignalsafe
  */
-int bind(int fd, const void *addr, uint32_t addrsize) {
+int bind(int fd, const struct sockaddr *addr, uint32_t addrsize) {
   int rc;
   if (!addr || (IsAsan() && !__asan_is_valid(addr, addrsize))) {
     rc = efault();
   } else if (addrsize >= sizeof(struct sockaddr_in)) {
-    if (!IsWindows()) {
+    if (fd < g_fds.n && g_fds.p[fd].kind == kFdZip) {
+      rc = enotsock();
+    } else if (!IsWindows()) {
       rc = sys_bind(fd, addr, addrsize);
+    } else if (!__isfdopen(fd)) {
+      rc = ebadf();
     } else if (__isfdkind(fd, kFdSocket)) {
       rc = sys_bind_nt(&g_fds.p[fd], addr, addrsize);
     } else {
-      rc = ebadf();
+      rc = enotsock();
     }
   } else {
     rc = einval();
   }
-  STRACE("bind(%d, %s) -> %d% lm", fd, __describe_sockaddr(addr, addrsize), rc);
+  STRACE("bind(%d, %s) -> %d% lm", fd, DescribeSockaddr(addr, addrsize), rc);
   return rc;
 }

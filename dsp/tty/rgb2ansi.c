@@ -19,7 +19,6 @@
 #include "dsp/core/core.h"
 #include "dsp/tty/quant.h"
 #include "libc/assert.h"
-#include "libc/bits/initializer.internal.h"
 #include "libc/limits.h"
 #include "libc/log/log.h"
 #include "libc/macros.internal.h"
@@ -40,9 +39,9 @@ struct TtyRgb tty2rgb_(struct TtyRgb rgbxt) {
   return g_ansi2rgb_[rgbxt.xt];
 }
 
-__m128 tty2rgbf_(struct TtyRgb rgbxt) {
+ttyrgb_m128 tty2rgbf_(struct TtyRgb rgbxt) {
   rgbxt = g_ansi2rgb_[rgbxt.xt];
-  return (__m128){(int)rgbxt.r, (int)rgbxt.g, (int)rgbxt.b} / 255;
+  return (ttyrgb_m128){(int)rgbxt.r, (int)rgbxt.g, (int)rgbxt.b} / 255;
 }
 
 static int rgb2xterm256_(int r, int g, int b) {
@@ -99,8 +98,8 @@ static int uncube(int x) {
 }
 
 static textstartup void rgb2ansi_init(void) {
-  uint8_t c, y;
-  uint32_t i, j;
+  uint8_t c;
+  uint32_t i;
   memcpy(g_ansi2rgb_, &kCgaPalette, sizeof(kCgaPalette));
   for (i = 16; i < 232; ++i) {
     g_ansi2rgb_[i].r = kXtermCube[((i - 020) / 044) % 06];

@@ -1,19 +1,24 @@
+#include "third_party/dlmalloc/dlmalloc.h"
 #include "libc/assert.h"
-#include "libc/bits/likely.h"
-#include "libc/bits/weaken.h"
 #include "libc/calls/calls.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
-#include "libc/intrin/kprintf.h"
+#include "libc/intrin/bsr.h"
+#include "libc/intrin/likely.h"
+#include "libc/intrin/weaken.h"
+#include "libc/macros.internal.h"
 #include "libc/mem/mem.h"
 #include "libc/nexgen32e/rdtsc.h"
-#include "libc/rand/rand.h"
+#include "libc/runtime/internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/runtime/sysconf.h"
+#include "libc/stdckdint.h"
+#include "libc/stdio/rand.h"
 #include "libc/stdio/stdio.h"
+#include "libc/str/str.h"
 #include "libc/sysv/consts/map.h"
 #include "libc/sysv/consts/prot.h"
-#include "third_party/dlmalloc/dlmalloc.h"
+#include "libc/thread/thread.h"
 #include "third_party/dlmalloc/vespene.internal.h"
 // clang-format off
 
@@ -23,19 +28,24 @@
 #define HAVE_MMAP 1
 #define HAVE_MREMAP 0
 #define HAVE_MORECORE 0
-#define USE_SPIN_LOCKS 1
+#define USE_LOCKS 2
 #define MORECORE_CONTIGUOUS 0
 #define MALLOC_INSPECT_ALL 1
+#define ABORT_ON_ASSERT_FAILURE 0
+#define LOCK_AT_FORK 1
+#define NO_MALLOC_STATS 1
 
 #if IsTiny()
 #define INSECURE 1
 #define PROCEED_ON_ERROR 1
-#define ABORT_ON_ASSERT_FAILURE 0
 #endif
 
 #if IsModeDbg()
 #define DEBUG 1
 #endif
+
+#undef assert
+#define assert(x) npassert(x)
 
 #include "third_party/dlmalloc/platform.inc"
 #include "third_party/dlmalloc/locks.inc"
@@ -338,8 +348,8 @@ static int sys_trim(mstate m, size_t pad) {
             size_t newsize = sp->size - extra;
             (void)newsize; /* placate people compiling -Wunused-variable */
             /* Prefer mremap, fall back to munmap */
-            if ((CALL_MREMAP(sp->base, sp->size, newsize, 0) != MFAIL) ||
-                (CALL_MUNMAP(sp->base + newsize, extra) == 0)) {
+            if (CALL_MREMAP(sp->base, sp->size, newsize, 0) != MFAIL ||
+                (!extra || !CALL_MUNMAP(sp->base + newsize, extra))) {
               released = extra;
             }
           }
@@ -694,8 +704,8 @@ void* dlmalloc(size_t bytes) {
 
     mem = sys_alloc(gm, nb);
     POSTACTION(gm);
-    if (mem == MAP_FAILED && weaken(__oom_hook)) {
-      weaken(__oom_hook)(bytes);
+    if (mem == MAP_FAILED && _weaken(__oom_hook)) {
+      _weaken(__oom_hook)(bytes);
     }
     return mem;
 
@@ -821,7 +831,7 @@ void dlfree(void* mem) {
 void* dlcalloc(size_t n_elements, size_t elem_size) {
   void* mem;
   size_t req = 0;
-  if (__builtin_mul_overflow(n_elements, elem_size, &req)) req = -1;
+  if (ckd_mul(&req, n_elements, elem_size)) req = -1;
   mem = dlmalloc(req);
   if (mem != 0 && calloc_must_clear(mem2chunk(mem)))
     bzero(mem, req);
@@ -916,11 +926,8 @@ static void* internal_memalign(mstate m, size_t alignment, size_t bytes) {
   void* mem = 0;
   if (alignment <  MIN_CHUNK_SIZE) /* must be at least a minimum chunk size */
     alignment = MIN_CHUNK_SIZE;
-  if ((alignment & (alignment-SIZE_T_ONE)) != 0) {/* Ensure a power of 2 */
-    size_t a = MALLOC_ALIGNMENT << 1;
-    while (a < alignment) a <<= 1;
-    alignment = a;
-  }
+  /* alignment is 32+ bytes rounded up to nearest two power */
+  alignment = 2ul << _bsrl(MAX(MIN_CHUNK_SIZE, alignment) - 1);
   if (bytes >= MAX_REQUEST - alignment) {
     if (m != 0)  { /* Test isn't needed but avoids compiler warning */
       MALLOC_FAILURE_ACTION;
@@ -1290,42 +1297,12 @@ void* dlmemalign(size_t alignment, size_t bytes) {
   return internal_memalign(gm, alignment, bytes);
 }
 
-int dlposix_memalign(void** pp, size_t alignment, size_t bytes) {
-  void* mem = 0;
-  if (alignment == MALLOC_ALIGNMENT)
-    mem = dlmalloc(bytes);
-  else {
-    size_t d = alignment / sizeof(void*);
-    size_t r = alignment % sizeof(void*);
-    if (r != 0 || d == 0 || (d & (d-SIZE_T_ONE)) != 0)
-      return EINVAL;
-    else if (bytes <= MAX_REQUEST - alignment) {
-      if (alignment <  MIN_CHUNK_SIZE)
-        alignment = MIN_CHUNK_SIZE;
-      mem = internal_memalign(gm, alignment, bytes);
-    }
-  }
-  if (!mem) {
-    return ENOMEM;
-  } else {
-    *pp = mem;
-    return 0;
-  }
+#if USE_LOCKS
+void dlmalloc_atfork(void) {
+  bzero(&gm->mutex, sizeof(gm->mutex));
+  bzero(&malloc_global_mutex, sizeof(malloc_global_mutex));
 }
-
-void* dlvalloc(size_t bytes) {
-  size_t pagesz;
-  ensure_initialization();
-  pagesz = mparams.page_size;
-  return dlmemalign(pagesz, bytes);
-}
-
-void* dlpvalloc(size_t bytes) {
-  size_t pagesz;
-  ensure_initialization();
-  pagesz = mparams.page_size;
-  return dlmemalign(pagesz, (bytes + pagesz - SIZE_T_ONE) & ~(pagesz - SIZE_T_ONE));
-}
+#endif
 
 void** dlindependent_calloc(size_t n_elements, size_t elem_size,
                             void* chunks[]) {
@@ -1406,7 +1383,7 @@ int dlmallopt(int param_number, int value) {
   return change_mparam(param_number, value);
 }
 
-size_t dlmalloc_usable_size(const void* mem) {
+size_t dlmalloc_usable_size(void* mem) {
   mchunkptr p;
   size_t bytes;
   if (mem) {

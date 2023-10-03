@@ -42,7 +42,7 @@ struct NtObjectAttributes;
 NtStatus NtClose(int64_t handle);
 
 NtStatus NtCreateFile(int64_t *out_FileHandle, uint32_t DesiredAccess,
-                      struct NtObjectAttributes *ObjectAttributes,
+                      const struct NtObjectAttributes *ObjectAttributes,
                       struct NtIoStatusBlock *out_IoStatusBlock,
                       int64_t *opt_AllocationSize, uint32_t FileAttributes,
                       uint32_t ShareAccess, uint32_t CreateDisposition,
@@ -64,7 +64,7 @@ NtStatus NtWriteFile(int64_t FileHandle, void *opt_Event,
 NtStatus NtDuplicateObject(int64_t SourceProcessHandle, void *SourceHandle,
                            void *TargetProcessHandle,
                            void **opt_out_TargetHandle, uint32_t DesiredAcess,
-                           uint32_t Atrributes, uint32_t options_t);
+                           uint32_t Attributes, uint32_t options_t);
 
 NtStatus NtQueryInformationFile(int64_t FileHandle,
                                 struct NtIoStatusBlock *out_IoStatusBlock,

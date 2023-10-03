@@ -18,9 +18,12 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
 #include "libc/intrin/kprintf.h"
+#include "libc/mem/mem.h"
+#include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
-#include "libc/unicode/locale.h"
-#include "third_party/getopt/getopt.h"
+#include "libc/str/locale.h"
+#include "libc/str/str.h"
+#include "third_party/getopt/getopt.internal.h"
 
 #define USAGE \
   " [-?h] <lambda.txt >binary.txt\n\
@@ -215,7 +218,7 @@ static int Need(void) {
 static struct Node *Parse1(void) {
   wint_t c;
   int i, oldsp;
-  struct Node *r, *p, *q, *s;
+  struct Node *r, *p, *q;
   if ((c = Greed()) == EOF) return 0;
   if (c == L'λ' || c == '\\') {
     oldsp = sp;
@@ -266,9 +269,7 @@ static struct Node *Parse1(void) {
 }
 
 static struct Node *Parse(void) {
-  wint_t c;
-  int i, oldsp;
-  struct Node *r, *p, *q, *s;
+  struct Node *r, *p, *q;
   p = r = Parse1();
   if (!p) Error(6, "empty expression");
   while ((q = Parse1())) {

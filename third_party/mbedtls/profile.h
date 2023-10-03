@@ -1,10 +1,9 @@
 #ifndef COSMOPOLITAN_THIRD_PARTY_MBEDTLS_PROFILE_H_
 #define COSMOPOLITAN_THIRD_PARTY_MBEDTLS_PROFILE_H_
-#include "libc/bits/safemacros.internal.h"
+#include "libc/intrin/safemacros.internal.h"
 #include "libc/log/log.h"
 #include "libc/nexgen32e/bench.h"
 #include "libc/nexgen32e/rdtsc.h"
-#include "libc/time/time.h"
 #if 1
 
 #define START() \

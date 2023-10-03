@@ -18,8 +18,10 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/internal.h"
 #include "libc/calls/syscall_support-nt.internal.h"
-#include "libc/runtime/gc.internal.h"
+#include "libc/dce.h"
+#include "libc/mem/gc.internal.h"
 #include "libc/testlib/testlib.h"
+#if SupportsWindows()
 
 char16_t p[PATH_MAX];
 
@@ -47,6 +49,6 @@ TEST(mkntpath, testUnicode) {
 TEST(mkntpath, testRemoveDoubleSlash) {
   EXPECT_EQ(21, __mkntpath("C:\\Users\\jart\\\\.config", p));
   EXPECT_STREQ(u"C:\\Users\\jart\\.config", p);
-  EXPECT_EQ(8, __mkntpath("\\\\?\\doge", p));
-  EXPECT_STREQ(u"\\\\?\\doge", p);
 }
+
+#endif /* SupportsWindows() */

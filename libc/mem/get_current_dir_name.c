@@ -19,7 +19,6 @@
 #include "libc/calls/calls.h"
 #include "libc/mem/mem.h"
 #include "libc/runtime/runtime.h"
-#include "libc/str/path.h"
 
 /**
  * Returns current working directory.
@@ -28,11 +27,10 @@
  * that'll be returned.
  *
  * @return pointer that must be free()'d, or NULL w/ errno
- * @threadsafe
  */
-dontdiscard char *get_current_dir_name(void) {
+char *get_current_dir_name(void) {
   const char *p;
-  if ((p = getenv("PWD")) && _isabspath(p)) {
+  if ((p = getenv("PWD")) && *p == '/') {
     return strdup(p);
   } else {
     return getcwd(0, 0);

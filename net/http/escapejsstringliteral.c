@@ -16,7 +16,9 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/likely.h"
+#include "libc/intrin/likely.h"
+#include "libc/mem/mem.h"
+#include "libc/str/str.h"
 #include "libc/str/thompike.h"
 #include "libc/str/utf16.h"
 #include "libc/x/x.h"
@@ -25,7 +27,7 @@
 static const char kEscapeLiteral[128] = {
     9, 9, 9, 9, 9, 9, 9, 9, 9, 1, 2, 9, 4, 3, 9, 9,  // 0x00
     9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9,  // 0x10
-    0, 0, 7, 0, 0, 0, 9, 8, 0, 0, 0, 0, 0, 0, 0, 6,  // 0x20
+    0, 0, 7, 0, 0, 0, 9, 9, 0, 0, 0, 0, 0, 0, 0, 6,  // 0x20
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 9, 9, 9, 0,  // 0x30
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  // 0x40
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0,  // 0x50
@@ -37,6 +39,8 @@ static const char kEscapeLiteral[128] = {
  * Escapes UTF-8 data for JavaScript or JSON string literal.
  *
  * HTML entities and forward slash are escaped too for added safety.
+ * Single quote (`'`) is \uxxxx-encoded for consistency, as it's
+ * allowed in JavaScript, but not in JSON strings.
  *
  * We assume the UTF-8 is well-formed and can be represented as UTF-16.
  * Things that can't be decoded will fall back to binary. Things that
@@ -47,19 +51,30 @@ static const char kEscapeLiteral[128] = {
  * EscapeJsStringLiteral(Underlong(𝑥)) since EscapeJsStringLiteral(𝑥)
  * will do the same thing.
  *
+ * @param r is realloc'able output buffer reused between calls
+ * @param y is used to track byte length of `*r`
  * @param p is input value
  * @param n if -1 implies strlen
  * @param out_size if non-NULL receives output length
- * @return allocated NUL-terminated buffer, or NULL w/ errno
+ * @return *r on success, or null w/ errno
  */
-char *EscapeJsStringLiteral(const char *p, size_t n, size_t *z) {
+char *EscapeJsStringLiteral(char **r, size_t *y, const char *p, size_t n,
+                            size_t *z) {
+  char *q;
   uint64_t w;
-  char *q, *r;
   size_t i, j, m;
   wint_t x, a, b;
-  if (z) *z = 0;
+  if (z) *z = 0;  // TODO(jart): why is this here?
   if (n == -1) n = p ? strlen(p) : 0;
-  if ((q = r = malloc(n * 6 + 6 + 1))) {
+  q = *r;
+  i = n * 8 + 6 + 1;  // only need *6 but *8 is faster
+  if (i > *y) {
+    if ((q = realloc(q, i))) {
+      *r = q;
+      *y = i;
+    }
+  }
+  if (q) {
     for (i = 0; i < n;) {
       x = p[i++] & 0xff;
       if (x >= 0300) {
@@ -117,11 +132,6 @@ char *EscapeJsStringLiteral(const char *p, size_t n, size_t *z) {
           q[1] = '"';
           q += 2;
           break;
-        case 8:
-          q[0] = '\\';
-          q[1] = '\'';
-          q += 2;
-          break;
         case 9:
           w = EncodeUtf16(x);
           do {
@@ -135,12 +145,11 @@ char *EscapeJsStringLiteral(const char *p, size_t n, size_t *z) {
           } while ((w >>= 16));
           break;
         default:
-          unreachable;
+          __builtin_unreachable();
       }
     }
-    if (z) *z = q - r;
+    if (z) *z = q - *r;
     *q++ = '\0';
-    if ((q = realloc(r, q - r))) r = q;
   }
-  return r;
+  return *r;
 }

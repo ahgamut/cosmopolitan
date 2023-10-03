@@ -16,199 +16,114 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/assert.h"
-#include "libc/bits/weaken.h"
 #include "libc/calls/calls.h"
-#include "libc/calls/strace.internal.h"
-#include "libc/calls/struct/sigaction.h"
-#include "libc/calls/struct/sigset.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
-#include "libc/fmt/fmt.h"
 #include "libc/fmt/itoa.h"
-#include "libc/intrin/kprintf.h"
-#include "libc/log/check.h"
-#include "libc/log/internal.h"
+#include "libc/intrin/dll.h"
+#include "libc/intrin/getenv.internal.h"
+#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/weaken.h"
+#include "libc/limits.h"
 #include "libc/macros.internal.h"
 #include "libc/nt/process.h"
-#include "libc/runtime/internal.h"
 #include "libc/runtime/runtime.h"
-#include "libc/runtime/symbols.internal.h"
-#include "libc/sock/sock.h"
+#include "libc/stdio/rand.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
-#include "libc/sysv/consts/poll.h"
-#include "libc/sysv/consts/sa.h"
-#include "libc/sysv/consts/sig.h"
-#include "libc/sysv/consts/w.h"
+#include "libc/testlib/aspect.internal.h"
 #include "libc/testlib/testlib.h"
+#include "libc/thread/thread.h"
 #include "libc/x/x.h"
 
-static int x;
-char g_testlib_olddir[PATH_MAX];
-char g_testlib_tmpdir[PATH_MAX];
-struct sigaction wanthandlers[31];
+struct Dll *testlib_aspects;
+static pthread_mutex_t testlib_error_lock;
 
 void testlib_finish(void) {
+  char b1[12], b2[12];
   if (g_testlib_failed) {
-    fprintf(stderr, "%u / %u %s\n", g_testlib_failed, g_testlib_ran,
-            "tests failed");
+    FormatInt32(b1, g_testlib_failed);
+    FormatInt32(b2, g_testlib_ran);
+    tinyprint(2, b1, " / ", b2, " tests failed\n", NULL);
   }
+}
+
+void testlib_error_enter(const char *file, const char *func) {
+  ftrace_enabled(-1);
+  strace_enabled(-1);
+  pthread_mutex_lock(&testlib_error_lock);
+  if (!IsWindows()) sys_getpid(); /* make strace easier to read */
+  if (!IsWindows()) sys_getpid();
+  if (g_testlib_shoulddebugbreak) {
+    DebugBreak();
+  }
+  testlib_showerror_file = file;
+  testlib_showerror_func = func;
+}
+
+void testlib_error_leave(void) {
+  strace_enabled(+1);
+  ftrace_enabled(+1);
+  pthread_mutex_unlock(&testlib_error_lock);
 }
 
 wontreturn void testlib_abort(void) {
   testlib_finish();
-  __restorewintty();
-  _Exit(MIN(255, g_testlib_failed));
-  unreachable;
-}
-
-static void SetupTmpDir(void) {
-  char *p = g_testlib_tmpdir;
-  p = stpcpy(p, "o/tmp/");
-  p = stpcpy(p, program_invocation_short_name), *p++ = '.';
-  p = FormatInt64(p, getpid()), *p++ = '.';
-  p = FormatInt64(p, x++);
-  p[0] = '\0';
-  CHECK_NE(-1, makedirs(g_testlib_tmpdir, 0755), "%s", g_testlib_tmpdir);
-  CHECK_NOTNULL(realpath(g_testlib_tmpdir, g_testlib_tmpdir), "%`'s",
-                g_testlib_tmpdir);
-  CHECK_NE(-1, chdir(g_testlib_tmpdir), "%s", g_testlib_tmpdir);
-}
-
-static void TearDownTmpDir(void) {
-  CHECK_NE(-1, chdir(g_testlib_olddir));
-  CHECK_NE(-1, rmrf(g_testlib_tmpdir), "%s", g_testlib_tmpdir);
-}
-
-static void DoNothing(int sig) {
-  // function intentionally empty
-}
-
-static void CopySignalHandlers(void) {
-#if 0
-  int i;
-  for (i = 0; i < ARRAYLEN(wanthandlers); ++i) {
-    if (i + 1 == SIGKILL || i + 1 == SIGSTOP) continue;
-    CHECK_EQ(0, sigaction(i + 1, 0, wanthandlers + i), "sig=%d", i + 1);
-  }
-#endif
-}
-
-static void CheckSignalHandler(int sig) {
-#if 0
-  int i;
-  struct sigaction sa = {0};
-  assert(0 <= sig - 1 && sig - 1 < ARRAYLEN(wanthandlers));
-  CHECK_EQ(0, sigaction(sig, 0, &sa));
-  CHECK_EQ(0, memcmp(wanthandlers + sig - 1, &sa, sizeof(sa)),
-           "signal handler for %s was %p/%#x/%#x:%x "
-           "but should have been restored to %p/%#x/%#x:%x",
-           strsignal(sig), sa.sa_handler, sa.sa_flags, sa.sa_mask.__bits[0],
-           sa.sa_mask.__bits[1], wanthandlers[sig - 1].sa_handler,
-           wanthandlers[sig - 1].sa_flags,
-           wanthandlers[sig - 1].sa_mask.__bits[0],
-           wanthandlers[sig - 1].sa_mask.__bits[1]);
-#endif
-}
-
-static void CheckForSignalHandlers(void) {
-#if 0
-  CheckSignalHandler(SIGINT);
-  CheckSignalHandler(SIGQUIT);
-  CheckSignalHandler(SIGCHLD);
-  CheckSignalHandler(SIGFPE);
-  CheckSignalHandler(SIGILL);
-  CheckSignalHandler(SIGSEGV);
-  CheckSignalHandler(SIGTRAP);
-  CheckSignalHandler(SIGABRT);
-  CheckSignalHandler(SIGBUS);
-  CheckSignalHandler(SIGSYS);
-  CheckSignalHandler(SIGWINCH);
-#endif
-}
-
-static void CheckForFileDescriptors(void) {
-#if 0
-  // TODO: race condition on fd cleanup :'(
-  int i;
-  struct pollfd pfds[16];
-  if (!weaken(open) && !weaken(socket)) return;
-  for (i = 0; i < ARRAYLEN(pfds); ++i) {
-    pfds[i].fd = i + 3;
-    pfds[i].events = POLLIN;
-  }
-  if (poll(pfds, ARRAYLEN(pfds), 0) > 0) {
-    for (i = 0; i < ARRAYLEN(pfds); ++i) {
-      if (pfds[i].revents & POLLNVAL) continue;
-      ++g_testlib_failed;
-      fprintf(stderr, "error: test failed to close() fd %d\n", pfds[i].fd);
-    }
-  }
-#endif
-}
-
-static void CheckForZombies(void) {
-#if 0
-  int e, pid;
-  sigset_t ss, oldss;
-  struct sigaction oldsa;
-  struct sigaction ignore = {.sa_handler = DoNothing};
-  if (!weaken(fork)) return;
-  for (;;) {
-    if ((pid = wait(0)) == -1) {
-      CHECK_EQ(ECHILD, errno);
-      break;
-    } else {
-      ++g_testlib_failed;
-      fprintf(stderr, "error: test failed to reap zombies %d\n", pid);
-    }
-  }
-#endif
+  _Exit(MAX(1, MIN(255, g_testlib_failed)));
 }
 
 /**
  * Runs all test case functions in sorted order.
  */
-testonly void testlib_runtestcases(testfn_t *start, testfn_t *end,
-                                   testfn_t warmup) {
-  /*
-   * getpid() calls are inserted to help visually see tests in traces
-   * which can be performed on Linux, FreeBSD, OpenBSD, and XNU:
-   *
-   *     strace -f o/default/test.com |& less
-   *     truss o/default/test.com |& less
-   *     ktrace -f trace o/default/test.com </dev/null; kdump -f trace | less
-   *     dtruss o/default/test.com |& less
-   *
-   * Test cases are iterable via a decentralized section. Your TEST()
-   * macro inserts .testcase.SUITENAME sections into the binary which
-   * the linker sorts into an array.
-   *
-   * @see ape/ape.lds
-   */
+void testlib_runtestcases(const testfn_t *start, const testfn_t *end,
+                          testfn_t warmup) {
+  // getpid() calls are inserted to help visually see tests in traces
+  // which can be performed on Linux, FreeBSD, OpenBSD, and XNU:
+  //
+  //     strace -f o/default/test.com |& less
+  //     truss o/default/test.com |& less
+  //     ktrace -f trace o/default/test.com </dev/null; kdump -f trace | less
+  //     dtruss o/default/test.com |& less
+  //
+  // Test cases are iterable via a decentralized section. Your TEST()
+  // macro inserts .testcase.SUITENAME sections into the binary which
+  // the linker sorts into an array.
+  char host[64];
+  struct Dll *e;
   const testfn_t *fn;
-  CopySignalHandlers();
-  CHECK_NOTNULL(getcwd(g_testlib_olddir, sizeof(g_testlib_olddir)));
-  if (weaken(testlib_enable_tmp_setup_teardown_once)) SetupTmpDir();
-  if (weaken(SetUpOnce)) weaken(SetUpOnce)();
-  for (x = 0, fn = start; fn != end; ++fn) {
-    if (weaken(testlib_enable_tmp_setup_teardown)) SetupTmpDir();
-    if (weaken(SetUp)) weaken(SetUp)();
+  struct TestAspect *a;
+  strcpy(host, "unknown");
+  gethostname(host, sizeof(host)), errno = 0;
+  for (fn = start; fn != end; ++fn) {
+    STRACE("");
+    STRACE("# setting up %t", fn);
+    for (e = dll_first(testlib_aspects); e; e = dll_next(testlib_aspects, e)) {
+      a = TESTASPECT_CONTAINER(e);
+      if (!a->once && a->setup) {
+        a->setup(fn);
+      }
+    }
+    if (_weaken(SetUp)) _weaken(SetUp)();
     errno = 0;
-    SetLastError(0);
+    if (IsWindows()) SetLastError(0);
     if (!IsWindows()) sys_getpid();
     if (warmup) warmup();
     testlib_clearxmmregisters();
+    STRACE("");
+    STRACE("# running test %t on %s@%s", fn, __getenv(environ, "USER").s, host);
     (*fn)();
+    STRACE("");
+    STRACE("# tearing down %t", fn);
     if (!IsWindows()) sys_getpid();
-    if (weaken(TearDown)) weaken(TearDown)();
-    if (weaken(testlib_enable_tmp_setup_teardown)) TearDownTmpDir();
-    CheckForFileDescriptors();
-    CheckForSignalHandlers();
-    CheckForZombies();
+    if (_weaken(TearDown)) {
+      _weaken(TearDown)();
+    }
+    for (e = dll_last(testlib_aspects); e; e = dll_prev(testlib_aspects, e)) {
+      a = TESTASPECT_CONTAINER(e);
+      if (!a->once && a->teardown) {
+        a->teardown(fn);
+      }
+    }
   }
-  if (weaken(TearDownOnce)) weaken(TearDownOnce)();
-  if (weaken(testlib_enable_tmp_setup_teardown_once)) TearDownTmpDir();
 }

@@ -5,8 +5,17 @@ DESCRIPTION
 
 ORIGIN
 
-    https://www.sqlite.org/2021/sqlite-preprocessed-3350500.zip
+    https://www.sqlite.org/2022/sqlite-preprocessed-3400000.zip
 
 LICENSE
 
     Public Domain or MIT
+
+LOCAL CHANGES
+
+  - Added `/zip/.args` file support to SQLite shell
+  - Added `--strace` system call tracing flag to SQLite shell
+  - Added `--strace` function call logging flag to SQLite shell
+  - Configured fsync() using runtime magnums rather than ifdefs
+  - Modify preprocessor macro for enabling pread() and pwrite()
+  - Save and restore errno in some places to avoid log pollution

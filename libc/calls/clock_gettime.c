@@ -16,89 +16,87 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/assert.h"
-#include "libc/bits/asmflag.h"
-#include "libc/bits/bits.h"
-#include "libc/calls/asan.internal.h"
-#include "libc/calls/clock_gettime.internal.h"
-#include "libc/calls/internal.h"
-#include "libc/calls/state.internal.h"
-#include "libc/calls/strace.internal.h"
-#include "libc/calls/struct/timeval.h"
+#include "libc/calls/struct/timespec.h"
+#include "libc/calls/struct/timespec.internal.h"
 #include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/dce.h"
-#include "libc/fmt/conv.h"
-#include "libc/intrin/asan.internal.h"
+#include "libc/errno.h"
 #include "libc/intrin/describeflags.internal.h"
-#include "libc/mem/alloca.h"
-#include "libc/nt/synchronization.h"
-#include "libc/sysv/errfuns.h"
+#include "libc/intrin/strace.internal.h"
+#include "libc/runtime/syslib.internal.h"
+
+#ifdef __aarch64__
+#define CGT_VDSO __vdsosym("LINUX_2.6.39", "__kernel_clock_gettime")
+#else
+#define CGT_VDSO __vdsosym("LINUX_2.6", "__vdso_clock_gettime")
+#endif
+
+typedef int clock_gettime_f(int, struct timespec *);
+
+static clock_gettime_f *__clock_gettime_get(void) {
+  clock_gettime_f *cgt;
+  if (IsLinux() && (cgt = CGT_VDSO)) {
+    return cgt;
+  } else if (__syslib) {
+    return (void *)__syslib->__clock_gettime;
+  } else if (IsWindows()) {
+    return sys_clock_gettime_nt;
+#ifdef __x86_64__
+  } else if (IsXnu()) {
+    return sys_clock_gettime_xnu;
+#endif
+  } else {
+    return sys_clock_gettime;
+  }
+}
+
+static int __clock_gettime_init(int, struct timespec *);
+static clock_gettime_f *__clock_gettime = __clock_gettime_init;
+static int __clock_gettime_init(int clockid, struct timespec *ts) {
+  clock_gettime_f *cgt;
+  __clock_gettime = cgt = __clock_gettime_get();
+  return cgt(clockid, ts);
+}
 
 /**
  * Returns nanosecond time.
  *
- * This is a high-precision timer that supports multiple definitions of
- * time. Among the more popular is CLOCK_MONOTONIC. This function has a
- * zero syscall implementation of that on modern x86.
- *
- *     nowl                l:        45𝑐        15𝑛𝑠
- *     rdtsc               l:        13𝑐         4𝑛𝑠
- *     gettimeofday        l:        44𝑐        14𝑛𝑠
- *     clock_gettime       l:        40𝑐        13𝑛𝑠
- *     __clock_gettime     l:        35𝑐        11𝑛𝑠
- *     sys_clock_gettime   l:       220𝑐        71𝑛𝑠
- *
- * @param clockid can be CLOCK_REALTIME, CLOCK_MONOTONIC, etc.
- * @param ts is where the result is stored
+ * @param clock can be one of:
+ *    - `CLOCK_REALTIME`: universally supported
+ *    - `CLOCK_REALTIME_FAST`: ditto but faster on freebsd
+ *    - `CLOCK_REALTIME_PRECISE`: ditto but better on freebsd
+ *    - `CLOCK_REALTIME_COARSE`: : like `CLOCK_REALTIME_FAST` w/ Linux 2.6.32+
+ *    - `CLOCK_MONOTONIC`: universally supported (except on XNU/NT w/o INVTSC)
+ *    - `CLOCK_MONOTONIC_FAST`: ditto but faster on freebsd
+ *    - `CLOCK_MONOTONIC_PRECISE`: ditto but better on freebsd
+ *    - `CLOCK_MONOTONIC_COARSE`: : like `CLOCK_MONOTONIC_FAST` w/ Linux 2.6.32+
+ *    - `CLOCK_MONOTONIC_RAW`: is actually monotonic but needs Linux 2.6.28+
+ *    - `CLOCK_PROCESS_CPUTIME_ID`: linux and bsd (NetBSD permits OR'd PID)
+ *    - `CLOCK_THREAD_CPUTIME_ID`: linux and bsd (NetBSD permits OR'd TID)
+ *    - `CLOCK_MONOTONIC_COARSE`: linux, freebsd
+ *    - `CLOCK_PROF`: linux and netbsd
+ *    - `CLOCK_BOOTTIME`: linux and openbsd
+ *    - `CLOCK_REALTIME_ALARM`: linux-only
+ *    - `CLOCK_BOOTTIME_ALARM`: linux-only
+ *    - `CLOCK_TAI`: linux-only
+ * @param ts is where the result is stored (or null to do clock check)
  * @return 0 on success, or -1 w/ errno
- * @error EINVAL if clockid isn't supported on this system
+ * @raise EFAULT if `ts` points to invalid memory
+ * @error EINVAL if `clock` isn't supported on this system
+ * @error EPERM if pledge() is in play without stdio promise
+ * @error ESRCH on NetBSD if PID/TID OR'd into `clock` wasn't found
  * @see strftime(), gettimeofday()
  * @asyncsignalsafe
+ * @vforksafe
  */
-int clock_gettime(int clockid, struct timespec *ts) {
-  int rc;
-  char *buf;
-  if (IsAsan() && !__asan_is_valid_timespec(ts)) {
-    rc = efault();
-  } else {
-    rc = __clock_gettime(clockid, ts);
+int clock_gettime(int clock, struct timespec *ts) {
+  // threads on win32 stacks call this so we can't asan check *ts
+  int rc = __clock_gettime(clock, ts);
+  if (rc) {
+    errno = -rc;
+    rc = -1;
   }
-#if SYSDEBUG
-  if (!__time_critical) {
-    buf = alloca(45);
-    STRACE("clock_gettime(%d, [%s]) → %d% m", clockid,
-           DescribeTimespec(buf, 45, rc, ts), rc);
-  }
-#endif
+  TIMETRACE("clock_gettime(%s, [%s]) → %d% m", DescribeClockName(clock),
+            DescribeTimespec(rc, ts), rc);
   return rc;
-}
-
-/**
- * Returns pointer to fastest clock_gettime().
- */
-clock_gettime_f *__clock_gettime_get(bool *opt_out_isfast) {
-  bool isfast;
-  clock_gettime_f *res;
-  if (IsLinux() && (res = __vdsosym("LINUX_2.6", "__vdso_clock_gettime"))) {
-    isfast = true;
-  } else if (IsXnu()) {
-    isfast = false;
-    res = sys_clock_gettime_xnu;
-  } else if (IsWindows()) {
-    isfast = true;
-    res = sys_clock_gettime_nt;
-  } else {
-    isfast = false;
-    res = sys_clock_gettime;
-  }
-  if (opt_out_isfast) {
-    *opt_out_isfast = isfast;
-  }
-  return res;
-}
-
-hidden int __clock_gettime_init(int clockid, struct timespec *ts) {
-  clock_gettime_f *gettime;
-  __clock_gettime = gettime = __clock_gettime_get(0);
-  return gettime(clockid, ts);
 }

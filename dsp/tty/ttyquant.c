@@ -18,7 +18,6 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "dsp/tty/internal.h"
 #include "dsp/tty/quant.h"
-#include "libc/bits/initializer.internal.h"
 #include "libc/dce.h"
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"

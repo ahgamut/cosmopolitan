@@ -16,45 +16,56 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/intrin/pthread.h"
+#include "libc/intrin/weaken.h"
 #include "libc/mem/mem.h"
+#include "libc/stdio/internal.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/errfuns.h"
+#include "libc/thread/thread.h"
 
 /**
  * Opens buffer as stream.
  *
  * @param buf becomes owned by this function, and is allocated if NULL
  * @return new stream or NULL w/ errno
+ * @raise ENOMEM if `buf` is NULL and we failed to allocate it
+ * @raise ENOMEM if `buf` is NULL and malloc() wasn't linked
+ * @raise EINVAL if `buf` is NULL when `+` isn't in `mode`
  */
 FILE *fmemopen(void *buf, size_t size, const char *mode) {
   FILE *f;
   char *p;
-  unsigned flags;
-  if (size && size > 0x7ffff000) {
+  int iomode;
+  iomode = fopenflags(mode);
+  if ((size && size > 0x7ffff000) ||  //
+      (!buf && (iomode & O_ACCMODE) != O_RDWR)) {
     einval();
     return NULL;
   }
-  if (!(f = calloc(1, sizeof(FILE)))) {
+  if (!(f = __stdio_alloc())) {
     return NULL;
   }
   if (buf) {
     f->nofree = true;
   } else {
     if (!size) size = BUFSIZ;
-    if (!(buf = calloc(1, size))) {
-      free(f);
+    // TODO(jart): Why do we need calloc()?
+    if (!_weaken(calloc) || !(buf = _weaken(calloc)(1, size))) {
+      __stdio_free(f);
+      enomem();
       return NULL;
     }
   }
   f->fd = -1;
   f->buf = buf;
-  f->end = size;
+  if (!(iomode & O_TRUNC)) {
+    f->end = size;
+  }
   f->size = size;
-  f->iomode = fopenflags(mode);
-  if (f->iomode & O_APPEND) {
+  f->iomode = iomode;
+  if (iomode & O_APPEND) {
     if ((p = memchr(buf, '\0', size))) {
       f->beg = p - (char *)buf;
     } else {

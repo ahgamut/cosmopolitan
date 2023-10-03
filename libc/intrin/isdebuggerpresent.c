@@ -16,18 +16,23 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/calls/blockcancel.internal.h"
+#include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
+#include "libc/errno.h"
+#include "libc/intrin/getenv.internal.h"
+#include "libc/intrin/promises.internal.h"
 #include "libc/log/libfatal.internal.h"
 #include "libc/log/log.h"
-#include "libc/nexgen32e/vendor.internal.h"
 #include "libc/nt/struct/teb.h"
 #include "libc/runtime/runtime.h"
+#include "libc/sysv/consts/at.h"
 #include "libc/sysv/consts/o.h"
 
 #define kBufSize 1024
 #define kPid     "TracerPid:\t"
 
-static textwindows noasan bool IsBeingDebugged(void) {
+static textwindows bool IsBeingDebugged(void) {
   return !!NtGetPeb()->BeingDebugged;
 }
 
@@ -37,23 +42,28 @@ static textwindows noasan bool IsBeingDebugged(void) {
  */
 int IsDebuggerPresent(bool force) {
   /* asan runtime depends on this function */
-  int fd, res;
   ssize_t got;
+  int e, fd, res;
   char *p, buf[1024];
-  if (!force && IsGenuineCosmo()) return 0;
-  if (!force && __getenv(environ, "HEISENDEBUG")) return 0;
+  if (!force && IsGenuineBlink()) return 0;
+  if (!force && __getenv(environ, "HEISENDEBUG").s) return 0;
   if (IsWindows()) return IsBeingDebugged();
   if (__isworker) return false;
+  if (!PLEDGED(RPATH)) return false;
   res = 0;
-  if ((fd = __sysv_open("/proc/self/status", O_RDONLY, 0)) >= 0) {
-    if ((got = __sysv_read(fd, buf, sizeof(buf) - 1)) > 0) {
+  e = errno;
+  BLOCK_CANCELLATIONS;
+  if ((fd = __sys_openat(AT_FDCWD, "/proc/self/status", O_RDONLY, 0)) >= 0) {
+    if ((got = sys_read(fd, buf, sizeof(buf) - 1)) > 0) {
       buf[got] = '\0';
       if ((p = __strstr(buf, kPid))) {
         p += sizeof(kPid) - 1;
         res = __atoul(p);
       }
     }
-    __sysv_close(fd);
+    sys_close(fd);
   }
+  ALLOW_CANCELLATIONS;
+  errno = e;
   return res;
 }

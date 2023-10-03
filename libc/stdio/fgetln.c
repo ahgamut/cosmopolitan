@@ -16,18 +16,22 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/stdio/internal.h"
 #include "libc/stdio/stdio.h"
 
 /**
  * Retrieves line from stream, e.g.
  *
  *     char *line;
- *     while ((line = _chomp(fgetln(stdin, 0)))) {
+ *     while ((line = chomp(fgetln(stdin, 0)))) {
  *       printf("%s\n", line);
  *     }
  *
  * The returned memory is owned by the stream. It'll be reused when
  * fgetln() is called again. It's free()'d upon fclose() / fflush()
+ *
+ * When reading from the console on Windows in `ICANON` mode, the
+ * returned line will end with `\r\n` rather than `\n`.
  *
  * @param stream specifies non-null open input stream
  * @param len optionally receives byte length of line

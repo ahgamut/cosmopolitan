@@ -205,7 +205,7 @@ typedef unsigned short UShort;
 
 #ifdef Bad_float_h
 
-#else /* ifndef Bad_float_h */
+#else  /* ifndef Bad_float_h */
 #endif /* Bad_float_h */
 
 #ifdef IEEE_Arith
@@ -348,12 +348,13 @@ typedef struct ThInfo {
 #define Bcopy(x, y) \
   memcpy(&x->sign, &y->sign, y->wds * sizeof(ULong) + 2 * sizeof(int))
 
-hidden extern const double __gdtoa_tens[];
-hidden extern const double __gdtoa_bigtens[];
-hidden extern const double __gdtoa_tinytens[];
-hidden extern const unsigned char __gdtoa_hexdig[];
-hidden extern const char *const __gdtoa_InfName[6];
-hidden extern const char *const __gdtoa_NanName[3];
+extern const double __gdtoa_tens[];
+extern const double __gdtoa_bigtens[];
+extern const double __gdtoa_tinytens[];
+extern const unsigned char __gdtoa_hexdig[];
+extern const char *const __gdtoa_InfName[6];
+extern const char *const __gdtoa_NanName[3];
+extern const ULong __gdtoa_NanDflt_Q[4];
 
 Bigint *__gdtoa_Balloc(int, ThInfo **);
 void __gdtoa_Bfree(Bigint *, ThInfo **);

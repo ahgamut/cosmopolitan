@@ -17,14 +17,14 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/log/check.h"
-#include "libc/rand/rand.h"
+#include "libc/stdio/rand.h"
 #include "net/https/https.h"
 #include "third_party/mbedtls/ctr_drbg.h"
 
 void InitializeRng(mbedtls_ctr_drbg_context *r) {
-  volatile unsigned char b[64];
+  unsigned char b[64];
   mbedtls_ctr_drbg_init(r);
-  CHECK(getrandom(b, 64, 0) == 64);
-  CHECK(!mbedtls_ctr_drbg_seed(r, GetEntropy, 0, b, 64));
+  getrandom(b, 64, 0);
+  mbedtls_ctr_drbg_seed(r, GetEntropy, 0, b, 64);
   mbedtls_platform_zeroize(b, 64);
 }

@@ -16,11 +16,9 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/weaken.h"
 #include "libc/calls/calls.h"
-#include "libc/calls/strace.internal.h"
 #include "libc/dce.h"
-#include "libc/intrin/spinlock.h"
+#include "libc/intrin/strace.internal.h"
 #include "libc/mem/mem.h"
 #include "libc/nt/runtime.h"
 #include "libc/nt/winsock.h"
@@ -30,26 +28,27 @@
 #define VERSION 0x0202 /* Windows Vista+ */
 
 /**
- * Information about underyling Windows Sockets implemmentation.
+ * Information about underlying Windows Sockets implementation.
  *
- * Cosmopolitan automatically calls YOINK() on this symbol when its
+ * Cosmopolitan automatically calls __yoink() on this symbol when its
  * Berkeley Socket wrappers are linked. The latest version of Winsock
  * was introduced alongside x64, so this should never fail.
  */
-hidden struct NtWsaData kNtWsaData;
+struct NtWsaData kNtWsaData;
 
 static textwindows void WinSockCleanup(void) {
-  int i, rc;
+  int rc;
+  (void)rc;
   rc = WSACleanup();
   NTTRACE("WSACleanup() → %d% lm", rc);
 }
 
-textwindows noasan void WinSockInit(void) {
+textwindows dontasan void WinSockInit(void) {
   int rc;
   atexit(WinSockCleanup);
   NTTRACE("WSAStartup()");
   if ((rc = WSAStartup(VERSION, &kNtWsaData)) != 0 ||
       kNtWsaData.wVersion != VERSION) {
-    ExitProcess(123);
+    _Exit(1);
   }
 }

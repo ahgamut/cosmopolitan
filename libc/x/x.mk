@@ -17,16 +17,8 @@ LIBC_X = $(LIBC_X_A_DEPS) $(LIBC_X_A)
 LIBC_X_A = o/$(MODE)/libc/x/x.a
 LIBC_X_A_FILES := $(wildcard libc/x/*)
 LIBC_X_A_HDRS = $(filter %.h,$(LIBC_X_A_FILES))
-LIBC_X_A_SRCS_S = $(filter %.S,$(LIBC_X_A_FILES))
-LIBC_X_A_SRCS_C = $(filter %.c,$(LIBC_X_A_FILES))
-
-LIBC_X_A_SRCS =					\
-	$(LIBC_X_A_SRCS_S)			\
-	$(LIBC_X_A_SRCS_C)
-
-LIBC_X_A_OBJS =					\
-	$(LIBC_X_A_SRCS_S:%.S=o/$(MODE)/%.o)	\
-	$(LIBC_X_A_SRCS_C:%.c=o/$(MODE)/%.o)
+LIBC_X_A_SRCS = $(filter %.c,$(LIBC_X_A_FILES))
+LIBC_X_A_OBJS = $(LIBC_X_A_SRCS:%.c=o/$(MODE)/%.o)
 
 LIBC_X_A_CHECKS =				\
 	$(LIBC_X_A).pkg				\
@@ -38,13 +30,14 @@ LIBC_X_A_DIRECTDEPS =				\
 	LIBC_INTRIN				\
 	LIBC_MEM				\
 	LIBC_NEXGEN32E				\
+	LIBC_PROC				\
 	LIBC_RUNTIME				\
+	LIBC_NT_KERNEL32			\
 	LIBC_STDIO				\
 	LIBC_STR				\
-	LIBC_STUBS				\
 	LIBC_SYSV				\
 	THIRD_PARTY_GDTOA			\
-	THIRD_PARTY_ZLIB
+	THIRD_PARTY_MUSL
 
 LIBC_X_A_DEPS :=				\
 	$(call uniq,$(foreach x,$(LIBC_X_A_DIRECTDEPS),$($(x))))

@@ -18,11 +18,12 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
 #include "libc/calls/calls.h"
-#include "libc/calls/internal.h"
-#include "libc/calls/strace.internal.h"
+#include "libc/calls/struct/rlimit.internal.h"
 #include "libc/dce.h"
 #include "libc/intrin/asan.internal.h"
 #include "libc/intrin/describeflags.internal.h"
+#include "libc/intrin/strace.internal.h"
+#include "libc/macros.internal.h"
 #include "libc/sysv/consts/rlimit.h"
 #include "libc/sysv/errfuns.h"
 
@@ -31,9 +32,15 @@
  *
  * The following resources are recommended:
  *
+ * - `RLIMIT_STACK` controls how much stack memory is available to the
+ *   main thread. This setting is inherited across fork() and execve()
+ *   Please note it's only safe for Cosmopolitan programs, to set this
+ *   value to at least `PTHREAD_STACK_MIN * 2`. On Windows this cannot
+ *   be used to extend the stack, which is currently hard-coded.
+ *
  * - `RLIMIT_AS` limits the size of the virtual address space. This will
- *   work on all platforms. It's emulated on XNU and Windows which means
- *   it won't propagate across execve() currently.
+ *   work on all platforms except WSL. It is emulated on XNU and Windows
+ *   which means it won't propagate across execve() currently.
  *
  * - `RLIMIT_CPU` causes `SIGXCPU` to be sent to the process when the
  *   soft limit on CPU time is exceeded, and the process is destroyed
@@ -43,6 +50,8 @@
  * - `RLIMIT_FSIZE` causes `SIGXFSZ` to sent to the process when the
  *   soft limit on file size is exceeded and the process is destroyed
  *   when the hard limit is exceeded. It works everywhere but Windows
+ *   and it also causes `EFBIG` to be returned by i/o functions after
+ *   the `SIGXFSZ` signal is delivered or ignored
  *
  * - `RLIMIT_NPROC` limits the number of simultaneous processes and it
  *   should work on all platforms except Windows. Please be advised it
@@ -66,7 +75,6 @@
  */
 int setrlimit(int resource, const struct rlimit *rlim) {
   int rc;
-  char buf[64];
   if (resource == 127) {
     rc = einval();
   } else if (!rlim || (IsAsan() && !__asan_is_valid(rlim, sizeof(*rlim)))) {
@@ -77,6 +85,8 @@ int setrlimit(int resource, const struct rlimit *rlim) {
       // TODO(jart): What's up with XNU and NetBSD?
       __virtualmax = rlim->rlim_cur;
     }
+  } else if (resource == RLIMIT_STACK) {
+    rc = enotsup();
   } else if (resource == RLIMIT_AS) {
     __virtualmax = rlim->rlim_cur;
     rc = 0;
@@ -84,6 +94,8 @@ int setrlimit(int resource, const struct rlimit *rlim) {
     rc = einval();
   }
   STRACE("setrlimit(%s, %s) → %d% m", DescribeRlimitName(resource),
-         DescribeRlimit(buf, sizeof(buf), 0, rlim), rc);
+         DescribeRlimit(0, rlim), rc);
   return rc;
 }
+
+__weak_reference(setrlimit, setrlimit64);

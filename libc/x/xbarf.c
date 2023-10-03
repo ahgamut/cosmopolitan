@@ -21,6 +21,7 @@
 #include "libc/str/str.h"
 #include "libc/sysv/consts/madv.h"
 #include "libc/sysv/consts/o.h"
+#include "libc/x/x.h"
 
 /**
  * Writes data to file.
@@ -30,9 +31,9 @@
  * @note this is uninterruptible
  */
 int xbarf(const char *path, const void *data, size_t size) {
-  char *p;
   ssize_t rc;
   int fd, res;
+  const char *p;
   size_t i, wrote;
   res = 0;
   p = data;

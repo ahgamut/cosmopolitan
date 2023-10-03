@@ -17,21 +17,22 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "dsp/scale/cdecimate2xuint8x8.h"
-#include "libc/calls/ioctl.h"
 #include "libc/calls/struct/winsize.h"
+#include "libc/calls/termios.h"
 #include "libc/fmt/conv.h"
+#include "libc/fmt/libgen.h"
+#include "libc/intrin/bsr.h"
 #include "libc/log/libfatal.internal.h"
 #include "libc/log/log.h"
 #include "libc/macros.internal.h"
+#include "libc/mem/gc.h"
 #include "libc/mem/mem.h"
-#include "libc/nexgen32e/bsr.h"
-#include "libc/runtime/gc.internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/termios.h"
 #include "libc/x/x.h"
-#include "third_party/getopt/getopt.h"
+#include "third_party/getopt/getopt.internal.h"
 #include "third_party/stb/stb_truetype.h"
 
 #define MAXCODE
@@ -41,7 +42,7 @@ int end = 0x03134A /* 0x10FFFD */;
 int verbose;
 
 struct winsize ws = {24, 80};
-signed char kThePerfectKernel[8] = {-1, -3, 3, 17, 17, 3, -3, -1};
+signed char kThePerfectKernel[8] = {-1, -1, 3, 15, 15, 3, -1, -1};
 
 void PrintBar(unsigned char *p, size_t n) {
   size_t i, j;
@@ -50,7 +51,7 @@ void PrintBar(unsigned char *p, size_t n) {
   }
   for (i = 0; i < j; ++i) {
     if (p[i]) {
-      fputwc(u"░░▒▒▓▓██"[bsr(p[i])], stdout);
+      fputwc(u"░░▒▒▓▓██"[_bsr(p[i])], stdout);
     } else {
       fputc(' ', stdout);
     }
@@ -62,14 +63,13 @@ int main(int argc, char *argv[]) {
   float scale;
   void *bitmap;
   size_t ttfsize;
-  const char *dir;
   unsigned char *ttf;
   stbtt_fontinfo font;
   unsigned char *present;
   unsigned char *intotal;
-  int w, h, i, j, c, arg, opt, errs, line, count, maxcode, s = 40 * 4, rc = 0;
+  int w, h, i, c, arg, opt, errs, line, s = 40 * 4, rc = 0;
   ShowCrashReports();
-  ioctl(0, TIOCGWINSZ, &ws);
+  tcgetwinsize(0, &ws);
   while ((opt = getopt(argc, argv, "vs:e:")) != -1) {
     switch (opt) {
       case 'v':
@@ -87,8 +87,8 @@ int main(int argc, char *argv[]) {
   }
   n = end + 1 - start;
   m = ROUNDUP(n, 16);
-  present = gc(malloc(m));
-  intotal = gc(calloc(1, m));
+  present = _gc(malloc(m));
+  intotal = _gc(calloc(1, m));
   if (optind < argc) {
     for (arg = optind; arg < argc; ++arg) {
       ttf = xslurp(argv[arg], &ttfsize);
@@ -102,7 +102,7 @@ int main(int argc, char *argv[]) {
         continue;
       }
       bzero(present, m);
-      for (maxcode = errs = 0, c = start; c <= end; ++c) {
+      for (errs = 0, c = start; c <= end; ++c) {
         if (!(line = setjmp(stbtt_jmpbuf))) {
           if ((i = stbtt_FindGlyphIndex(&font, c)) > 0) {
             w = h = 0;
@@ -110,7 +110,6 @@ int main(int argc, char *argv[]) {
             bitmap = stbtt_GetGlyphBitmap(&font, 0, scale, i, &w, &h, 0, 0);
             if (w && h) {
               intotal[c - start] = present[c - start] = 255;
-              maxcode = c;
             }
             free(bitmap);
           }

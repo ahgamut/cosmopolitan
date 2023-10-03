@@ -32,6 +32,10 @@
 #include "libc/calls/struct/termios.h"
 #include "libc/calls/termios.h"
 #include "third_party/unzip/crypt.h"
+#include "libc/sysv/consts/termios.h"
+#include "libc/calls/struct/winsize.h"
+#include "libc/calls/termios.h"
+#include "third_party/unzip/globals.h"
 
 #if (CRYPT || (defined(UNZIP) && !defined(FUNZIP)))
 /* Non-echo console/keyboard input is needed for (en/de)cryption's password

@@ -6,9 +6,10 @@ PKGS += TOOL_BUILD
 TOOL_BUILD_FILES := $(wildcard tool/build/*)
 TOOL_BUILD_SRCS = $(filter %.c,$(TOOL_BUILD_FILES))
 TOOL_BUILD_HDRS = $(filter %.h,$(TOOL_BUILD_FILES))
-TOOL_BUILD_CTESTS = $(filter %.ctest,$(TOOL_BUILD_FILES))
-TOOL_BUILD_BINS = $(TOOL_BUILD_COMS) $(TOOL_BUILD_COMS:%=%.dbg)
-TOOL_BUILD_CALCULATOR = o/$(MODE)/tool/build/calculator.com
+
+TOOL_BUILD_BINS =					\
+	$(TOOL_BUILD_COMS)				\
+	$(TOOL_BUILD_COMS:%=%.dbg)
 
 TOOL_BUILD_OBJS =					\
 	$(TOOL_BUILD_SRCS:%.c=o/$(MODE)/%.o)
@@ -18,15 +19,12 @@ TOOL_BUILD_COMS =					\
 
 TOOL_BUILD_CHECKS =					\
 	$(TOOL_BUILD).pkg				\
-	$(TOOL_BUILD_HDRS:%=o/$(MODE)/%.ok)		\
-	$(TOOL_BUILD_CTESTS:%=o/$(MODE)/%.ok)
+	$(TOOL_BUILD_HDRS:%=o/$(MODE)/%.ok)
 
 TOOL_BUILD_DIRECTDEPS =					\
 	DSP_CORE					\
 	DSP_SCALE					\
 	DSP_TTY						\
-	LIBC_ALG					\
-	LIBC_BITS					\
 	LIBC_CALLS					\
 	LIBC_DNS					\
 	LIBC_ELF					\
@@ -38,25 +36,25 @@ TOOL_BUILD_DIRECTDEPS =					\
 	LIBC_NT_KERNEL32				\
 	LIBC_NT_USER32					\
 	LIBC_NT_WS2_32					\
-	LIBC_RAND					\
+	LIBC_PROC					\
 	LIBC_RUNTIME					\
 	LIBC_SOCK					\
 	LIBC_STDIO					\
 	LIBC_STR					\
-	LIBC_STUBS					\
 	LIBC_SYSV					\
 	LIBC_SYSV_CALLS					\
+	LIBC_THREAD					\
 	LIBC_TIME					\
 	LIBC_TINYMATH					\
-	LIBC_UNICODE					\
 	LIBC_X						\
-	LIBC_ZIPOS					\
+	NET_HTTP					\
 	NET_HTTPS					\
 	THIRD_PARTY_COMPILER_RT				\
 	THIRD_PARTY_GDTOA				\
 	THIRD_PARTY_GETOPT				\
 	THIRD_PARTY_MBEDTLS				\
 	THIRD_PARTY_MUSL				\
+	THIRD_PARTY_REGEX				\
 	THIRD_PARTY_STB					\
 	THIRD_PARTY_XED					\
 	THIRD_PARTY_ZLIB				\
@@ -70,11 +68,6 @@ o/$(MODE)/tool/build/build.pkg:				\
 		$(TOOL_BUILD_OBJS)			\
 		$(foreach x,$(TOOL_BUILD_DIRECTDEPS),$($(x)_A).pkg)
 
-o/$(MODE)/%.ctest.ok:					\
-		%.ctest					\
-		$(TOOL_BUILD_CALCULATOR)
-	@$(COMPILE) -AMKWIDES -tT$@ $(TOOL_BUILD_CALCULATOR) $<
-
 o/$(MODE)/tool/build/%.com.dbg:				\
 		$(TOOL_BUILD_DEPS)			\
 		o/$(MODE)/tool/build/build.pkg		\
@@ -83,73 +76,54 @@ o/$(MODE)/tool/build/%.com.dbg:				\
 		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
 
-o/$(MODE)/tool/build/blinkenlights.com.dbg:		\
+o/$(MODE)/tool/build/dso/sandbox.so.zip.o		\
+o/$(MODE)/tool/build/false.com.zip.o			\
+o/$(MODE)/tool/build/echo.com.zip.o			\
+o/$(MODE)/tool/build/cocmd.com.zip.o: private		\
+		ZIPOBJ_FLAGS +=				\
+			-B
+
+# we need pic because:
+#   so it can be an LD_PRELOAD payload
+o/$(MODE)/tool/build/dso/sandbox.o: private		\
+		CFLAGS +=				\
+			-fPIC
+
+o/$(MODE)/tool/build/dso/sandbox.o:			\
+		libc/calls/calls.h			\
+		tool/build/dso/sandbox.c		\
+		libc/calls/pledge.h			\
+		libc/runtime/runtime.h			\
+		libc/calls/pledge.internal.h		\
+		libc/intrin/promises.internal.h		\
+		tool/build/build.mk
+
+o/$(MODE)/tool/build/dso/sandbox.so:			\
+		o/$(MODE)/tool/build/dso/sandbox.o	\
+		o/$(MODE)/libc/calls/pledge-linux.o	\
+		o/$(MODE)/libc/sysv/restorert.o
+	@$(COMPILE) -ALINK.so				\
+		$(CC)					\
+		-s					\
+		-shared					\
+		-nostdlib				\
+		-Wl,--gc-sections			\
+		o/$(MODE)/tool/build/dso/sandbox.o	\
+		o/$(MODE)/libc/calls/pledge-linux.o	\
+		o/$(MODE)/libc/sysv/restorert.o		\
+		$(OUTPUT_OPTION)
+
+o/$(MODE)/tool/build/pledge.com.dbg:			\
 		$(TOOL_BUILD_DEPS)			\
 		o/$(MODE)/tool/build/build.pkg		\
-		o/$(MODE)/tool/build/blinkenlights.o	\
+		o/$(MODE)/tool/build/dso/sandbox.so.zip.o \
+		o/$(MODE)/tool/build/pledge.o		\
 		$(CRT)					\
 		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
-
-.PRECIOUS: o/$(MODE)/tool/build/blinkenlights.com
-o/$(MODE)/tool/build/blinkenlights.com:						\
-		o/$(MODE)/tool/build/blinkenlights.com.dbg			\
-		o/$(MODE)/third_party/zip/zip.com				\
-		o/$(MODE)/tool/build/symtab.com
-	@$(COMPILE) -AOBJCOPY -T$@ $(OBJCOPY) -S -O binary $< $@
-	@$(COMPILE) -ASYMTAB o/$(MODE)/tool/build/symtab.com			\
-		-o o/$(MODE)/tool/build/.blinkenlights/.symtab $<
-	@$(COMPILE) -AZIP -T$@ o/$(MODE)/third_party/zip/zip.com -9qj $@	\
-		o/$(MODE)/tool/build/.blinkenlights/.symtab
-
-o/$(MODE)/tool/build/ar.com.dbg:			\
-		$(TOOL_BUILD_DEPS)			\
-		o/$(MODE)/tool/build/build.pkg		\
-		o/$(MODE)/tool/build/ar.o		\
-		$(CRT)					\
-		$(APE_NO_MODIFY_SELF)
-	@$(APELINK)
-
-o/$(MODE)/tool/build/package.com.dbg:			\
-		$(TOOL_BUILD_DEPS)			\
-		o/$(MODE)/tool/build/build.pkg		\
-		o/$(MODE)/tool/build/package.o		\
-		$(CRT)					\
-		$(APE_NO_MODIFY_SELF)
-	@$(APELINK)
-
-o/$(MODE)/tool/build/mkdeps.com.dbg:			\
-		$(TOOL_BUILD_DEPS)			\
-		o/$(MODE)/tool/build/build.pkg		\
-		o/$(MODE)/tool/build/mkdeps.o		\
-		$(CRT)					\
-		$(APE_NO_MODIFY_SELF)
-	@$(APELINK)
-
-o/$(MODE)/tool/build/compile.com.dbg:			\
-		$(TOOL_BUILD_DEPS)			\
-		o/$(MODE)/tool/build/build.pkg		\
-		o/$(MODE)/tool/build/compile.o		\
-		$(CRT)					\
-		$(APE_NO_MODIFY_SELF)
-	@$(APELINK)
-
-o/$(MODE)/tool/build/zipobj.com.dbg:			\
-		$(TOOL_BUILD_DEPS)			\
-		o/$(MODE)/tool/build/build.pkg		\
-		o/$(MODE)/tool/build/zipobj.o		\
-		$(CRT)					\
-		$(APE_NO_MODIFY_SELF)
-	@$(APELINK)
-
-o/$(MODE)/tool/build/emulator.o:			\
-		OVERRIDE_COPTS +=			\
-			-fno-sanitize=pointer-overflow
 
 .PHONY: o/$(MODE)/tool/build
 o/$(MODE)/tool/build:					\
-		o/$(MODE)/tool/build/emucrt		\
-		o/$(MODE)/tool/build/emubin		\
 		o/$(MODE)/tool/build/lib		\
 		$(TOOL_BUILD_BINS)			\
 		$(TOOL_BUILD_CHECKS)

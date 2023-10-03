@@ -16,15 +16,17 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/pushpop.h"
 #include "libc/dce.h"
 #include "libc/dns/resolvconf.h"
 #include "libc/fmt/fmt.h"
-#include "libc/intrin/pthread.h"
+#include "libc/intrin/pushpop.internal.h"
 #include "libc/macros.internal.h"
+#include "libc/mem/mem.h"
 #include "libc/runtime/runtime.h"
 #include "libc/sock/sock.h"
+#include "libc/sock/struct/sockaddr.h"
 #include "libc/stdio/stdio.h"
+#include "libc/thread/thread.h"
 
 static struct ResolvConf *g_resolvconf;
 static struct ResolvConfInitialStaticMemory {
@@ -35,7 +37,6 @@ static struct ResolvConfInitialStaticMemory {
 
 /**
  * Returns singleton with DNS server address.
- * @threadsafe
  */
 const struct ResolvConf *GetResolvConf(void) {
   int rc;
@@ -64,4 +65,19 @@ const struct ResolvConf *GetResolvConf(void) {
   }
   pthread_mutex_unlock(&init->lock);
   return g_resolvconf;
+}
+
+/**
+ * Frees resolv.conf data structure populated by ParseResolvConf().
+ */
+void FreeResolvConf(struct ResolvConf **rvp) {
+  if (*rvp) {
+    if ((*rvp)->nameservers.p != g_resolvconf_init.nameservers) {
+      free((*rvp)->nameservers.p);
+    }
+    if (*rvp != &g_resolvconf_init.rv) {
+      free(*rvp);
+    }
+    *rvp = 0;
+  }
 }

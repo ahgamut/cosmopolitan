@@ -29,6 +29,6 @@
  * @see chmod()
  */
 int fchmod(int fd, uint32_t mode) {
-  /* TODO(jart): Windows */
+  // TODO(jart): Windows
   return sys_fchmod(fd, mode);
 }

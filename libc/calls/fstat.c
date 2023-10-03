@@ -16,36 +16,48 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/weaken.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
-#include "libc/calls/strace.internal.h"
+#include "libc/calls/struct/stat.internal.h"
 #include "libc/dce.h"
 #include "libc/intrin/asan.internal.h"
 #include "libc/intrin/describeflags.internal.h"
+#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/weaken.h"
+#include "libc/runtime/zipos.internal.h"
 #include "libc/sysv/errfuns.h"
-#include "libc/zipos/zipos.internal.h"
 
 /**
  * Returns information about file, via open()'d descriptor.
  *
+ * On Windows, this implementation always sets `st_uid` and `st_gid` to
+ * `getuid()` and `getgid()`. The `st_mode` field is generated based on
+ * the current umask().
+ *
  * @return 0 on success or -1 w/ errno
+ * @raise EBADF if `fd` isn't a valid file descriptor
+ * @raise EIO if an i/o error happens while reading from file system
+ * @raise EOVERFLOW shouldn't be possible on 64-bit systems
  * @asyncsignalsafe
  */
 int fstat(int fd, struct stat *st) {
   int rc;
-  if (__isfdkind(fd, kFdZip)) {
-    rc = weaken(__zipos_fstat)(
+  if (IsAsan() && !__asan_is_valid(st, sizeof(*st))) {
+    rc = efault();
+  } else if (__isfdkind(fd, kFdZip)) {
+    rc = _weaken(__zipos_fstat)(
         (struct ZiposHandle *)(intptr_t)g_fds.p[fd].handle, st);
-  } else if (!IsWindows() && !IsMetal()) {
+  } else if (IsLinux() || IsXnu() || IsFreebsd() || IsOpenbsd() || IsNetbsd()) {
     rc = sys_fstat(fd, st);
   } else if (IsMetal()) {
     rc = sys_fstat_metal(fd, st);
-  } else if (!__isfdkind(fd, kFdFile)) {
-    rc = ebadf();
-  } else {
+  } else if (IsWindows()) {
     rc = sys_fstat_nt(__getfdhandleactual(fd), st);
+  } else {
+    rc = enosys();
   }
   STRACE("fstat(%d, [%s]) → %d% m", fd, DescribeStat(rc, st), rc);
   return rc;
 }
+
+__strong_reference(fstat, fstat64);

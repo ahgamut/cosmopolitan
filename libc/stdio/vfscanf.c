@@ -23,6 +23,12 @@
  * Stream decoder.
  * @see libc/fmt/vcscanf.h
  */
-int(vfscanf)(FILE *stream, const char *fmt, va_list ap) {
-  return (vcscanf)((void *)fgetc, (void *)ungetc, stream, fmt, ap);
+int vfscanf(FILE *stream, const char *fmt, va_list ap) {
+  int rc;
+  flockfile(stream);
+  rc = __vcscanf((void *)fgetc_unlocked,   //
+                 (void *)ungetc_unlocked,  //
+                 stream, fmt, ap);
+  funlockfile(stream);
+  return rc;
 }

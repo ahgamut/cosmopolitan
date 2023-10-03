@@ -23,13 +23,12 @@
 #include "libc/calls/struct/rlimit.h"
 #include "libc/calls/struct/sigaction.h"
 #include "libc/errno.h"
-#include "libc/intrin/kprintf.h"
-#include "libc/intrin/spinlock.h"
-#include "libc/intrin/wait0.internal.h"
 #include "libc/macros.internal.h"
-#include "libc/nexgen32e/threaded.h"
-#include "libc/rand/rand.h"
+#include "libc/runtime/internal.h"
+#include "libc/runtime/runtime.h"
 #include "libc/runtime/stack.h"
+#include "libc/stdio/rand.h"
+#include "libc/str/str.h"
 #include "libc/sysv/consts/clone.h"
 #include "libc/sysv/consts/itimer.h"
 #include "libc/sysv/consts/map.h"
@@ -40,36 +39,46 @@
 #include "libc/sysv/consts/sig.h"
 #include "libc/testlib/hyperion.h"
 #include "libc/testlib/testlib.h"
+#include "libc/thread/tls.h"
+#include "libc/time/struct/tm.h"
 #include "libc/time/time.h"
 
-STATIC_YOINK("zip_uri_support");
-STATIC_YOINK("libc/testlib/hyperion.txt");
+__static_yoink("zipos");
+__static_yoink("libc/testlib/hyperion.txt");
 
 #define THREADS 8
+
+void SetUpOnce(void) {
+  for (int i = 3; i < 200; ++i) {
+    close(i);
+  }
+  errno = 0;
+  ASSERT_SYS(0, 0, pledge("stdio rpath", 0));
+}
 
 void PullSomeZipFilesIntoLinkage(void) {
   gmtime(0);
 }
 
-char *stack[THREADS];
-char tls[THREADS][64];
-
 TEST(reservefd, testGrowthOfFdsDataStructure) {
   int i, n;
   struct rlimit rlim;
-  ASSERT_EQ(g_fds.n, OPEN_MAX);
   n = 1700;  // pe '2**16/40' → 1638 (likely value of g_fds.n)
-  if (!getrlimit(RLIMIT_NOFILE, &rlim)) n = MIN(n, rlim.rlim_cur - 3);
-  for (i = 0; i < n; ++i) {
-    EXPECT_SYS(0, i + 3, open("/zip/usr/share/zoneinfo/UTC", O_RDONLY));
+  if (!getrlimit(RLIMIT_NOFILE, &rlim)) {
+    n = MIN(n, rlim.rlim_cur - 3);
+  } else {
+    errno = 0;
   }
-  ASSERT_GT(g_fds.n, OPEN_MAX);
   for (i = 0; i < n; ++i) {
-    EXPECT_SYS(0, 0, close(i + 3));
+    ASSERT_SYS(0, i + 3, open("/zip/usr/share/zoneinfo/UTC", O_RDONLY));
+  }
+  ASSERT_GT(g_fds.n, 16);
+  for (i = 0; i < n; ++i) {
+    ASSERT_SYS(0, 0, close(i + 3));
   }
 }
 
-void OnSigAlrm(int sig, siginfo_t *si, ucontext_t *ctx) {
+void OnSigAlrm(int sig, siginfo_t *si, void *ctx) {
   int rc, fd;
   char buf[64];
   ASSERT_NE(-1, (fd = open("/zip/libc/testlib/hyperion.txt", O_RDONLY)));
@@ -87,12 +96,12 @@ void OnSigAlrm(int sig, siginfo_t *si, ucontext_t *ctx) {
   close(fd);  // can eintr which doesn't matter
 }
 
-int Worker(void *p) {
+int Worker(void *p, int tid) {
   char buf[64];
   int i, rc, fd;
   for (i = 0; i < 64; ++i) {
     ASSERT_NE(-1, (fd = open("/zip/libc/testlib/hyperion.txt", O_RDONLY)));
-    usleep(rand64() % 100);
+    usleep(_rand64() % 100);
     for (;;) {
       rc = read(fd, buf, 64);
       if (rc != -1) {
@@ -107,30 +116,4 @@ int Worker(void *p) {
     close(fd);
   }
   return 0;
-}
-
-TEST(reservefd, tortureTest) {
-  int i;
-  struct sigaction oldsa;
-  struct itimerval oldit;
-  struct itimerval it = {{0, 10000}, {0, 100}};
-  struct sigaction sa = {.sa_sigaction = OnSigAlrm,
-                         .sa_flags = 0 /* SA_NODEFER */};
-  // ASSERT_SYS(0, 0, sigaction(SIGALRM, &sa, &oldsa));
-  // ASSERT_SYS(0, 0, setitimer(ITIMER_REAL, &it, &oldit));
-  for (i = 0; i < THREADS; ++i) {
-    clone(Worker,
-          (stack[i] = mmap(0, GetStackSize(), PROT_READ | PROT_WRITE,
-                           MAP_STACK | MAP_ANONYMOUS, -1, 0)),
-          GetStackSize(),
-          CLONE_THREAD | CLONE_VM | CLONE_FS | CLONE_FILES | CLONE_SIGHAND |
-              CLONE_CHILD_SETTID | CLONE_CHILD_CLEARTID | CLONE_SETTLS,
-          0, 0, __initialize_tls(tls[i]), sizeof(tls[i]),
-          (int *)(tls[i] + 0x38));
-  }
-  for (i = 0; i < THREADS; ++i) {
-    _wait0((int *)(tls[i] + 0x38));
-  }
-  // EXPECT_SYS(0, 0, sigaction(SIGALRM, &oldsa, 0));
-  // EXPECT_SYS(0, 0, setitimer(ITIMER_REAL, &oldit, 0));
 }

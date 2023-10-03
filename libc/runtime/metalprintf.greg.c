@@ -20,6 +20,8 @@
 #include "libc/runtime/pc.internal.h"
 #include "libc/runtime/runtime.h"
 
+#ifdef __x86_64__
+
 #define PUTC(C)                                      \
   do {                                               \
     while (!(inb(0x3F8 + UART_LSR) & UART_TTYTXR)) { \
@@ -34,7 +36,7 @@
  * This only supports %d and %s. It'll will work even if .rodata hasn't
  * been loaded into memory yet.
  */
-hidden textreal void(MetalPrintf)(const char *fmt, ...) {
+textreal void(MetalPrintf)(const char *fmt, ...) {
   int i;
   char c;
   unsigned u;
@@ -78,3 +80,5 @@ hidden textreal void(MetalPrintf)(const char *fmt, ...) {
     }
   }
 }
+
+#endif /* __x86_64__ */

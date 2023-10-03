@@ -16,7 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/weaken.h"
+#include "libc/intrin/weaken.h"
 #include "libc/mem/mem.h"
 #include "libc/runtime/runtime.h"
 
@@ -24,7 +24,7 @@
  * Thunks free() if it's linked, otherwise do nothing.
  */
 void _weakfree(void *p) {
-  if (weaken(free)) {
-    weaken(free)(p);
+  if (_weaken(free)) {
+    _weaken(free)(p);
   }
 }

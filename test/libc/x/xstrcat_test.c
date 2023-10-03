@@ -16,10 +16,13 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/runtime/gc.internal.h"
+#include "libc/mem/gc.internal.h"
+#include "libc/mem/mem.h"
+#include "libc/str/str.h"
 #include "libc/testlib/ezbench.h"
 #include "libc/testlib/testlib.h"
 #include "libc/x/x.h"
+#include "libc/x/xasprintf.h"
 
 TEST(xstrcat, test) {
   EXPECT_STREQ("hi", gc(xstrcat("hi")));
@@ -45,16 +48,16 @@ int hard_static(void) {
 int hard_dynamic(void) {
   char *b, *p;
   p = b = malloc(16);
-  p = stpcpy(p, VEIL("r", "eins"));
-  p = stpcpy(p, VEIL("r", "zwei"));
-  p = stpcpy(p, VEIL("r", "drei"));
+  p = stpcpy(p, __veil("r", "eins"));
+  p = stpcpy(p, __veil("r", "zwei"));
+  p = stpcpy(p, __veil("r", "drei"));
   free(b);
   return (intptr_t)b;
 }
 
 BENCH(xstrcat, bench) {
-  EZBENCH2("hard_static", donothing, EXPROPRIATE(hard_static()));
-  EZBENCH2("hard_dynamic", donothing, EXPROPRIATE(hard_dynamic()));
+  EZBENCH2("hard_static", donothing, __expropriate(hard_static()));
+  EZBENCH2("hard_dynamic", donothing, __expropriate(hard_dynamic()));
   EZBENCH2("xstrcat", donothing, free(xstrcat("eins", "zwei", "drei")));
   EZBENCH2("xasprintf", donothing,
            free(xasprintf("%s%s%s", "eins", "zwei", "drei")));

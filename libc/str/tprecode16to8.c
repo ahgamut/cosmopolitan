@@ -16,30 +16,30 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/dce.h"
 #include "libc/fmt/conv.h"
 #include "libc/intrin/packsswb.h"
 #include "libc/intrin/pandn.h"
 #include "libc/intrin/pcmpgtw.h"
 #include "libc/intrin/pmovmskb.h"
 #include "libc/str/str.h"
-#include "libc/str/tpenc.h"
 #include "libc/str/utf16.h"
 
 static const int16_t kDel16[8] = {127, 127, 127, 127, 127, 127, 127, 127};
 
 /* 10x speedup for ascii */
-static noasan axdx_t tprecode16to8_sse2(char *dst, size_t dstsize,
-                                        const char16_t *src, axdx_t r) {
+static axdx_t tprecode16to8_sse2(char *dst, size_t dstsize, const char16_t *src,
+                                 axdx_t r) {
   int16_t v1[8], v2[8], v3[8], vz[8];
-  __builtin_memset(vz, 0, 16);
+  memset(vz, 0, 16);
   while (r.ax + 8 < dstsize) {
-    __builtin_memcpy(v1, src + r.dx, 16);
+    memcpy(v1, src + r.dx, 16);
     pcmpgtw(v2, v1, vz);
     pcmpgtw(v3, v1, kDel16);
     pandn((void *)v2, (void *)v3, (void *)v2);
     if (pmovmskb((void *)v2) != 0xFFFF) break;
     packsswb((void *)v1, v1, v1);
-    __builtin_memcpy(dst + r.ax, v1, 8);
+    memcpy(dst + r.ax, v1, 8);
     r.ax += 8;
     r.dx += 8;
   }
@@ -50,7 +50,7 @@ static noasan axdx_t tprecode16to8_sse2(char *dst, size_t dstsize,
  * Transcodes UTF-16 to UTF-8.
  *
  * This is a low-level function intended for the core runtime. Use
- * utf16toutf8() for a much better API that uses malloc().
+ * utf16to8() for a much better API that uses malloc().
  *
  * @param dst is output buffer
  * @param dstsize is bytes in dst
@@ -65,9 +65,11 @@ axdx_t tprecode16to8(char *dst, size_t dstsize, const char16_t *src) {
   r.ax = 0;
   r.dx = 0;
   for (;;) {
-    if (!IsTiny() && !((uintptr_t)(src + r.dx) & 15)) {
+#if defined(__x86_64__) && !IsModeDbg() && !IsTiny()
+    if (!((uintptr_t)(src + r.dx) & 15)) {
       r = tprecode16to8_sse2(dst, dstsize, src, r);
     }
+#endif
     if (!(x = src[r.dx++])) break;
     if (IsUtf16Cont(x)) continue;
     if (!IsUcs2(x)) {

@@ -11,7 +11,7 @@
 #include "libc/log/log.h"
 #include "libc/mem/alloca.h"
 #include "libc/mem/mem.h"
-#include "libc/runtime/gc.internal.h"
+#include "libc/mem/gc.internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/auxv.h"
@@ -664,7 +664,7 @@ Py_GetProgramFullPath(void)
 {
     static bool once;
     if (_cmpxchg(&once, false, true)) {
-        progpath = utf8toutf32(GetProgramExecutableName(), -1, 0);
+        progpath = utf8to32(GetProgramExecutableName(), -1, 0);
         __cxa_atexit(free, progpath, 0);
     }
     return progpath;

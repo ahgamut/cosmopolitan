@@ -20,12 +20,18 @@
 #include "libc/sysv/consts/at.h"
 
 /**
- * Returns information about thing.
+ * Returns information about file.
  *
- * @param st is where result is stored
- * @see S_ISDIR(st.st_mode), S_ISREG(), etc.
+ * This function is equivalent to:
+ *
+ *     struct stat st;
+ *     fstatat(AT_FDCWD, path, &st, 0);
+ *
+ * @see fstatat() for further documentation
  * @asyncsignalsafe
  */
 int stat(const char *path, struct stat *st) {
   return fstatat(AT_FDCWD, path, st, 0);
 }
+
+__strong_reference(stat, stat64);

@@ -16,8 +16,8 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/internal.h"
 #include "libc/calls/struct/stat.h"
+#include "libc/calls/struct/stat.internal.h"
 #include "libc/calls/syscall_support-nt.internal.h"
 #include "libc/nt/createfile.h"
 #include "libc/nt/enum/accessmask.h"
@@ -34,7 +34,9 @@ textwindows int sys_fstatat_nt(int dirfd, const char *path, struct stat *st,
   uint16_t path16[PATH_MAX];
   if (__mkntpathat(dirfd, path, 0, path16) == -1) return -1;
   if ((fh = CreateFile(
-           path16, kNtFileReadAttributes, 0, 0, kNtOpenExisting,
+           path16, kNtFileGenericRead,
+           kNtFileShareRead | kNtFileShareWrite | kNtFileShareDelete, 0,
+           kNtOpenExisting,
            kNtFileAttributeNormal | kNtFileFlagBackupSemantics |
                ((flags & AT_SYMLINK_NOFOLLOW) ? kNtFileFlagOpenReparsePoint
                                               : 0),

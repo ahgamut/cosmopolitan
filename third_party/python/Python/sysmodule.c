@@ -6,15 +6,15 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
 #include "libc/dce.h"
+#include "libc/mem/gc.internal.h"
 #include "libc/mem/mem.h"
 #include "libc/nt/dll.h"
 #include "libc/nt/version.h"
-#include "libc/runtime/gc.internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
+#include "libc/str/locale.h"
 #include "libc/sysv/consts/exit.h"
 #include "libc/sysv/consts/s.h"
-#include "libc/unicode/locale.h"
 #include "libc/x/x.h"
 #include "third_party/python/Include/abstract.h"
 #include "third_party/python/Include/boolobject.h"
@@ -1026,11 +1026,11 @@ sys_getwindowsversion(PyObject *self)
     int pos = 0;
     PyObject *version;
     struct NtOsVersionInfo ver;
-    uint32_t realMajor, realMinor, realBuild;
-    int64_t hKernel32;
-    wchar_t kernel32_path[PATH_MAX];
-    void *verblock;
-    uint32_t verblock_size;
+
+    if (!IsWindows()) {
+        PyErr_SetString(PyExc_SystemError, "this is not windows");
+        return 0;
+    }
 
     ver.dwOSVersionInfoSize = sizeof(ver);
     if (!GetVersionEx(&ver))
@@ -1044,41 +1044,11 @@ sys_getwindowsversion(PyObject *self)
     PyStructSequence_SET_ITEM(version, pos++, PyLong_FromLong(ver.dwMinorVersion));
     PyStructSequence_SET_ITEM(version, pos++, PyLong_FromLong(ver.dwBuildNumber));
     PyStructSequence_SET_ITEM(version, pos++, PyLong_FromLong(ver.dwPlatformId));
-    PyStructSequence_SET_ITEM(version, pos++, PyUnicode_FromString(gc(utf16toutf8(ver.szCSDVersion,-1,0))));
+    PyStructSequence_SET_ITEM(version, pos++, PyUnicode_FromString(gc(utf16to8(ver.szCSDVersion,-1,0))));
     PyStructSequence_SET_ITEM(version, pos++, PyLong_FromLong(ver.wServicePackMajor));
     PyStructSequence_SET_ITEM(version, pos++, PyLong_FromLong(ver.wServicePackMinor));
     PyStructSequence_SET_ITEM(version, pos++, PyLong_FromLong(ver.wSuiteMask));
     PyStructSequence_SET_ITEM(version, pos++, PyLong_FromLong(ver.wProductType));
-
-    realMajor = ver.dwMajorVersion;
-    realMinor = ver.dwMinorVersion;
-    realBuild = ver.dwBuildNumber;
-
-#if 0 // todo(jart): port me
-    // GetVersion will lie if we are running in a compatibility mode.
-    // We need to read the version info from a system file resource
-    // to accurately identify the OS version. If we fail for any reason,
-    // just return whatever GetVersion said.
-    hKernel32 = GetModuleHandle("kernel32.dll");
-    if (hKernel32 && GetModuleFileNameW(hKernel32, kernel32_path, MAX_PATH) &&
-        (verblock_size = GetFileVersionInfoSizeW(kernel32_path, NULL)) &&
-        (verblock = PyMem_RawMalloc(verblock_size))) {
-        VS_FIXEDFILEINFO *ffi;
-        UINT ffi_len;
-        if (GetFileVersionInfoW(kernel32_path, 0, verblock_size, verblock) &&
-            VerQueryValueW(verblock, L"", (LPVOID)&ffi, &ffi_len)) {
-            realMajor = HIWORD(ffi->dwProductVersionMS);
-            realMinor = LOWORD(ffi->dwProductVersionMS);
-            realBuild = HIWORD(ffi->dwProductVersionLS);
-        }
-        PyMem_RawFree(verblock);
-    }
-    PyStructSequence_SET_ITEM(version, pos++, Py_BuildValue("(kkk)",
-        realMajor,
-        realMinor,
-        realBuild
-    ));
-#endif
 
     if (PyErr_Occurred()) {
         Py_DECREF(version);
@@ -2449,7 +2419,7 @@ sys_pyfile_write(const char *text, PyObject *file)
  */
 
 static void
-sys_write(_Py_Identifier *key, FILE *fp, const char *format, va_list va)
+sys_write_(_Py_Identifier *key, FILE *fp, const char *format, va_list va)
 {
     PyObject *file;
     PyObject *error_type, *error_value, *error_traceback;
@@ -2477,7 +2447,7 @@ PySys_WriteStdout(const char *format, ...)
     va_list va;
 
     va_start(va, format);
-    sys_write(&PyId_stdout, stdout, format, va);
+    sys_write_(&PyId_stdout, stdout, format, va);
     va_end(va);
 }
 
@@ -2487,7 +2457,7 @@ PySys_WriteStderr(const char *format, ...)
     va_list va;
 
     va_start(va, format);
-    sys_write(&PyId_stderr, stderr, format, va);
+    sys_write_(&PyId_stderr, stderr, format, va);
     va_end(va);
 }
 

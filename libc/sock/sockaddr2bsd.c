@@ -17,9 +17,13 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/sock/internal.h"
+#include "libc/sock/struct/sockaddr.internal.h"
+#include "libc/sock/struct/sockaddr6-bsd.internal.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/af.h"
 #include "libc/sysv/errfuns.h"
+
+// TODO(jart): DELETE
 
 /**
  * Converts sockaddr (Linux/Windows) → sockaddr_bsd (XNU/BSD).
@@ -36,6 +40,21 @@ int sockaddr2bsd(const void *addr, uint32_t addrsize,
         out_addr->sin.sin_addr = ((struct sockaddr_in *)addr)->sin_addr;
         bzero(&out_addr->sin.sin_zero, sizeof(out_addr->sin.sin_zero));
         *out_addrsize = sizeof(struct sockaddr_in_bsd);
+        return 0;
+      } else {
+        return einval();
+      }
+    } else if (((struct sockaddr *)addr)->sa_family == AF_INET6) {
+      if (addrsize >= sizeof(struct sockaddr_in6)) {
+        out_addr->sin6.sin6_len = 0;
+        out_addr->sin6.sin6_family = AF_INET6;
+        out_addr->sin6.sin6_port = ((struct sockaddr_in6 *)addr)->sin6_port;
+        out_addr->sin6.sin6_flowinfo =
+            ((struct sockaddr_in6 *)addr)->sin6_flowinfo;
+        out_addr->sin6.sin6_addr = ((struct sockaddr_in6 *)addr)->sin6_addr;
+        out_addr->sin6.sin6_scope_id =
+            ((struct sockaddr_in6 *)addr)->sin6_scope_id;
+        *out_addrsize = sizeof(struct sockaddr_in6_bsd);
         return 0;
       } else {
         return einval();

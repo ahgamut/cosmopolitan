@@ -22,11 +22,8 @@ THIRD_PARTY_UNZIP_A_DIRECTDEPS =						\
 	LIBC_RUNTIME								\
 	LIBC_STDIO								\
 	LIBC_STR								\
-	LIBC_STUBS								\
 	LIBC_SYSV								\
 	LIBC_TIME								\
-	LIBC_UNICODE								\
-	LIBC_ZIPOS								\
 	THIRD_PARTY_BZIP2
 
 THIRD_PARTY_UNZIP_A_DEPS :=							\
@@ -51,14 +48,19 @@ o/$(MODE)/third_party/unzip/unzip.com.dbg:					\
 		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
 
-$(THIRD_PARTY_UNZIP_A_OBJS):							\
-		OVERRIDE_CPPFLAGS +=						\
+$(THIRD_PARTY_UNZIP_A_OBJS): private						\
+		CPPFLAGS +=							\
+			-w							\
 			-DUSE_BZIP2						\
 			-DUNICODE_SUPPORT					\
 			-DHAVE_UNLINK						\
 			-DLARGE_FILE_SUPPORT					\
 			-DHAVE_TERMIOS_H					\
 			-DNO_LCHMOD
+
+$(THIRD_PARTY_UNZIP_A_OBJS): private						\
+		CFLAGS +=							\
+			$(OLD_CODE)
 
 THIRD_PARTY_UNZIP_COMS = o/$(MODE)/third_party/unzip/unzip.com
 THIRD_PARTY_UNZIP_BINS = $(THIRD_PARTY_UNZIP_COMS) $(THIRD_PARTY_UNZIP_COMS:%=%.dbg)

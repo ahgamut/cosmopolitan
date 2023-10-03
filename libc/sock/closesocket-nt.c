@@ -16,12 +16,13 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/weaken.h"
-#include "libc/intrin/kprintf.h"
-#include "libc/log/backtrace.internal.h"
 #include "libc/mem/mem.h"
+#include "libc/nt/thunk/msabi.h"
+#include "libc/nt/winsock.h"
 #include "libc/sock/internal.h"
 #include "libc/sock/syscall_fd.internal.h"
+
+__msabi extern typeof(__sys_closesocket_nt) *const __imp_closesocket;
 
 /**
  * Closes socket on Windows.
@@ -32,7 +33,8 @@ textwindows int sys_closesocket_nt(struct Fd *fd) {
   struct SockFd *sockfd;
   sockfd = (struct SockFd *)fd->extra;
   free(sockfd);
-  if (__sys_closesocket_nt(fd->handle) != -1) {
+  int rc = __imp_closesocket(fd->handle);
+  if (rc != -1) {
     return 0;
   } else {
     return __winsockerr();

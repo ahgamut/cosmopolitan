@@ -77,13 +77,18 @@ bool32 SetNamedPipeHandleState(int64_t hNamedPipe, uint32_t *lpMode,
                                uint32_t *lpCollectDataTimeout);
 
 bool32 PeekNamedPipe(int64_t hNamedPipe, void *lpBuffer, uint32_t nBufferSize,
-                     uint32_t *lpBytesRead, uint32_t *lpTotalBytesAvail,
-                     uint32_t *lpBytesLeftThisMessage);
+                     uint32_t *opt_lpBytesRead, uint32_t *opt_lpTotalBytesAvail,
+                     uint32_t *opt_lpBytesLeftThisMessage);
 
 bool32 TransactNamedPipe(int64_t hNamedPipe, void *lpInBuffer,
                          uint32_t nInBufferSize, void *lpOutBuffer,
                          uint32_t nOutBufferSize, uint32_t *lpBytesRead,
                          struct NtOverlapped *lpOverlapped);
+
+bool32 GetNamedPipeInfo(int64_t hNamedPipe, uint32_t *opt_out_lpFlags,
+                        uint32_t *opt_out_lpOutBufferSize,
+                        uint32_t *opt_out_lpInBufferSize,
+                        uint32_t *opt_out_lpMaxInstances);
 
 COSMOPOLITAN_C_END_
 #endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */

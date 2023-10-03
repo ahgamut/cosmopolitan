@@ -16,48 +16,38 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/strace.internal.h"
-#include "libc/dce.h"
-#include "libc/intrin/asan.internal.h"
-#include "libc/macros.internal.h"
-#include "libc/nexgen32e/bsr.h"
-#include "libc/nexgen32e/x86feature.h"
+#include "libc/intrin/strace.internal.h"
 #include "libc/runtime/runtime.h"
 
-forceinline void longsorter(long *x, size_t n, size_t t) {
-  long a, b, c;
-  size_t i, p, q;
-  for (p = t; p > 0; p >>= 1) {
-    for (i = 0; i < n - p; ++i) {
-      if (!(i & p)) {
-        a = x[i + 0];
-        b = x[i + p];
-        if (a > b) c = a, a = b, b = c;
-        x[i + 0] = a;
-        x[i + p] = b;
-      }
+static inline void InsertionSort(long *A, long n) {
+  long i, j, t;
+  for (i = 1; i < n; i++) {
+    t = A[i];
+    j = i - 1;
+    while (j >= 0 && A[j] > t) {
+      A[j + 1] = A[j];
+      j = j - 1;
     }
-    for (q = t; q > p; q >>= 1) {
-      for (i = 0; i < n - q; ++i) {
-        if (!(i & p)) {
-          a = x[i + p];
-          b = x[i + q];
-          if (a > b) c = a, a = b, b = c;
-          x[i + p] = a;
-          x[i + q] = b;
-        }
-      }
-    }
+    A[j + 1] = t;
   }
 }
 
-static microarchitecture("avx2") optimizespeed noasan
-    void longsort_avx2(long *x, size_t n, size_t t) {
-  longsorter(x, n, t);
-}
-
-static optimizesize noasan void longsort_pure(long *x, size_t n, size_t t) {
-  longsorter(x, n, t);
+static void LongSort(long *A, long n) {
+  long t, p, i, j;
+  if (n <= 32) {
+    InsertionSort(A, n);
+  } else {
+    for (p = A[n >> 1], i = 0, j = n - 1;; i++, j--) {
+      while (A[i] < p) i++;
+      while (A[j] > p) j--;
+      if (i >= j) break;
+      t = A[i];
+      A[i] = A[j];
+      A[j] = t;
+    }
+    LongSort(A, i);
+    LongSort(A + i, n - i);
+  }
 }
 
 /**
@@ -67,21 +57,9 @@ static optimizesize noasan void longsort_pure(long *x, size_t n, size_t t) {
  *                               -Lord Capulet
  *
  */
-void longsort(long *x, size_t n) {
-  size_t t, m;
-  if (IsAsan()) {
-    if (__builtin_mul_overflow(n, sizeof(long), &m)) m = -1;
-    __asan_verify(x, m);
-  }
-  if (n > 1) {
-    t = 1ul << bsrl(n - 1);
-    if (!IsTiny() && X86_HAVE(AVX2)) {
-      longsort_avx2(x, n, t);
-    } else {
-      longsort_pure(x, n, t);
-    }
-  }
+void _longsort(long *A, size_t n) {
+  LongSort(A, n);
   if (n > 1000) {
-    STRACE("longsort(%p, %'zu)", x, n);
+    STRACE("_longsort(%p, %'zu)", A, n);
   }
 }

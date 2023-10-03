@@ -20,18 +20,21 @@
 #include "libc/sysv/consts/o.h"
 #include "libc/testlib/testlib.h"
 
-char testlib_enable_tmp_setup_teardown;
+int fd;
+char buf[8];
 
-static int fd;
-static char buf[8];
+void SetUpOnce(void) {
+  testlib_enable_tmp_setup_teardown();
+  ASSERT_SYS(0, 0, pledge("stdio rpath wpath cpath fattr", 0));
+}
 
-TEST(dog, testReadPastEof_returnsZero) {
+TEST(pread, testReadPastEof_returnsZero) {
   EXPECT_NE(-1, (fd = open("a", O_RDWR | O_CREAT | O_TRUNC, 0644)));
   EXPECT_EQ(0, pread(fd, buf, 8, 0));
   EXPECT_EQ(0, close(fd));
 }
 
-TEST(dog, testReadOverlapsEof_returnsShortNumber) {
+TEST(pread, testReadOverlapsEof_returnsShortNumber) {
   EXPECT_NE(-1, (fd = open("b", O_RDWR | O_CREAT | O_TRUNC, 0644)));
   EXPECT_EQ(4, pwrite(fd, buf, 4, 0));
   EXPECT_EQ(4, pread(fd, buf, 8, 0));

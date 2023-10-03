@@ -23,15 +23,17 @@
  */
 #include "libc/assert.h"
 #include "libc/calls/calls.h"
+#include "libc/dce.h"
+#include "libc/fmt/conv.h"
 #include "libc/fmt/fmt.h"
 #include "libc/log/log.h"
+#include "libc/mem/gc.h"
 #include "libc/mem/mem.h"
-#include "libc/runtime/gc.internal.h"
+#include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
-#include "libc/x/x.h"
-#include "third_party/gdtoa/gdtoa.h"
-#include "third_party/getopt/getopt.h"
+#include "libc/x/xasprintf.h"
+#include "third_party/getopt/getopt.internal.h"
 #include "third_party/quickjs/cutils.h"
 #include "third_party/quickjs/quickjs-libc.h"
 
@@ -477,7 +479,7 @@ int main(int argc, char **argv)
 {
     int c, i, verbose;
     const char *out_filename, *cname;
-    char *cfilename = gc(malloc(1024));
+    char *cfilename = _gc(malloc(1024));
     FILE *fo;
     JSRuntime *rt;
     JSContext *ctx;
@@ -634,7 +636,7 @@ int main(int argc, char **argv)
                 "\n"
                 );
     } else {
-#ifndef COSMO
+#ifndef _COSMO_SOURCE
         fprintf(fo, "#include <inttypes.h>\n"
                 "\n"
                 );

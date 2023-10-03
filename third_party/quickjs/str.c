@@ -22,6 +22,7 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
+#include "libc/str/str.h"
 #include "libc/assert.h"
 #include "libc/fmt/conv.h"
 #include "libc/fmt/fmt.h"
@@ -857,12 +858,6 @@ static int js_string_delete_property(JSContext *ctx,
     }
     return TRUE;
 }
-
-static const JSClassExoticMethods js_string_exotic_methods = {
-    .get_own_property = js_string_get_own_property,
-    .define_own_property = js_string_define_own_property,
-    .delete_property = js_string_delete_property,
-};
 
 JSValue js_string_constructor(JSContext *ctx, JSValueConst new_target,
                               int argc, JSValueConst *argv)

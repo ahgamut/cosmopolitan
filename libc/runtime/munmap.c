@@ -17,21 +17,18 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
-#include "libc/bits/likely.h"
-#include "libc/bits/weaken.h"
 #include "libc/calls/state.internal.h"
-#include "libc/calls/strace.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/intrin/asan.internal.h"
-#include "libc/intrin/kprintf.h"
-#include "libc/intrin/spinlock.h"
+#include "libc/intrin/directmap.internal.h"
+#include "libc/intrin/likely.h"
+#include "libc/intrin/strace.internal.h"
 #include "libc/log/backtrace.internal.h"
 #include "libc/log/libfatal.internal.h"
 #include "libc/log/log.h"
 #include "libc/macros.internal.h"
-#include "libc/runtime/directmap.internal.h"
 #include "libc/runtime/internal.h"
 #include "libc/runtime/memtrack.internal.h"
 #include "libc/runtime/runtime.h"
@@ -40,14 +37,11 @@
 
 #define IP(X)      (intptr_t)(X)
 #define ALIGNED(p) (!(IP(p) & (FRAMESIZE - 1)))
-#define ADDR(x)    ((int64_t)((uint64_t)(x) << 32) >> 16)
 #define FRAME(x)   ((int)((intptr_t)(x) >> 16))
 
-static noasan int Munmap(char *, size_t);
-
-static noasan void MunmapShadow(char *p, size_t n) {
+static void __munmap_shadow(char *p, size_t n) {
   intptr_t a, b, x, y;
-  KERNTRACE("MunmapShadow(%p, %'zu)", p, n);
+  KERNTRACE("__munmap_shadow(%p, %'zu)", p, n);
   a = ((intptr_t)p >> 3) + 0x7fff8000;
   b = a + (n >> 3);
   if (IsMemtracked(FRAME(a), FRAME(b - 1))) {
@@ -58,7 +52,7 @@ static noasan void MunmapShadow(char *p, size_t n) {
       // to be >1mb since we can only unmap it if it's aligned, and
       // as such we poison the edges if there are any.
       __repstosb((void *)a, kAsanUnmapped, x - a);
-      Munmap((void *)x, y - x);
+      __munmap_unlocked((void *)x, y - x);
       __repstosb((void *)y, kAsanUnmapped, b - y);
     } else {
       // otherwise just poison and assume reuse
@@ -72,15 +66,15 @@ static noasan void MunmapShadow(char *p, size_t n) {
 // our api supports doing things like munmap(0, 0x7fffffffffff) but some
 // platforms (e.g. openbsd) require that we know the specific intervals
 // or else it returns EINVAL. so we munmap a piecewise.
-static noasan void MunmapImpl(char *p, size_t n) {
+static void __munmap_impl(char *p, size_t n) {
   char *q;
   size_t m;
   intptr_t a, b, c;
-  int i, l, r, rc, beg, end;
-  KERNTRACE("MunmapImpl(%p, %'zu)", p, n);
+  int i, l, r, beg, end;
+  KERNTRACE("__munmap_impl(%p, %'zu)", p, n);
   l = FRAME(p);
   r = FRAME(p + n - 1);
-  i = FindMemoryInterval(&_mmi, l);
+  i = __find_memory(&_mmi, l);
   for (; i < _mmi.i && r >= _mmi.p[i].x; ++i) {
     if (l >= _mmi.p[i].x && r <= _mmi.p[i].y) {
 
@@ -98,56 +92,50 @@ static noasan void MunmapImpl(char *p, size_t n) {
       beg = MAX(_mmi.p[i].x, l);
       end = _mmi.p[i].y;
     } else {
-      // shouldn't be possible
-      assert(!"binary search panic");
-      continue;
+      __builtin_unreachable();
     }
     // openbsd even requires that if we mapped, for instance a 5 byte
     // file, that we be sure to call munmap(file, 5). let's abstract!
-    a = ADDR(beg);
-    b = ADDR(end) + FRAMESIZE;
-    c = ADDR(_mmi.p[i].x) + _mmi.p[i].size;
+    a = ADDR_32_TO_48(beg);
+    b = ADDR_32_TO_48(end) + FRAMESIZE;
+    c = ADDR_32_TO_48(_mmi.p[i].x) + _mmi.p[i].size;
     q = (char *)a;
     m = MIN(b, c) - a;
     if (!IsWindows()) {
-      rc = sys_munmap(q, m);
-      assert(!rc);
+      npassert(!sys_munmap(q, m));
     } else {
-      // Handled by UntrackMemoryIntervals() on Windows
+      // Handled by __untrack_memories() on Windows
     }
     if (IsAsan() && !OverlapsShadowSpace(p, n)) {
-      MunmapShadow(q, m);
+      __munmap_shadow(q, m);
     }
   }
 }
 
-static noasan int Munmap(char *p, size_t n) {
-  unsigned i;
-  char poison;
-  intptr_t a, b, x, y;
-  assert(!__vforked);
+int __munmap_unlocked(char *p, size_t n) {
+  unassert(!__vforked);
   if (UNLIKELY(!n)) {
-    STRACE("n=0");
+    STRACE("munmap n is 0");
     return einval();
   }
   if (UNLIKELY(!IsLegalSize(n))) {
-    STRACE("n isn't 48-bit");
+    STRACE("munmap n isn't 48-bit");
     return einval();
   }
   if (UNLIKELY(!IsLegalPointer(p))) {
-    STRACE("p isn't 48-bit");
+    STRACE("munmap p isn't 48-bit");
     return einval();
   }
   if (UNLIKELY(!IsLegalPointer(p + (n - 1)))) {
-    STRACE("p+(n-1) isn't 48-bit");
+    STRACE("munmap p+(n-1) isn't 48-bit");
     return einval();
   }
   if (UNLIKELY(!ALIGNED(p))) {
-    STRACE("p isn't 64kb aligned");
+    STRACE("munmap(%p) isn't 64kb aligned", p);
     return einval();
   }
-  MunmapImpl(p, n);
-  return UntrackMemoryIntervals(p, n);
+  __munmap_impl(p, n);
+  return __untrack_memories(p, n);
 }
 
 /**
@@ -161,13 +149,12 @@ static noasan int Munmap(char *p, size_t n) {
  * @raises EINVAL if `p+(n-1)` isn't 48-bit
  * @raises EINVAL if `p` isn't 65536-byte aligned
  */
-noasan int munmap(void *p, size_t n) {
+int munmap(void *p, size_t n) {
   int rc;
-  size_t toto;
   __mmi_lock();
-  rc = Munmap(p, n);
+  rc = __munmap_unlocked(p, n);
 #if SYSDEBUG
-  toto = __strace > 0 ? GetMemtrackSize(&_mmi) : 0;
+  size_t toto = __strace > 0 ? __get_memtrack_size(&_mmi) : 0;
 #endif
   __mmi_unlock();
   STRACE("munmap(%.12p, %'zu) → %d% m (%'zu bytes total)", p, n, rc, toto);

@@ -17,26 +17,27 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
-#include "libc/bits/bits.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/iovec.h"
 #include "libc/calls/struct/stat.h"
 #include "libc/elf/def.h"
 #include "libc/fmt/conv.h"
+#include "libc/intrin/bits.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
 #include "libc/macros.internal.h"
+#include "libc/mem/gc.internal.h"
 #include "libc/mem/mem.h"
-#include "libc/runtime/gc.internal.h"
 #include "libc/runtime/runtime.h"
-#include "libc/stdio/append.internal.h"
+#include "libc/runtime/stack.h"
+#include "libc/stdio/append.h"
 #include "libc/stdio/stdio.h"
 #include "libc/sysv/consts/clock.h"
 #include "libc/sysv/consts/o.h"
 #include "libc/time/time.h"
 #include "libc/x/x.h"
-#include "libc/zip.h"
-#include "third_party/getopt/getopt.h"
+#include "libc/zip.internal.h"
+#include "third_party/getopt/getopt.internal.h"
 #include "third_party/python/Include/abstract.h"
 #include "third_party/python/Include/bytesobject.h"
 #include "third_party/python/Include/code.h"
@@ -64,7 +65,9 @@
 #include "tool/build/lib/stripcomponents.h"
 /* clang-format off */
 
-STATIC_YOINK("_PyUnicode_GetCode");
+STATIC_STACK_ALIGN(GetStackSize());
+
+__static_yoink("_PyUnicode_GetCode");
 
 #define MANUAL "\
 SYNOPSIS\n\
@@ -100,14 +103,12 @@ const char *const kIgnoredModules[] = /* sorted */ {
     "_dummy_threading.__all__",
     "_overlapped", /* don't recognize if sys.platform yet */
     "_scproxy", /* don't recognize if sys.platform yet */
-    "_thread",
     "_winapi", /* don't recognize if sys.platform yet */
     "asyncio.test_support", /* todo??? */
     "builtins",
     "concurrent.futures", /* asyncio's fault */
     "concurrent.futures._base",
     "concurrent.futures.process",
-    "concurrent.futures.thread",
     "distutils.command.bdist",
     "distutils.command.bdist_dumb",
     "distutils.command.bdist_rpm",
@@ -128,7 +129,6 @@ const char *const kIgnoredModules[] = /* sorted */ {
     "distutils.command.sdist",
     "distutils.command.upload",
     "distutils.spawn._nt_quote_args",
-    "dummy_threading.Thread",
     "encodings.aliases",
     "importlib._bootstrap",
     "importlib._bootstrap.BuiltinImporter",
@@ -218,9 +218,6 @@ const char *const kIgnoredModules[] = /* sorted */ {
     /* "xml.dom", */
 };
 
-_Py_IDENTIFIER(stdout);
-_Py_IDENTIFIER(stderr);
-
 struct Yoinks {
     size_t n;
     char **p;
@@ -237,7 +234,6 @@ static bool nocompress;
 static bool isunittest;
 static bool insertrunner;
 static bool insertlauncher;
-static uint64_t image_base;
 static int strip_components;
 static struct ElfWriter *elf;
 static const char *path_prefix;
@@ -249,7 +245,6 @@ static void
 GetOpts(int argc, char *argv[])
 {
     int opt;
-    image_base = IMAGE_BASE_VIRTUAL;
     path_prefix = ".python";
     while ((opt = getopt(argc, argv, "hnmtr0Bb:O:o:C:P:Y:")) != -1) {
         switch (opt) {
@@ -281,9 +276,6 @@ GetOpts(int argc, char *argv[])
             break;
         case 'C':
             strip_components = atoi(optarg);
-            break;
-        case 'b':
-            image_base = strtoul(optarg, NULL, 0);
             break;
         case 'Y':
             yoinks.p = realloc(yoinks.p, ++yoinks.n * sizeof(*yoinks.p));
@@ -422,7 +414,7 @@ IsIgnoredModule(const char *s)
     l = 0;
     r = ARRAYLEN(kIgnoredModules) - 1;
     while (l <= r) {
-        m = (l + r) >> 1;
+        m = (l & r) + ((l ^ r) >> 1);  // floor((a+b)/2)
         x = strcmp(s, kIgnoredModules[m]);
         if (x < 0) {
             r = m - 1;
@@ -477,13 +469,13 @@ Analyze(const char *modname, PyObject *code, struct Interner *globals)
     int rc;
     bool istry;
     unsigned a;
-    size_t i, j, n;
+    size_t i, n;
     char *p, *mod, *imp;
     int x, y, op, arg, rel;
     PyObject *co_code, *co_names, *co_consts, *name, *iter, *item;
     rc = 0;
     mod = 0;
-    istry = rel = 0;
+    istry = (rel = 0);
     assert(PyCode_Check(code));
     co_code = ((PyCodeObject *)code)->co_code;
     co_names = ((PyCodeObject *)code)->co_names;
@@ -659,22 +651,18 @@ Objectify(void)
     if (ispkg) {
         elfwriter_zip(elf, zipdir, zipdir, strlen(zipdir),
                       pydata, 0, 040755, timestamp, timestamp,
-                      timestamp, nocompress, image_base,
-                      kZipCdirHdrLinkableSize);
+                      timestamp, nocompress);
     }
     if (!binonly) {
         elfwriter_zip(elf, gc(xstrcat("py:", modname)), zipfile,
                       strlen(zipfile), pydata, pysize, st.st_mode, timestamp,
-                      timestamp, timestamp, nocompress, image_base,
-                      kZipCdirHdrLinkableSize);
+                      timestamp, timestamp, nocompress);
     }
     elfwriter_zip(elf, gc(xstrcat("pyc:", modname)), gc(xstrcat(zipfile, 'c')),
                   strlen(zipfile) + 1, pycdata, pycsize, st.st_mode, timestamp,
-                  timestamp, timestamp, nocompress, image_base,
-                  kZipCdirHdrLinkableSize);
+                  timestamp, timestamp, nocompress);
     elfwriter_align(elf, 1, 0);
-    elfwriter_startsection(elf, ".yoink", SHT_PROGBITS,
-                           SHF_ALLOC | SHF_EXECINSTR);
+    elfwriter_startsection(elf, ".yoink", SHT_PROGBITS, 0);
     if (!(rc = AnalyzeModule(modname))) {
         if (*path_prefix && !IsDot()) {
             elfwriter_yoink(elf, gc(xstrcat(path_prefix, "/")), STB_GLOBAL);
@@ -689,9 +677,6 @@ Objectify(void)
             elfwriter_yoink(elf, "RunPythonModule", STB_GLOBAL);
         } else if (insertlauncher) {
             elfwriter_yoink(elf, "LaunchPythonModule", STB_GLOBAL);
-        }
-        if (isunittest) {
-            elfwriter_yoink(elf, "testlib_quota_handlers", STB_GLOBAL);
         }
         elfwriter_finishsection(elf);
         if (insertrunner || insertlauncher) {
@@ -717,6 +702,7 @@ int
 main(int argc, char *argv[])
 {
     int ec;
+    ShowCrashReports();
     timestamp.tv_sec = 1647414000; /* determinism */
     /* clock_gettime(CLOCK_REALTIME, &timestamp); */
     GetOpts(argc, argv);

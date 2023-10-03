@@ -16,21 +16,22 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/bits.h"
+#include "libc/intrin/bits.h"
 #include "libc/intrin/kprintf.h"
 #include "libc/log/color.internal.h"
-#include "libc/log/log.h"
+#include "libc/mem/gc.h"
 #include "libc/nexgen32e/cpuid4.internal.h"
 #include "libc/nexgen32e/nexgen32e.h"
 #include "libc/nexgen32e/rdtscp.h"
 #include "libc/nexgen32e/x86feature.h"
 #include "libc/nexgen32e/x86info.h"
-#include "libc/runtime/gc.internal.h"
+#include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
 #include "libc/time/time.h"
-#include "libc/x/x.h"
+#include "libc/x/xasprintf.h"
 #include "tool/decode/lib/idname.h"
 #include "tool/decode/lib/x86idnames.h"
+#ifdef __x86_64__
 
 #define CANIUSE(FEATURE) caniuse(#FEATURE, X86_HAVE(FEATURE))
 #define SHOW(CONSTANT)   show(#CONSTANT, CONSTANT)
@@ -75,15 +76,15 @@ void showcachesizes(void) {
   CPUID4_ITERATE(i, {
     printf("%-19s%s%s %u-way %,7u byte cache w/%s %,5u sets of %u byte lines "
            "shared across %u threads\n",
-           gc(xasprintf("Level %u%s", CPUID4_CACHE_LEVEL,
-                        CPUID4_CACHE_TYPE == 1   ? " data"
-                        : CPUID4_CACHE_TYPE == 2 ? " code"
-                                                 : "")),
+           _gc(xasprintf("Level %u%s", CPUID4_CACHE_LEVEL,
+                         CPUID4_CACHE_TYPE == 1   ? " data"
+                         : CPUID4_CACHE_TYPE == 2 ? " code"
+                                                  : "")),
            CPUID4_IS_FULLY_ASSOCIATIVE ? " fully-associative" : "",
            CPUID4_COMPLEX_INDEXING ? " complexly-indexed" : "",
            CPUID4_WAYS_OF_ASSOCIATIVITY, CPUID4_CACHE_SIZE_IN_BYTES,
            CPUID4_PHYSICAL_LINE_PARTITIONS > 1
-               ? gc(xasprintf(" %u physically partitioned"))
+               ? _gc(xasprintf(" %u physically partitioned"))
                : "",
            CPUID4_NUMBER_OF_SETS, CPUID4_SYSTEM_COHERENCY_LINE_SIZE,
            CPUID4_MAX_THREADS_SHARING_CACHE);
@@ -333,3 +334,10 @@ int main(int argc, char *argv[]) {
 
   return 0;
 }
+
+#else
+
+int main(int argc, char *argv[]) {
+}
+
+#endif /* __x86_64__ */

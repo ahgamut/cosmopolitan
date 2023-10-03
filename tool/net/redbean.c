@@ -16,58 +16,74 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/atomic.h"
-#include "libc/bits/safemacros.internal.h"
+#include "ape/sections.internal.h"
+#include "libc/assert.h"
+#include "libc/atomic.h"
 #include "libc/calls/calls.h"
-#include "libc/calls/ioctl.h"
-#include "libc/calls/math.h"
+#include "libc/calls/pledge.h"
 #include "libc/calls/struct/dirent.h"
-#include "libc/calls/struct/filter.h"
 #include "libc/calls/struct/flock.h"
 #include "libc/calls/struct/iovec.h"
 #include "libc/calls/struct/rusage.h"
 #include "libc/calls/struct/sigaction.h"
+#include "libc/calls/struct/sigset.h"
 #include "libc/calls/struct/stat.h"
 #include "libc/calls/struct/termios.h"
+#include "libc/calls/struct/timespec.h"
+#include "libc/calls/termios.h"
 #include "libc/dce.h"
 #include "libc/dns/dns.h"
 #include "libc/dns/hoststxt.h"
-#include "libc/dos.h"
+#include "libc/dos.internal.h"
+#include "libc/errno.h"
 #include "libc/fmt/conv.h"
 #include "libc/fmt/itoa.h"
-#include "libc/intrin/kprintf.h"
+#include "libc/fmt/wintime.internal.h"
+#include "libc/intrin/atomic.h"
+#include "libc/intrin/bits.h"
+#include "libc/intrin/bsr.h"
+#include "libc/intrin/likely.h"
 #include "libc/intrin/nomultics.internal.h"
-#include "libc/intrin/wait0.internal.h"
+#include "libc/intrin/safemacros.internal.h"
+#include "libc/log/appendresourcereport.internal.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
 #include "libc/macros.internal.h"
 #include "libc/math.h"
 #include "libc/mem/alloca.h"
-#include "libc/nexgen32e/bsr.h"
+#include "libc/mem/gc.h"
+#include "libc/mem/gc.internal.h"
+#include "libc/mem/mem.h"
 #include "libc/nexgen32e/crc32.h"
-#include "libc/nexgen32e/nt2sysv.h"
 #include "libc/nexgen32e/rdtsc.h"
-#include "libc/nexgen32e/threaded.h"
+#include "libc/nexgen32e/vendor.internal.h"
 #include "libc/nexgen32e/x86feature.h"
 #include "libc/nt/enum/fileflagandattributes.h"
-#include "libc/nt/thread.h"
-#include "libc/rand/rand.h"
 #include "libc/runtime/clktck.h"
-#include "libc/runtime/gc.h"
-#include "libc/runtime/gc.internal.h"
 #include "libc/runtime/internal.h"
+#include "libc/runtime/memtrack.internal.h"
+#include "libc/runtime/runtime.h"
 #include "libc/runtime/stack.h"
 #include "libc/sock/goodsocket.internal.h"
 #include "libc/sock/sock.h"
-#include "libc/stdio/append.internal.h"
+#include "libc/sock/struct/pollfd.h"
+#include "libc/sock/struct/sockaddr.h"
+#include "libc/stdio/append.h"
 #include "libc/stdio/hex.internal.h"
+#include "libc/stdio/rand.h"
+#include "libc/stdio/stdio.h"
 #include "libc/str/slice.h"
+#include "libc/str/str.h"
+#include "libc/str/strwidth.h"
 #include "libc/sysv/consts/af.h"
+#include "libc/sysv/consts/auxv.h"
+#include "libc/sysv/consts/clock.h"
 #include "libc/sysv/consts/clone.h"
 #include "libc/sysv/consts/dt.h"
 #include "libc/sysv/consts/ex.h"
 #include "libc/sysv/consts/exit.h"
 #include "libc/sysv/consts/f.h"
+#include "libc/sysv/consts/hwcap.h"
 #include "libc/sysv/consts/inaddr.h"
 #include "libc/sysv/consts/ipproto.h"
 #include "libc/sysv/consts/madv.h"
@@ -82,15 +98,21 @@
 #include "libc/sysv/consts/sig.h"
 #include "libc/sysv/consts/sock.h"
 #include "libc/sysv/consts/termios.h"
+#include "libc/sysv/consts/timer.h"
 #include "libc/sysv/consts/w.h"
 #include "libc/sysv/errfuns.h"
+#include "libc/thread/thread.h"
+#include "libc/thread/tls.h"
 #include "libc/x/x.h"
-#include "libc/zip.h"
+#include "libc/x/xasprintf.h"
+#include "libc/zip.internal.h"
 #include "net/http/escape.h"
 #include "net/http/http.h"
 #include "net/http/ip.h"
+#include "net/http/tokenbucket.h"
+#include "net/http/url.h"
 #include "net/https/https.h"
-#include "third_party/getopt/getopt.h"
+#include "third_party/getopt/getopt.internal.h"
 #include "third_party/lua/cosmo.h"
 #include "third_party/lua/lauxlib.h"
 #include "third_party/lua/lrepl.h"
@@ -109,14 +131,22 @@
 #include "third_party/zlib/zlib.h"
 #include "tool/args/args.h"
 #include "tool/build/lib/case.h"
+#include "tool/net/lfinger.h"
 #include "tool/net/lfuncs.h"
+#include "tool/net/ljson.h"
+#include "tool/net/lpath.h"
 #include "tool/net/luacheck.h"
 #include "tool/net/sandbox.h"
 
-STATIC_STACK_SIZE(0x40000);
-STATIC_YOINK("zip_uri_support");
-#if !IsTiny()
-STATIC_YOINK("ShowCrashReportsEarly");
+#pragma GCC diagnostic ignored "-Wunused-variable"
+
+STATIC_STACK_ALIGN(GetStackSize());
+
+__static_yoink("zipos");
+
+#ifdef USE_BLINK
+__static_yoink("blink_linux_aarch64");  // for raspberry pi
+__static_yoink("blink_xnu_aarch64");    // is apple silicon
 #endif
 
 /**
@@ -143,41 +173,49 @@ STATIC_YOINK("ShowCrashReportsEarly");
 #define REDBEAN "redbean"
 #endif
 
-#define VERSION          0x020007
-#define HEARTBEAT        5000 /*ms*/
+#define VERSION          0x020200
 #define HASH_LOAD_FACTOR /* 1. / */ 4
 #define MONITOR_MICROS   150000
 #define READ(F, P, N)    readv(F, &(struct iovec){P, N}, 1)
 #define WRITE(F, P, N)   writev(F, &(struct iovec){P, N}, 1)
-#define LockInc(P)       asm volatile("lock incq\t%0" : "=m"(*(P)))
-#define LockDec(P)       asm volatile("lock decq\t%0" : "=m"(*(P)))
+#define LockInc(P)       (*(_Atomic(typeof(*(P))) *)(P))++
+#define LockDec(P)       (*(_Atomic(typeof(*(P))) *)(P))--
 #define AppendCrlf(P)    mempcpy(P, "\r\n", 2)
-#define HasHeader(H)     (!!msg.headers[H].a)
-#define HeaderData(H)    (inbuf.p + msg.headers[H].a)
-#define HeaderLength(H)  (msg.headers[H].b - msg.headers[H].a)
+#define HasHeader(H)     (!!cpm.msg.headers[H].a)
+#define HeaderData(H)    (inbuf.p + cpm.msg.headers[H].a)
+#define HeaderLength(H)  (cpm.msg.headers[H].b - cpm.msg.headers[H].a)
 #define HeaderEqualCase(H, S) \
   SlicesEqualCase(S, strlen(S), HeaderData(H), HeaderLength(H))
 
-#define TRACE_BEGIN             \
-  do {                          \
-    if (!IsTiny()) {            \
-      if (funtrace) ++__ftrace; \
-      if (systrace) ++__strace; \
-    }                           \
+#define TRACE_BEGIN         \
+  do {                      \
+    if (!IsTiny()) {        \
+      if (funtrace) {       \
+        ftrace_enabled(+1); \
+      }                     \
+      if (systrace) {       \
+        strace_enabled(+1); \
+      }                     \
+    }                       \
   } while (0)
 
-#define TRACE_END               \
-  do {                          \
-    if (!IsTiny()) {            \
-      if (funtrace) --__ftrace; \
-      if (systrace) --__strace; \
-    }                           \
+#define TRACE_END           \
+  do {                      \
+    if (!IsTiny()) {        \
+      if (funtrace) {       \
+        ftrace_enabled(-1); \
+      }                     \
+      if (systrace) {       \
+        strace_enabled(-1); \
+      }                     \
+    }                       \
   } while (0)
 
-// letters not used: EINOQYnoqwxy
+// letters not used: INOQYnoqwxy
 // digits not used:  0123456789
-// puncts not used:  !"#$&'()*+,-./;<=>@[\]^_`{|}~
-#define GETOPTS "%BJSVXZabdfghijkmsuvzA:C:D:F:G:H:K:L:M:P:R:T:U:W:c:e:l:p:r:t:"
+// puncts not used:  !"#$&'()+,-./;<=>@[\]^_`{|}~
+#define GETOPTS \
+  "*%BEJSVXZabdfghijkmsuvzA:C:D:F:G:H:K:L:M:P:R:T:U:W:c:e:l:p:r:t:w:"
 
 static const uint8_t kGzipHeader[] = {
     0x1F,        // MAGNUM
@@ -312,11 +350,36 @@ static struct Assets {
   } * p;
 } assets;
 
+static struct TrustedIps {
+  size_t n;
+  struct TrustedIp {
+    uint32_t ip;
+    uint32_t mask;
+  } * p;
+} trustedips;
+
+struct TokenBucket {
+  signed char cidr;
+  signed char reject;
+  signed char ignore;
+  signed char ban;
+  struct timespec replenish;
+  union {
+    atomic_schar *b;
+    atomic_uint_fast64_t *w;
+  };
+} tokenbucket;
+
+struct Blackhole {
+  struct sockaddr_un addr;
+  int fd;
+} blackhole;
+
 static struct Shared {
   int workers;
-  long double nowish;
-  long double lastreindex;
-  long double lastmeltdown;
+  struct timespec nowish;
+  struct timespec lastreindex;
+  struct timespec lastmeltdown;
   char currentdate[32];
   struct rusage server;
   struct rusage children;
@@ -325,7 +388,7 @@ static struct Shared {
 #include "tool/net/counters.inc"
 #undef C
   } c;
-  _Alignas(64) char montermlock;
+  pthread_spinlock_t montermlock;
 } * shared;
 
 static const char kCounterNames[] =
@@ -337,12 +400,30 @@ static const char kCounterNames[] =
 typedef ssize_t (*reader_f)(int, void *, size_t);
 typedef ssize_t (*writer_f)(int, struct iovec *, int);
 
+struct ClearedPerMessage {
+  bool istext;
+  bool branded;
+  bool hascontenttype;
+  bool gotcachecontrol;
+  bool gotxcontenttypeoptions;
+  int frags;
+  int statuscode;
+  int isyielding;
+  char *outbuf;
+  char *content;
+  size_t gzipped;
+  size_t contentlength;
+  char *luaheaderp;
+  const char *referrerpolicy;
+  size_t msgsize;
+  ssize_t (*generator)(struct iovec[3]);
+  struct Strings loops;
+  struct HttpMessage msg;
+} cpm;
+
 static bool suiteb;
 static bool killed;
-static bool istext;
 static bool zombied;
-static bool gzipped;
-static bool branded;
 static bool usingssl;
 static bool funtrace;
 static bool systrace;
@@ -354,7 +435,6 @@ static bool daemonize;
 static bool logrusage;
 static bool logbodies;
 static bool requiressl;
-static bool isterminal;
 static bool sslcliused;
 static bool loglatency;
 static bool terminated;
@@ -362,14 +442,13 @@ static bool uniprocess;
 static bool invalidated;
 static bool logmessages;
 static bool isinitialized;
-static bool checkedmethod;
 static bool sslinitialized;
 static bool sslfetchverify;
-static bool hascontenttype;
-static bool gotcachecontrol;
+static bool selfmodifiable;
 static bool interpretermode;
 static bool sslclientverify;
 static bool connectionclose;
+static bool hasonloglatency;
 static bool hasonworkerstop;
 static bool isexitingworker;
 static bool hasonworkerstart;
@@ -379,85 +458,73 @@ static bool ishandlingrequest;
 static bool listeningonport443;
 static bool hasonprocesscreate;
 static bool hasonprocessdestroy;
-static bool loggednetworkorigin;
 static bool ishandlingconnection;
 static bool hasonclientconnection;
-static bool gotxcontenttypeoptions;
 static bool evadedragnetsurveillance;
-static _Atomic(bool) terminatemonitor;
 
 static int zfd;
-static int frags;
 static int gmtoff;
 static int client;
 static int mainpid;
 static int sandboxed;
 static int changeuid;
 static int changegid;
-static int isyielding;
-static int statuscode;
+static int maxworkers;
 static int shutdownsig;
 static int sslpskindex;
 static int oldloglevel;
-static int *monitortid;
-static char *monitortls;
-static char *monitorstack;
-static int maxpayloadsize;
 static int messageshandled;
 static int sslticketlifetime;
 static uint32_t clientaddrsize;
+static atomic_int terminatemonitor;
 
+static char *brand;
 static size_t zsize;
-static char *outbuf;
 static lua_State *GL;
 static lua_State *YL;
-static char *content;
 static uint8_t *zmap;
-static uint8_t *zbase;
 static uint8_t *zcdir;
 static size_t hdrsize;
-static size_t msgsize;
 static size_t amtread;
 static reader_f reader;
 static writer_f writer;
 static char *extrahdrs;
-static char *luaheaderp;
 static const char *zpath;
-static const char *brand;
+static char *serverheader;
 static char gzip_footer[8];
+static long maxpayloadsize;
 static const char *pidpath;
 static const char *logpath;
-static const char *histpath;
+static uint32_t *interfaces;
 static struct pollfd *polls;
-static struct Strings loops;
 static size_t payloadlength;
-static size_t contentlength;
 static int64_t cacheseconds;
+static char *cachedirective;
 static const char *monitortty;
-static const char *serverheader;
 static struct Strings stagedirs;
 static struct Strings hidepaths;
 static const char *launchbrowser;
-static const char *referrerpolicy;
-static ssize_t (*generator)(struct iovec[3]);
+static const char ctIdx = 'c';  // a pseudo variable to get address of
 
+static pthread_t replth;
+static pthread_t monitorth;
 static struct Buffer inbuf_actual;
 static struct Buffer inbuf;
 static struct Buffer oldin;
 static struct Buffer hdrbuf;
 static struct timeval timeout;
 static struct Buffer effectivepath;
+static struct timespec heartbeatinterval;
 
 static struct Url url;
-static struct HttpMessage msg;
 
 static struct stat zst;
-static long double startread;
-static long double lastrefresh;
-static long double startserver;
-static long double startrequest;
-static long double lastheartbeat;
-static long double startconnection;
+static struct timespec startread;
+static struct timespec lastrefresh;
+static struct timespec startserver;
+static struct timespec startrequest;
+static struct timespec lastheartbeat;
+static struct timespec startconnection;
 static struct sockaddr_in clientaddr;
 static struct sockaddr_in *serveraddr;
 
@@ -548,7 +615,7 @@ static void UnmapLater(int f, void *p, size_t n) {
 
 static void CollectGarbage(void) {
   __log_level = oldloglevel;
-  DestroyHttpMessage(&msg);
+  DestroyHttpMessage(&cpm.msg);
   while (freelist.n) {
     free(freelist.p[--freelist.n]);
   }
@@ -560,14 +627,18 @@ static void CollectGarbage(void) {
 }
 
 static void UseOutput(void) {
-  content = FreeLater(outbuf);
-  contentlength = appendz(outbuf).i;
-  outbuf = 0;
+  cpm.content = FreeLater(cpm.outbuf);
+  cpm.contentlength = appendz(cpm.outbuf).i;
+  cpm.outbuf = 0;
 }
 
 static void DropOutput(void) {
-  FreeLater(outbuf);
-  outbuf = 0;
+  FreeLater(cpm.outbuf);
+  cpm.outbuf = 0;
+}
+
+static bool ShouldAvoidGzip(void) {
+  return (IsGenuineBlink() && !X86_HAVE(JIT));
 }
 
 static char *MergePaths(const char *p, size_t n, const char *q, size_t m,
@@ -582,11 +653,11 @@ static char *MergePaths(const char *p, size_t n, const char *q, size_t m,
 }
 
 static long FindRedirect(const char *s, size_t n) {
-  int c, m, l, r, z;
+  int c, m, l, r;
   l = 0;
   r = redirects.n - 1;
   while (l <= r) {
-    m = (l + r) >> 1;
+    m = (l & r) + ((l ^ r) >> 1);  // floor((a+b)/2)
     c = CompareSlices(redirects.p[m].path.s, redirects.p[m].path.n, s, n);
     if (c < 0) {
       l = m + 1;
@@ -614,7 +685,7 @@ static void UseCertificate(mbedtls_ssl_config *c, struct Cert *kp,
                            const char *role) {
   VERBOSEF("(ssl) using %s certificate %`'s for HTTPS %s",
            mbedtls_pk_get_name(&kp->cert->pk),
-           gc(FormatX509Name(&kp->cert->subject)), role);
+           _gc(FormatX509Name(&kp->cert->subject)), role);
   CHECK_EQ(0, mbedtls_ssl_conf_own_cert(c, kp->cert, kp->key));
 }
 
@@ -631,32 +702,21 @@ static void InternCertificate(mbedtls_x509_crt *cert, mbedtls_x509_crt *prev) {
   if (prev) {
     if (mbedtls_x509_crt_check_parent(prev, cert, 1)) {
       DEBUGF("(ssl) unbundling %`'s from %`'s",
-             gc(FormatX509Name(&prev->subject)),
-             gc(FormatX509Name(&cert->subject)));
+             _gc(FormatX509Name(&prev->subject)),
+             _gc(FormatX509Name(&cert->subject)));
       prev->next = 0;
     } else if ((r = mbedtls_x509_crt_check_signature(prev, cert, 0))) {
       WARNF("(ssl) invalid signature for %`'s -> %`'s (-0x%04x)",
-            gc(FormatX509Name(&prev->subject)),
-            gc(FormatX509Name(&cert->subject)), -r);
+            _gc(FormatX509Name(&prev->subject)),
+            _gc(FormatX509Name(&cert->subject)), -r);
     }
   }
   if (mbedtls_x509_time_is_past(&cert->valid_to)) {
     WARNF("(ssl) certificate %`'s is expired",
-          gc(FormatX509Name(&cert->subject)));
+          _gc(FormatX509Name(&cert->subject)));
   } else if (mbedtls_x509_time_is_future(&cert->valid_from)) {
     WARNF("(ssl) certificate %`'s is from the future",
-          gc(FormatX509Name(&cert->subject)));
-  }
-  for (i = 0; i < certs.n; ++i) {
-    if (!certs.p[i].cert) continue;
-    if (mbedtls_pk_get_type(&cert->pk) ==
-            mbedtls_pk_get_type(&certs.p[i].cert->pk) &&
-        !mbedtls_x509_name_cmp(&cert->subject, &certs.p[i].cert->subject)) {
-      VERBOSEF("(ssl) %s %`'s is already loaded",
-               mbedtls_pk_get_name(&cert->pk),
-               gc(FormatX509Name(&cert->subject)));
-      return;
-    }
+          _gc(FormatX509Name(&cert->subject)));
   }
   for (i = 0; i < certs.n; ++i) {
     if (!certs.p[i].cert && certs.p[i].key &&
@@ -722,7 +782,7 @@ static void ProgramPrivateKey(const char *p, size_t n) {
   rc = mbedtls_pk_parse_key(key, waqapi, n + 1, 0, 0);
   mbedtls_platform_zeroize(waqapi, n);
   free(waqapi);
-  if (rc != 0) DIEF("(ssl) error: load key (grep -0x%04x)", -rc);
+  if (rc != 0) FATALF("(ssl) error: load key (grep -0x%04x)", -rc);
   for (i = 0; i < certs.n; ++i) {
     if (certs.p[i].cert && !certs.p[i].key &&
         !mbedtls_pk_check_pair(&certs.p[i].cert->pk, key)) {
@@ -743,13 +803,13 @@ static void ProgramFile(const char *path, void program(const char *, size_t)) {
     mbedtls_platform_zeroize(p, n);
     free(p);
   } else {
-    DIEF("(srvr) error: failed to read file %`'s", path);
+    FATALF("(srvr) error: failed to read file %`'s", path);
   }
 }
 
 static void ProgramPort(long port) {
   if (!(0 <= port && port <= 65535)) {
-    DIEF("(cfg) error: bad port: %d", port);
+    FATALF("(cfg) error: bad port: %d", port);
   }
   if (port == 443) listeningonport443 = true;
   ports.p = realloc(ports.p, ++ports.n * sizeof(*ports.p));
@@ -773,12 +833,12 @@ static void ProgramAddr(const char *addr) {
       struct addrinfo hint = {AI_NUMERICSERV, AF_INET, SOCK_STREAM,
                               IPPROTO_TCP};
       if ((rc = getaddrinfo(addr, "0", &hint, &ai)) != EAI_SUCCESS) {
-        DIEF("(cfg) error: bad addr: %s (EAI_%s)", addr, gai_strerror(rc));
+        FATALF("(cfg) error: bad addr: %s (EAI_%s)", addr, gai_strerror(rc));
       }
       ip = ntohl(ai->ai_addr4->sin_addr.s_addr);
       freeaddrinfo(ai);
     } else {
-      DIEF("(cfg) error: ProgramAddr() needs an IP in MODE=tiny: %s", addr);
+      FATALF("(cfg) error: ProgramAddr() needs an IP in MODE=tiny: %s", addr);
     }
   }
   ips.p = realloc(ips.p, ++ips.n * sizeof(*ips.p));
@@ -790,11 +850,11 @@ static void ProgramRedirect(int code, const char *sp, size_t sn, const char *dp,
   long i, j;
   struct Redirect r;
   if (code && code != 301 && code != 302 && code != 307 && code != 308) {
-    DIEF("(cfg) error: unsupported redirect code %d", code);
+    FATALF("(cfg) error: unsupported redirect code %d", code);
   }
 
   if (!(FreeLater(EncodeHttpHeaderValue(dp, dn, 0)))) {
-    DIEF("(cfg) error: invalid location %s", dp);
+    FATALF("(cfg) error: invalid location %s", dp);
   }
 
   r.code = code;
@@ -825,14 +885,51 @@ static void ProgramRedirectArg(int code, const char *s) {
   const char *p;
   n = strlen(s);
   if (!(p = memchr(s, '=', n))) {
-    DIEF("(cfg) error: redirect arg missing '='");
+    FATALF("(cfg) error: redirect arg missing '='");
   }
   ProgramRedirect(code, s, p - s, p + 1, n - (p - s + 1));
 }
 
+static void ProgramTrustedIp(uint32_t ip, int cidr) {
+  uint32_t mask;
+  mask = 0xffffffffu << (32 - cidr);
+  trustedips.p = xrealloc(trustedips.p, ++trustedips.n * sizeof(*trustedips.p));
+  trustedips.p[trustedips.n - 1].ip = ip;
+  trustedips.p[trustedips.n - 1].mask = mask;
+}
+
+static bool IsTrustedIp(uint32_t ip) {
+  int i;
+  uint32_t *p;
+  if (interfaces) {
+    for (p = interfaces; *p; ++p) {
+      if (ip == *p && !IsTestnetIp(ip)) {
+        DEBUGF("(token) ip is trusted because it's %s", "a local interface");
+        return true;
+      }
+    }
+  }
+  if (trustedips.n) {
+    for (i = 0; i < trustedips.n; ++i) {
+      if ((ip & trustedips.p[i].mask) == trustedips.p[i].ip) {
+        DEBUGF("(token) ip is trusted because it's %s", "whitelisted");
+        return true;
+      }
+    }
+    return false;
+  } else if (IsPrivateIp(ip) && !IsTestnetIp(ip)) {
+    DEBUGF("(token) ip is trusted because it's %s", "private");
+    return true;
+  } else if (IsLoopbackIp(ip)) {
+    DEBUGF("(token) ip is trusted because it's %s", "loopback");
+    return true;
+  } else {
+    return false;
+  }
+}
+
 static void DescribeAddress(char buf[40], uint32_t addr, uint16_t port) {
   char *p;
-  const char *s;
   p = buf;
   p = FormatUint32(p, (addr & 0xFF000000) >> 030), *p++ = '.';
   p = FormatUint32(p, (addr & 0x00FF0000) >> 020), *p++ = '.';
@@ -843,34 +940,55 @@ static void DescribeAddress(char buf[40], uint32_t addr, uint16_t port) {
   assert(p - buf < 40);
 }
 
-static inline void GetServerAddr(uint32_t *ip, uint16_t *port) {
+static inline int GetServerAddr(uint32_t *ip, uint16_t *port) {
   *ip = ntohl(serveraddr->sin_addr.s_addr);
   if (port) *port = ntohs(serveraddr->sin_port);
+  return 0;
 }
 
-static inline void GetClientAddr(uint32_t *ip, uint16_t *port) {
+static inline int GetClientAddr(uint32_t *ip, uint16_t *port) {
   *ip = ntohl(clientaddr.sin_addr.s_addr);
   if (port) *port = ntohs(clientaddr.sin_port);
+  return 0;
 }
 
-static inline void GetRemoteAddr(uint32_t *ip, uint16_t *port) {
+static inline int GetRemoteAddr(uint32_t *ip, uint16_t *port) {
   GetClientAddr(ip, port);
-  if (HasHeader(kHttpXForwardedFor) &&
-      (IsPrivateIp(*ip) || IsLoopbackIp(*ip))) {
-    if (ParseForwarded(HeaderData(kHttpXForwardedFor),
-                       HeaderLength(kHttpXForwardedFor), ip, port) == -1)
-      WARNF("invalid X-Forwarded-For value: %`'.*s",
-            HeaderLength(kHttpXForwardedFor), HeaderData(kHttpXForwardedFor));
+  if (HasHeader(kHttpXForwardedFor)) {
+    if (IsTrustedIp(*ip)) {
+      if (ParseForwarded(HeaderData(kHttpXForwardedFor),
+                         HeaderLength(kHttpXForwardedFor), ip, port) == -1) {
+        VERBOSEF("could not parse x-forwarded-for %`'.*s len=%ld",
+                 HeaderLength(kHttpXForwardedFor),
+                 HeaderData(kHttpXForwardedFor),
+                 HeaderLength(kHttpXForwardedFor));
+        return -1;
+      }
+    } else {
+      WARNF(
+          "%hhu.%hhu.%hhu.%hhu isn't authorized to send x-forwarded-for %`'.*s",
+          *ip >> 24, *ip >> 16, *ip >> 8, *ip, HeaderLength(kHttpXForwardedFor),
+          HeaderData(kHttpXForwardedFor));
+    }
   }
+  return 0;
 }
 
 static char *DescribeClient(void) {
-  uint32_t ip;
+  char str[40];
   uint16_t port;
-  static char clientaddrstr[40];
-  GetRemoteAddr(&ip, &port);
-  DescribeAddress(clientaddrstr, ip, port);
-  return clientaddrstr;
+  uint32_t client;
+  static char description[128];
+  GetClientAddr(&client, &port);
+  if (HasHeader(kHttpXForwardedFor) && IsTrustedIp(client)) {
+    DescribeAddress(str, client, port);
+    snprintf(description, sizeof(description), "%'.*s via %s",
+             HeaderLength(kHttpXForwardedFor), HeaderData(kHttpXForwardedFor),
+             str);
+  } else {
+    DescribeAddress(description, client, port);
+  }
+  return description;
 }
 
 static char *DescribeServer(void) {
@@ -887,7 +1005,7 @@ static void ProgramBrand(const char *s) {
   free(brand);
   free(serverheader);
   if (!(p = EncodeHttpHeaderValue(s, -1, 0))) {
-    DIEF("(cfg) error: brand isn't latin1 encodable: %`'s", s);
+    FATALF("(cfg) error: brand isn't latin1 encodable: %`'s", s);
   }
   brand = strdup(s);
   serverheader = xasprintf("Server: %s\r\n", p);
@@ -910,7 +1028,7 @@ static void ProgramTimeout(long ms) {
     timeout.tv_usec = 0;
   } else {
     if (ms < MINTIMEOUT) {
-      DIEF("(cfg) error: timeout needs to be %dms or greater", MINTIMEOUT);
+      FATALF("(cfg) error: timeout needs to be %dms or greater", MINTIMEOUT);
     }
     d = ldiv(ms, 1000);
     timeout.tv_sec = d.quot;
@@ -918,16 +1036,17 @@ static void ProgramTimeout(long ms) {
   }
 }
 
-static void ProgramCache(long x) {
+static void ProgramCache(long x, const char *s) {
   cacheseconds = x;
+  if (s) cachedirective = strdup(s);
 }
 
 static void SetDefaults(void) {
-  ProgramBrand(gc(xasprintf("%s/%hhd.%hhd.%hhd", REDBEAN, VERSION >> 020,
-                            VERSION >> 010, VERSION >> 000)));
+  ProgramBrand(_gc(xasprintf("%s/%hhd.%hhd.%hhd", REDBEAN, VERSION >> 020,
+                             VERSION >> 010, VERSION >> 000)));
   __log_level = kLogInfo;
   maxpayloadsize = 64 * 1024;
-  ProgramCache(-1);
+  ProgramCache(-1, "must-revalidate");
   ProgramTimeout(60 * 1000);
   ProgramSslTicketLifetime(24 * 60 * 60);
   sslfetchverify = true;
@@ -952,21 +1071,50 @@ static bool HasString(struct Strings *l, const char *s, size_t n) {
   return false;
 }
 
+const char *DEFAULTLUAPATH = "/zip/.lua/?.lua;/zip/.lua/?/init.lua";
+
+static void UpdateLuaPath(const char *s) {
+#ifndef STATIC
+  lua_State *L = GL;
+  char *curpath = "";
+  char *respath = 0;
+  char *t;
+  int n = lua_gettop(L);
+  lua_getglobal(L, "package");
+  if (lua_istable(L, -1)) {
+    lua_getfield(L, -1, "path");
+    curpath = (void *)luaL_optstring(L, -1, "");
+    if ((t = strstr(curpath, DEFAULTLUAPATH))) {
+      // if the DEFAULT path is found, prepend the path in front of it
+      respath = xasprintf("%.*s%s/.lua/?.lua;%s/.lua/?/init.lua;%s",
+                          t - curpath, curpath, s, s, t);
+    } else {
+      // if the DEFAULT path is not found, append to the end
+      respath = xasprintf("%s;%s/.lua/?.lua;%s/.lua/?/init.lua", curpath, s, s);
+    }
+    lua_pushstring(L, _gc(respath));
+    lua_setfield(L, -3, "path");
+  }
+  lua_settop(L, n);
+#endif
+}
+
 static void ProgramDirectory(const char *path) {
   char *s;
   size_t n;
   struct stat st;
   if (stat(path, &st) == -1 || !S_ISDIR(st.st_mode)) {
-    DIEF("(cfg) error: not a directory: %`'s", path);
+    FATALF("(cfg) error: not a directory: %`'s", path);
   }
   s = strdup(path);
   n = strlen(s);
   INFOF("(cfg) program directory: %s", s);
   AddString(&stagedirs, s, n);
+  UpdateLuaPath(s);
 }
 
 static void ProgramHeader(const char *s) {
-  char *p, *v, *h;
+  char *p, *v;
   if ((p = strchr(s, ':')) && IsValidHttpToken(s, p - s) &&
       (v = EncodeLatin1(p + 1, -1, 0, kControlC0 | kControlC1 | kControlWs))) {
     switch (GetHttpHeader(s, p - s)) {
@@ -976,7 +1124,7 @@ static void ProgramHeader(const char *s) {
       case kHttpContentEncoding:
       case kHttpContentRange:
       case kHttpLocation:
-        DIEF("(cfg) error: can't program header: %`'s", s);
+        FATALF("(cfg) error: can't program header: %`'s", s);
       case kHttpServer:
         ProgramBrand(p + 1);
         break;
@@ -988,12 +1136,22 @@ static void ProgramHeader(const char *s) {
     }
     free(v);
   } else {
-    DIEF("(cfg) error: illegal header: %`'s", s);
+    FATALF("(cfg) error: illegal header: %`'s", s);
   }
 }
 
 static void ProgramLogPath(const char *s) {
+  int fd;
   logpath = strdup(s);
+  fd = open(logpath, O_APPEND | O_WRONLY | O_CREAT, 0640);
+  if (fd == -1) {
+    WARNF("(srvr) open(%`'s) failed: %m", logpath);
+    return;
+  }
+  if (fd != 2) {
+    dup2(fd, 2);
+    close(fd);
+  }
 }
 
 static void ProgramPidPath(const char *s) {
@@ -1013,64 +1171,51 @@ static bool IsServerFd(int fd) {
 static void ChangeUser(void) {
   if (changegid) {
     if (setgid(changegid)) {
-      FATALF("setgid() failed: %m");
+      FATALF("(cfg) setgid() failed: %m");
     }
   }
   // order matters
   if (changeuid) {
     if (setuid(changeuid)) {
-      FATALF("setuid() failed: %m");
+      FATALF("(cfg) setuid() failed: %m");
     }
   }
 }
 
 static void Daemonize(void) {
-  char ibuf[21];
-  int i, fd, pid;
-  for (i = 0; i < 256; ++i) {
-    if (!IsServerFd(i)) {
-      close(i);
-    }
-  }
-  if ((pid = fork()) > 0) exit(0);
+  if (fork() > 0) exit(0);
   setsid();
-  if ((pid = fork()) > 0) _exit(0);
+  if (fork() > 0) _exit(0);
   umask(0);
-  if (pidpath) {
-    fd = open(pidpath, O_CREAT | O_WRONLY, 0644);
-    WRITE(fd, ibuf, FormatInt32(ibuf, getpid()) - ibuf);
-    close(fd);
-  }
-  if (!logpath) ProgramLogPath("/dev/null");
-  open("/dev/null", O_RDONLY);
-  open(logpath, O_APPEND | O_WRONLY | O_CREAT, 0640);
-  dup2(1, 2);
-  ChangeUser();
 }
 
-static void LogLuaError(char *hook, char *err) {
+static void LogLuaError(const char *hook, const char *err) {
   ERRORF("(lua) failed to run %s: %s", hook, err);
 }
 
-static bool LuaEvalCode(const char *code) {
+// handles `-e CODE` (frontloads web server code)
+// handles `-i -e CODE` (interprets expression and exits)
+static void LuaEvalCode(const char *code) {
   lua_State *L = GL;
   int status = luaL_loadstring(L, code);
   if (status != LUA_OK || LuaCallWithTrace(L, 0, 0, NULL) != LUA_OK) {
     LogLuaError("lua code", lua_tostring(L, -1));
     lua_pop(L, 1);  // pop error
-    return false;
+    exit(1);
   }
   AssertLuaStackIsAt(L, 0);
-  return true;
 }
 
-static bool LuaEvalFile(const char *path) {
-  return LuaEvalCode(gc(xslurp(path, 0)));
+// handle `-F PATH` arg
+static void LuaEvalFile(const char *path) {
+  char *f = _gc(xslurp(path, 0));
+  if (!f) FATALF("(cfg) error: failed to read file %`'s", path);
+  LuaEvalCode(f);
 }
 
 static bool LuaOnClientConnection(void) {
+  bool dropit = false;
 #ifndef STATIC
-  bool dropit;
   uint32_t ip, serverip;
   uint16_t port, serverport;
   lua_State *L = GL;
@@ -1085,13 +1230,25 @@ static bool LuaOnClientConnection(void) {
     dropit = lua_toboolean(L, -1);
   } else {
     LogLuaError("OnClientConnection", lua_tostring(L, -1));
-    dropit = false;
   }
   lua_pop(L, 1);  // pop result or error
   AssertLuaStackIsAt(L, 0);
+#endif
   return dropit;
-#else
-  return false;
+}
+
+static void LuaOnLogLatency(long reqtime, long contime) {
+#ifndef STATIC
+  lua_State *L = GL;
+  int n = lua_gettop(L);
+  lua_getglobal(L, "OnLogLatency");
+  lua_pushinteger(L, reqtime);
+  lua_pushinteger(L, contime);
+  if (LuaCallWithTrace(L, 2, 0, NULL) != LUA_OK) {
+    LogLuaError("OnLogLatency", lua_tostring(L, -1));
+    lua_pop(L, 1);  // pop error
+  }
+  AssertLuaStackIsAt(L, n);
 #endif
 }
 
@@ -1114,6 +1271,25 @@ static void LuaOnProcessCreate(int pid) {
   }
   AssertLuaStackIsAt(L, 0);
 #endif
+}
+
+static bool LuaOnServerListen(int fd, uint32_t ip, uint16_t port) {
+  bool nouse = false;
+#ifndef STATIC
+  lua_State *L = GL;
+  lua_getglobal(L, "OnServerListen");
+  lua_pushinteger(L, fd);
+  lua_pushinteger(L, ip);
+  lua_pushinteger(L, port);
+  if (LuaCallWithTrace(L, 3, 1, NULL) == LUA_OK) {
+    nouse = lua_toboolean(L, -1);
+  } else {
+    LogLuaError("OnServerListen", lua_tostring(L, -1));
+  }
+  lua_pop(L, 1);  // pop result or error
+  AssertLuaStackIsAt(L, 0);
+#endif
+  return nouse;
 }
 
 static void LuaOnProcessDestroy(int pid) {
@@ -1193,7 +1369,7 @@ static void ReportWorkerResources(int pid, struct rusage *ru) {
 
 static void HandleWorkerExit(int pid, int ws, struct rusage *ru) {
   LockInc(&shared->c.connectionshandled);
-  AddRusage(&shared->children, ru);
+  rusage_add(&shared->children, ru);
   ReportWorkerExit(pid, ws);
   ReportWorkerResources(pid, ru);
   if (hasonprocessdestroy) {
@@ -1224,7 +1400,7 @@ static void WaitAll(void) {
         if (killed) {
           killed = false;
           terminated = false;
-          WARNF("(srvr) redbean shall terminate harder");
+          WARNF("(srvr) server shall terminate harder");
           KillGroup();
         }
         errno = 0;
@@ -1276,6 +1452,11 @@ static ssize_t ReadAll(int fd, char *p, size_t n) {
   return i;
 }
 
+static bool IsTakingTooLong(void) {
+  return meltdown && timespec_cmp(timespec_sub(timespec_real(), startread),
+                                  (struct timespec){2}) >= 0;
+}
+
 static ssize_t WritevAll(int fd, struct iovec *iov, int iovlen) {
   int i;
   ssize_t rc;
@@ -1302,7 +1483,7 @@ static ssize_t WritevAll(int fd, struct iovec *iov, int iovlen) {
     } else if (errno == EINTR) {
       errno = 0;
       LockInc(&shared->c.writeinterruputs);
-      if (killed || (meltdown && nowl() - startread > 2)) {
+      if (killed || IsTakingTooLong()) {
         return total ? total : -1;
       }
     } else {
@@ -1317,7 +1498,7 @@ static int TlsFlush(struct TlsBio *bio, const unsigned char *buf, size_t len) {
   if (len || bio->c > 0) {
     v[0].iov_base = bio->u;
     v[0].iov_len = MAX(0, bio->c);
-    v[1].iov_base = buf;
+    v[1].iov_base = (void *)buf;
     v[1].iov_len = len;
     if (WritevAll(bio->fd, v, 2) != -1) {
       if (bio->c > 0) bio->c = 0;
@@ -1339,7 +1520,6 @@ static int TlsFlush(struct TlsBio *bio, const unsigned char *buf, size_t len) {
 
 static int TlsSend(void *ctx, const unsigned char *buf, size_t len) {
   int rc;
-  struct iovec v[2];
   struct TlsBio *bio = ctx;
   if (bio->c >= 0 && bio->c + len <= sizeof(bio->u)) {
     memcpy(bio->u + bio->c, buf, len);
@@ -1352,7 +1532,6 @@ static int TlsSend(void *ctx, const unsigned char *buf, size_t len) {
 
 static int TlsRecvImpl(void *ctx, unsigned char *p, size_t n, uint32_t o) {
   int r;
-  ssize_t s;
   struct iovec v[2];
   struct TlsBio *bio = ctx;
   if ((r = TlsFlush(bio, 0, 0)) < 0) return r;
@@ -1386,7 +1565,6 @@ static int TlsRecvImpl(void *ctx, unsigned char *p, size_t n, uint32_t o) {
 
 static int TlsRecv(void *ctx, unsigned char *buf, size_t len, uint32_t tmo) {
   int rc;
-  struct TlsBio *bio = ctx;
   if (oldin.n) {
     rc = MIN(oldin.n, len);
     memcpy(buf, oldin.p, rc);
@@ -1517,8 +1695,6 @@ static void CertsDestroy(void) {
 }
 
 static void WipeServingKeys(void) {
-  size_t i;
-  long double t = nowl();
   if (uniprocess) return;
   mbedtls_ssl_ticket_free(&ssltick);
   mbedtls_ssl_key_cert_free(conf.key_cert), conf.key_cert = 0;
@@ -1553,7 +1729,7 @@ static bool TlsRouteFind(mbedtls_pk_type_t type, mbedtls_ssl_context *ssl,
           0, mbedtls_ssl_set_hs_own_cert(ssl, certs.p[i].cert, certs.p[i].key));
       DEBUGF("(ssl) TlsRoute(%s, %`'.*s) %s %`'s", mbedtls_pk_type_name(type),
              size, host, mbedtls_pk_get_name(&certs.p[i].cert->pk),
-             gc(FormatX509Name(&certs.p[i].cert->subject)));
+             _gc(FormatX509Name(&certs.p[i].cert->subject)));
       return true;
     }
   }
@@ -1568,7 +1744,7 @@ static bool TlsRouteFirst(mbedtls_pk_type_t type, mbedtls_ssl_context *ssl) {
           0, mbedtls_ssl_set_hs_own_cert(ssl, certs.p[i].cert, certs.p[i].key));
       DEBUGF("(ssl) TlsRoute(%s) %s %`'s", mbedtls_pk_type_name(type),
              mbedtls_pk_get_name(&certs.p[i].cert->pk),
-             gc(FormatX509Name(&certs.p[i].cert->subject)));
+             _gc(FormatX509Name(&certs.p[i].cert->subject)));
       return true;
     }
   }
@@ -1633,11 +1809,11 @@ static bool TlsSetup(void) {
                ssl.session->compression ? " COMPRESSED" : "",
                ssl.curve ? ssl.curve->name : "uncurved");
       DEBUGF("(ssl) client ciphersuite preference was %s",
-             gc(FormatSslClientCiphers(&ssl)));
+             _gc(FormatSslClientCiphers(&ssl)));
       return true;
     } else if (r == MBEDTLS_ERR_SSL_WANT_READ) {
       LockInc(&shared->c.handshakeinterrupts);
-      if (terminated || killed || (meltdown && nowl() - startread > 2)) {
+      if (terminated || killed || IsTakingTooLong()) {
         return false;
       }
     } else {
@@ -1657,12 +1833,12 @@ static bool TlsSetup(void) {
         case MBEDTLS_ERR_SSL_NO_CIPHER_CHOSEN:
           LockInc(&shared->c.sslnociphers);
           WARNF("(ssl) %s %s %s", DescribeClient(), "sslnociphers",
-                gc(FormatSslClientCiphers(&ssl)));
+                _gc(FormatSslClientCiphers(&ssl)));
           return false;
         case MBEDTLS_ERR_SSL_NO_USABLE_CIPHERSUITE:
           LockInc(&shared->c.sslcantciphers);
           WARNF("(ssl) %s %s %s", DescribeClient(), "sslcantciphers",
-                gc(FormatSslClientCiphers(&ssl)));
+                _gc(FormatSslClientCiphers(&ssl)));
           return false;
         case MBEDTLS_ERR_SSL_BAD_HS_PROTOCOL_VERSION:
           LockInc(&shared->c.sslnoversion);
@@ -1681,7 +1857,7 @@ static bool TlsSetup(void) {
         case MBEDTLS_ERR_X509_CERT_VERIFY_FAILED:
           LockInc(&shared->c.sslverifyfailed);
           WARNF("(ssl) %s SSL %s", DescribeClient(),
-                gc(DescribeSslVerifyFailure(
+                _gc(DescribeSslVerifyFailure(
                     ssl.session_negotiate->verify_result)));
           return false;
         case MBEDTLS_ERR_SSL_FATAL_ALERT_MESSAGE:
@@ -1713,9 +1889,8 @@ static void ConfigureCertificate(mbedtls_x509write_cert *cw, struct Cert *ca,
   const char *s;
   bool isduplicate;
   size_t i, j, k, nsan;
-  struct HostsTxt *htxt;
   struct mbedtls_san *san;
-  const mbedtls_x509_name *xname;
+  const struct HostsTxt *htxt;
   char *name, *subject, *issuer, notbefore[16], notafter[16], hbuf[256];
   san = 0;
   nsan = 0;
@@ -1725,10 +1900,11 @@ static void ConfigureCertificate(mbedtls_x509write_cert *cw, struct Cert *ca,
   gethostname(hbuf, sizeof(hbuf));
   for (i = 0; i < htxt->entries.i; ++i) {
     for (j = 0; j < ips.n; ++j) {
+      if (IsLoopbackIp(ips.p[j])) continue;
       if (ips.p[j] == READ32BE(htxt->entries.p[i].ip)) {
         isduplicate = false;
         s = htxt->strings.p + htxt->entries.p[i].name;
-        if (!name) name = s;
+        if (!name) name = (void *)s;
         for (k = 0; k < nsan; ++k) {
           if (san[k].tag == MBEDTLS_X509_SAN_DNS_NAME &&
               !strcasecmp(s, san[k].val)) {
@@ -1741,12 +1917,13 @@ static void ConfigureCertificate(mbedtls_x509write_cert *cw, struct Cert *ca,
           san[nsan - 2].tag = MBEDTLS_X509_SAN_DNS_NAME;
           san[nsan - 2].val = s;
           san[nsan - 1].tag = MBEDTLS_X509_SAN_DNS_NAME;
-          san[nsan - 1].val = gc(xasprintf("*.%s", s));
+          san[nsan - 1].val = _gc(xasprintf("*.%s", s));
         }
       }
     }
   }
   for (i = 0; i < ips.n; ++i) {
+    if (IsLoopbackIp(ips.p[i])) continue;
     san = realloc(san, ++nsan * sizeof(*san));
     san[nsan - 1].tag = MBEDTLS_X509_SAN_IP_ADDRESS;
     san[nsan - 1].ip4 = ips.p[i];
@@ -1770,7 +1947,7 @@ static void ConfigureCertificate(mbedtls_x509write_cert *cw, struct Cert *ca,
       (r = mbedtls_x509write_crt_set_ext_key_usage(cw, type)) ||
       (r = mbedtls_x509write_crt_set_subject_name(cw, subject)) ||
       (r = mbedtls_x509write_crt_set_issuer_name(cw, issuer))) {
-    DIEF("(ssl) configure certificate (grep -0x%04x)", -r);
+    FATALF("(ssl) configure certificate (grep -0x%04x)", -r);
   }
   free(subject);
   free(issuer);
@@ -1854,7 +2031,7 @@ static void LoadCertificates(void) {
   if (!havecert && (!psks.n || ksk.key)) {
     if ((ksk = GetKeySigningKey()).key) {
       DEBUGF("(ssl) generating ssl certificates using %`'s",
-             gc(FormatX509Name(&ksk.cert->subject)));
+             _gc(FormatX509Name(&ksk.cert->subject)));
     } else {
       VERBOSEF("(ssl) could not find non-CA SSL certificate key pair with"
                " -addext keyUsage=digitalSignature"
@@ -1886,8 +2063,8 @@ static void LoadCertificates(void) {
 }
 
 static bool ClientAcceptsGzip(void) {
-  return msg.version >= 10 && /* RFC1945 § 3.5 */
-         HeaderHas(&msg, inbuf.p, kHttpAcceptEncoding, "gzip", 4);
+  return cpm.msg.version >= 10 && /* RFC1945 § 3.5 */
+         HeaderHas(&cpm.msg, inbuf.p, kHttpAcceptEncoding, "gzip", 4);
 }
 
 char *FormatUnixHttpDateTime(char *s, int64_t t) {
@@ -1897,10 +2074,10 @@ char *FormatUnixHttpDateTime(char *s, int64_t t) {
   return s;
 }
 
-static void UpdateCurrentDate(long double now) {
+static void UpdateCurrentDate(struct timespec now) {
   int64_t t;
   struct tm tm;
-  t = now;
+  t = now.tv_sec;
   shared->nowish = now;
   gmtime_r(&t, &tm);
   FormatHttpDateTime(shared->currentdate, &tm);
@@ -1914,11 +2091,11 @@ static int64_t GetGmtOffset(int64_t t) {
 
 forceinline bool IsCompressed(struct Asset *a) {
   return !a->file &&
-         ZIP_LFILE_COMPRESSIONMETHOD(zbase + a->lf) == kZipCompressionDeflate;
+         ZIP_LFILE_COMPRESSIONMETHOD(zmap + a->lf) == kZipCompressionDeflate;
 }
 
 forceinline int GetMode(struct Asset *a) {
-  return a->file ? a->file->st.st_mode : GetZipCfileMode(zbase + a->cf);
+  return a->file ? a->file->st.st_mode : GetZipCfileMode(zmap + a->cf);
 }
 
 forceinline bool IsCompressionMethodSupported(int method) {
@@ -1952,6 +2129,10 @@ static void FreeStrings(struct Strings *l) {
   l->n = 0;
 }
 
+static unsigned long roundup2pow(unsigned long x) {
+  return x > 1 ? 2ul << _bsrl(x - 1) : x ? 1 : 0;
+}
+
 static void IndexAssets(void) {
   uint64_t cf;
   struct Asset *p;
@@ -1965,26 +2146,25 @@ static void IndexAssets(void) {
   n = GetZipCdirRecords(zcdir);
   m = roundup2pow(MAX(1, n) * HASH_LOAD_FACTOR);
   p = xcalloc(m, sizeof(struct Asset));
-  for (cf = GetZipCdirOffset(zcdir); n--; cf += ZIP_CFILE_HDRSIZE(zbase + cf)) {
-    CHECK_EQ(kZipCfileHdrMagic, ZIP_CFILE_MAGIC(zbase + cf));
-    if (!IsCompressionMethodSupported(
-            ZIP_CFILE_COMPRESSIONMETHOD(zbase + cf))) {
+  for (cf = GetZipCdirOffset(zcdir); n--; cf += ZIP_CFILE_HDRSIZE(zmap + cf)) {
+    CHECK_EQ(kZipCfileHdrMagic, ZIP_CFILE_MAGIC(zmap + cf));
+    if (!IsCompressionMethodSupported(ZIP_CFILE_COMPRESSIONMETHOD(zmap + cf))) {
       WARNF("(zip) don't understand zip compression method %d used by %`'.*s",
-            ZIP_CFILE_COMPRESSIONMETHOD(zbase + cf),
-            ZIP_CFILE_NAMESIZE(zbase + cf), ZIP_CFILE_NAME(zbase + cf));
+            ZIP_CFILE_COMPRESSIONMETHOD(zmap + cf),
+            ZIP_CFILE_NAMESIZE(zmap + cf), ZIP_CFILE_NAME(zmap + cf));
       continue;
     }
-    hash = Hash(ZIP_CFILE_NAME(zbase + cf), ZIP_CFILE_NAMESIZE(zbase + cf));
+    hash = Hash(ZIP_CFILE_NAME(zmap + cf), ZIP_CFILE_NAMESIZE(zmap + cf));
     step = 0;
     do {
-      i = (hash + (step * (step + 1)) >> 1) & (m - 1);
+      i = (hash + ((step * (step + 1)) >> 1)) & (m - 1);
       ++step;
     } while (p[i].hash);
-    GetZipCfileTimestamps(zbase + cf, &lm, 0, 0, gmtoff);
+    GetZipCfileTimestamps(zmap + cf, &lm, 0, 0, gmtoff);
     p[i].hash = hash;
     p[i].cf = cf;
-    p[i].lf = GetZipCfileOffset(zbase + cf);
-    p[i].istext = !!(ZIP_CFILE_INTERNALATTRIBUTES(zbase + cf) & kZipIattrText);
+    p[i].lf = GetZipCfileOffset(zmap + cf);
+    p[i].istext = !!(ZIP_CFILE_INTERNALATTRIBUTES(zmap + cf) & kZipIattrText);
     p[i].lastmodified = lm.tv_sec;
     p[i].lastmodifiedstr = FormatUnixHttpDateTime(xmalloc(30), lm.tv_sec);
   }
@@ -1995,8 +2175,8 @@ static void IndexAssets(void) {
 static bool OpenZip(bool force) {
   int fd;
   size_t n;
+  uint8_t *m, *d;
   struct stat st;
-  uint8_t *m, *b, *d, *p;
   if (stat(zpath, &st) != -1) {
     if (force || st.st_ino != zst.st_ino || st.st_size > zst.st_size) {
       if (st.st_ino == zst.st_ino) {
@@ -2008,22 +2188,15 @@ static bool OpenZip(bool force) {
       if ((m = mmap(0, st.st_size, PROT_READ, MAP_PRIVATE, fd, 0)) !=
           MAP_FAILED) {
         n = st.st_size;
-        if ((p = FindEmbeddedApe(m, n))) {
-          b = p;
-          n -= p - m;
-        } else {
-          b = m;
-        }
-        if ((d = GetZipCdir(b, n))) {
+        if ((d = GetZipEocd(m, n, 0))) {
           if (zmap) {
-            LOGIFNEG1(munmap(zmap, zbase + zsize - zmap));
+            LOGIFNEG1(munmap(zmap, zsize));
           }
           zmap = m;
-          zbase = b;
           zsize = n;
           zcdir = d;
-          DCHECK(IsZipCdir32(zbase, zsize, zcdir - zbase) ||
-                 IsZipCdir64(zbase, zsize, zcdir - zbase));
+          DCHECK(IsZipEocd32(zmap, zsize, zcdir - zmap) == kZipOk ||
+                 IsZipEocd64(zmap, zsize, zcdir - zmap) == kZipOk);
           memcpy(&zst, &st, sizeof(st));
           IndexAssets();
           return true;
@@ -2035,7 +2208,12 @@ static bool OpenZip(bool force) {
       }
     }
   } else {
-    WARNF("(zip) stat() error: %m");
+    // avoid noise if we setuid to user who can't see executable
+    if (errno == EACCES) {
+      VERBOSEF("(zip) stat(%`'s) error: %m", zpath);
+    } else {
+      WARNF("(zip) stat(%`'s) error: %m", zpath);
+    }
   }
   return false;
 }
@@ -2045,11 +2223,11 @@ static struct Asset *GetAssetZip(const char *path, size_t pathlen) {
   if (pathlen > 1 && path[0] == '/') ++path, --pathlen;
   hash = Hash(path, pathlen);
   for (step = 0;; ++step) {
-    i = (hash + (step * (step + 1)) >> 1) & (assets.n - 1);
+    i = (hash + ((step * (step + 1)) >> 1)) & (assets.n - 1);
     if (!assets.p[i].hash) return NULL;
     if (hash == assets.p[i].hash &&
-        pathlen == ZIP_CFILE_NAMESIZE(zbase + assets.p[i].cf) &&
-        memcmp(path, ZIP_CFILE_NAME(zbase + assets.p[i].cf), pathlen) == 0) {
+        pathlen == ZIP_CFILE_NAMESIZE(zmap + assets.p[i].cf) &&
+        memcmp(path, ZIP_CFILE_NAME(zmap + assets.p[i].cf), pathlen) == 0) {
       return &assets.p[i];
     }
   }
@@ -2079,7 +2257,6 @@ static struct Asset *GetAssetFile(const char *path, size_t pathlen) {
 }
 
 static struct Asset *GetAsset(const char *path, size_t pathlen) {
-  char *path2;
   struct Asset *a;
   if (!(a = GetAssetFile(path, pathlen))) {
     if (!(a = GetAssetZip(path, pathlen))) {
@@ -2101,15 +2278,15 @@ static char *AppendHeader(char *p, const char *k, const char *v) {
 static char *AppendContentType(char *p, const char *ct) {
   p = stpcpy(p, "Content-Type: ");
   p = stpcpy(p, ct);
-  if ((istext = startswith(ct, "text/"))) {
+  if ((cpm.istext = startswith(ct, "text/"))) {
     if (!strchr(ct + 5, ';')) {
       p = stpcpy(p, "; charset=utf-8");
     }
-    if (!referrerpolicy && startswith(ct + 5, "html")) {
-      referrerpolicy = "no-referrer-when-downgrade";
+    if (!cpm.referrerpolicy && startswith(ct + 5, "html")) {
+      cpm.referrerpolicy = "no-referrer-when-downgrade";
     }
   }
-  hascontenttype = true;
+  cpm.hascontenttype = true;
   return AppendCrlf(p);
 }
 
@@ -2121,17 +2298,18 @@ static char *AppendExpires(char *p, int64_t t) {
   return AppendCrlf(p);
 }
 
-static char *AppendCache(char *p, int64_t seconds) {
+static char *AppendCache(char *p, int64_t seconds, char *directive) {
   if (seconds < 0) return p;
   p = stpcpy(p, "Cache-Control: max-age=");
   p = FormatUint64(p, seconds);
   if (!seconds) {
     p = stpcpy(p, ", no-store");
-  } else {
-    p = stpcpy(p, ", must-revalidate");
+  } else if (directive && *directive) {
+    p = stpcpy(p, ", ");
+    p = stpcpy(p, directive);
   }
   p = AppendCrlf(p);
-  return AppendExpires(p, (int64_t)shared->nowish + seconds);
+  return AppendExpires(p, shared->nowish.tv_sec + seconds);
 }
 
 static inline char *AppendContentLength(char *p, size_t n) {
@@ -2167,17 +2345,15 @@ static bool Verify(void *data, size_t size, uint32_t crc) {
   } else {
     LockInc(&shared->c.thiscorruption);
     WARNF("(zip) corrupt zip file at %`'.*s had crc 0x%08x but expected 0x%08x",
-          msg.uri.b - msg.uri.a, inbuf.p + msg.uri.a, got, crc);
+          cpm.msg.uri.b - cpm.msg.uri.a, inbuf.p + cpm.msg.uri.a, got, crc);
     return false;
   }
 }
 
 static void *Deflate(const void *data, size_t size, size_t *out_size) {
   void *res;
-  z_stream zs;
+  z_stream zs = {0};
   LockInc(&shared->c.deflates);
-  zs.zfree = 0;
-  zs.zalloc = 0;
   CHECK_EQ(Z_OK, deflateInit2(&zs, 4, Z_DEFLATED, -MAX_WBITS, DEF_MEM_LEVEL,
                               Z_DEFAULT_STRATEGY));
   zs.next_in = data;
@@ -2191,7 +2367,6 @@ static void *Deflate(const void *data, size_t size, size_t *out_size) {
 }
 
 static void *LoadAsset(struct Asset *a, size_t *out_size) {
-  int mode;
   size_t size;
   uint8_t *data;
   if (S_ISDIR(GetMode(a))) {
@@ -2199,18 +2374,18 @@ static void *LoadAsset(struct Asset *a, size_t *out_size) {
     return NULL;
   }
   if (!a->file) {
-    size = GetZipLfileUncompressedSize(zbase + a->lf);
+    size = GetZipLfileUncompressedSize(zmap + a->lf);
     if (size == SIZE_MAX || !(data = malloc(size + 1))) return NULL;
     if (IsCompressed(a)) {
-      if (!Inflate(data, size, ZIP_LFILE_CONTENT(zbase + a->lf),
-                   GetZipCfileCompressedSize(zbase + a->cf))) {
+      if (!Inflate(data, size, ZIP_LFILE_CONTENT(zmap + a->lf),
+                   GetZipCfileCompressedSize(zmap + a->cf))) {
         free(data);
         return NULL;
       }
     } else {
-      memcpy(data, ZIP_LFILE_CONTENT(zbase + a->lf), size);
+      memcpy(data, ZIP_LFILE_CONTENT(zmap + a->lf), size);
     }
-    if (!Verify(data, size, ZIP_LFILE_CRC32(zbase + a->lf))) {
+    if (!Verify(data, size, ZIP_LFILE_CRC32(zmap + a->lf))) {
       free(data);
       return NULL;
     }
@@ -2231,7 +2406,11 @@ static wontreturn void PrintUsage(int fd, int rc) {
     fprintf(stderr, "error: /help.txt is not a zip asset\n");
     exit(1);
   }
-  __paginate(fd, p);
+  if (IsTiny()) {
+    write(fd, p, strlen(p));
+  } else {
+    __paginate(fd, p);
+  }
   exit(rc);
 }
 
@@ -2241,9 +2420,9 @@ static void AppendLogo(void) {
   struct Asset *a;
   if ((a = GetAsset("/redbean.png", 12)) && (p = LoadAsset(a, &n))) {
     if ((q = EncodeBase64(p, n, &n))) {
-      appends(&outbuf, "<img alt=\"[logo]\" src=\"data:image/png;base64,");
-      appendd(&outbuf, q, n);
-      appends(&outbuf, "\">\r\n");
+      appends(&cpm.outbuf, "<img alt=\"[logo]\" src=\"data:image/png;base64,");
+      appendd(&cpm.outbuf, q, n);
+      appends(&cpm.outbuf, "\">\r\n");
       free(q);
     }
     free(p);
@@ -2262,7 +2441,11 @@ static ssize_t Send(struct iovec *iov, int iovlen) {
       errno = 0;
     } else {
       LockInc(&shared->c.writeerrors);
-      WARNF("(rsp) %s write error: %m", DescribeClient());
+      if (errno == EBADF) {  // don't warn on close/bad fd
+        DEBUGF("(rsp) %s write badf", DescribeClient());
+      } else {
+        WARNF("(rsp) %s write error: %m", DescribeClient());
+      }
     }
     connectionclose = true;
   }
@@ -2276,18 +2459,22 @@ static bool IsSslCompressed(void) {
 static char *CommitOutput(char *p) {
   uint32_t crc;
   size_t outbuflen;
-  if (!contentlength) {
-    outbuflen = appendz(outbuf).i;
-    if (istext && outbuflen >= 100) {
+  if (!cpm.contentlength) {
+    outbuflen = appendz(cpm.outbuf).i;
+    if (cpm.istext && !cpm.isyielding && outbuflen >= 100) {
       if (!IsTiny() && !IsSslCompressed()) {
         p = stpcpy(p, "Vary: Accept-Encoding\r\n");
       }
-      if (!IsTiny() && !IsSslCompressed() && ClientAcceptsGzip()) {
-        gzipped = true;
-        crc = crc32_z(0, outbuf, outbuflen);
+      if (!IsTiny() &&            //
+          !IsSslCompressed() &&   //
+          ClientAcceptsGzip() &&  //
+          !ShouldAvoidGzip()) {
+        cpm.gzipped = outbuflen;
+        crc = crc32_z(0, cpm.outbuf, outbuflen);
         WRITE32LE(gzip_footer + 0, crc);
         WRITE32LE(gzip_footer + 4, outbuflen);
-        content = FreeLater(Deflate(outbuf, outbuflen, &contentlength));
+        cpm.content =
+            FreeLater(Deflate(cpm.outbuf, outbuflen, &cpm.contentlength));
         DropOutput();
       } else {
         UseOutput();
@@ -2305,11 +2492,11 @@ static char *ServeDefaultErrorPage(char *p, unsigned code, const char *reason,
                                    const char *details) {
   p = AppendContentType(p, "text/html; charset=ISO-8859-1");
   reason = FreeLater(EscapeHtml(reason, -1, 0));
-  appends(&outbuf, "\
+  appends(&cpm.outbuf, "\
 <!doctype html>\r\n\
 <title>");
-  appendf(&outbuf, "%d %s", code, reason);
-  appends(&outbuf, "\
+  appendf(&cpm.outbuf, "%d %s", code, reason);
+  appends(&cpm.outbuf, "\
 </title>\r\n\
 <style>\r\n\
 html { color: #111; font-family: sans-serif; }\r\n\
@@ -2317,10 +2504,10 @@ img { vertical-align: middle; }\r\n\
 </style>\r\n\
 <h1>\r\n");
   AppendLogo();
-  appendf(&outbuf, "%d %s\r\n", code, reason);
-  appends(&outbuf, "</h1>\r\n");
+  appendf(&cpm.outbuf, "%d %s\r\n", code, reason);
+  appends(&cpm.outbuf, "</h1>\r\n");
   if (details) {
-    appendf(&outbuf, "<pre>%s</pre>\r\n",
+    appendf(&cpm.outbuf, "<pre>%s</pre>\r\n",
             FreeLater(EscapeHtml(details, -1, 0)));
   }
   UseOutput();
@@ -2342,26 +2529,33 @@ static char *ServeErrorImpl(unsigned code, const char *reason,
     return ServeDefaultErrorPage(p, code, reason, details);
   } else if (a->file) {
     LockInc(&shared->c.slurps);
-    content = FreeLater(xslurp(a->file->path.s, &contentlength));
+    cpm.content = FreeLater(xslurp(a->file->path.s, &cpm.contentlength));
     return AppendContentType(p, "text/html; charset=utf-8");
   } else {
-    content = (char *)ZIP_LFILE_CONTENT(zbase + a->lf);
-    contentlength = GetZipCfileCompressedSize(zbase + a->cf);
+    cpm.content = (char *)ZIP_LFILE_CONTENT(zmap + a->lf);
+    cpm.contentlength = GetZipCfileCompressedSize(zmap + a->cf);
     if (IsCompressed(a)) {
-      n = GetZipLfileUncompressedSize(zbase + a->lf);
-      if ((s = FreeLater(malloc(n))) && Inflate(s, n, content, contentlength)) {
-        content = s;
-        contentlength = n;
+      n = GetZipLfileUncompressedSize(zmap + a->lf);
+      if ((s = FreeLater(malloc(n))) &&
+          Inflate(s, n, cpm.content, cpm.contentlength)) {
+        cpm.content = s;
+        cpm.contentlength = n;
       } else {
         return ServeDefaultErrorPage(p, code, reason, details);
       }
     }
-    if (Verify(content, contentlength, ZIP_LFILE_CRC32(zbase + a->lf))) {
+    if (Verify(cpm.content, cpm.contentlength, ZIP_LFILE_CRC32(zmap + a->lf))) {
       return AppendContentType(p, "text/html; charset=utf-8");
     } else {
       return ServeDefaultErrorPage(p, code, reason, details);
     }
   }
+}
+
+static char *ServeErrorWithPath(unsigned code, const char *reason,
+                                const char *path, size_t pathlen) {
+  ERRORF("(srvr) server error: %d %s %`'.*s", code, reason, pathlen, path);
+  return ServeErrorImpl(code, reason, NULL);
 }
 
 static char *ServeErrorWithDetail(unsigned code, const char *reason,
@@ -2376,21 +2570,21 @@ static char *ServeError(unsigned code, const char *reason) {
 
 static char *ServeFailure(unsigned code, const char *reason) {
   ERRORF("(srvr) failure: %d %s %s HTTP%02d %.*s %`'.*s %`'.*s %`'.*s %`'.*s",
-         code, reason, DescribeClient(), msg.version,
-         msg.xmethod.b - msg.xmethod.a, inbuf.p + msg.xmethod.a,
-         HeaderLength(kHttpHost), HeaderData(kHttpHost), msg.uri.b - msg.uri.a,
-         inbuf.p + msg.uri.a, HeaderLength(kHttpReferer),
-         HeaderData(kHttpReferer), HeaderLength(kHttpUserAgent),
-         HeaderData(kHttpUserAgent));
+         code, reason, DescribeClient(), cpm.msg.version,
+         cpm.msg.xmethod.b - cpm.msg.xmethod.a, inbuf.p + cpm.msg.xmethod.a,
+         HeaderLength(kHttpHost), HeaderData(kHttpHost),
+         cpm.msg.uri.b - cpm.msg.uri.a, inbuf.p + cpm.msg.uri.a,
+         HeaderLength(kHttpReferer), HeaderData(kHttpReferer),
+         HeaderLength(kHttpUserAgent), HeaderData(kHttpUserAgent));
   return ServeErrorImpl(code, reason, NULL);
 }
 
 static ssize_t YieldGenerator(struct iovec v[3]) {
   int nresults, status;
-  if (isyielding > 1) {
+  if (cpm.isyielding > 1) {
     do {
       if (!YL || lua_status(YL) != LUA_YIELD) return 0;  // done yielding
-      contentlength = 0;
+      cpm.contentlength = 0;
       status = lua_resume(YL, NULL, 0, &nresults);
       if (status != LUA_OK && status != LUA_YIELD) {
         LogLuaError("resume", lua_tostring(YL, -1));
@@ -2398,15 +2592,15 @@ static ssize_t YieldGenerator(struct iovec v[3]) {
         return -1;
       }
       lua_pop(YL, nresults);
-      if (!contentlength) UseOutput();
+      if (!cpm.contentlength) UseOutput();
       // continue yielding if nothing to return to keep generator running
-    } while (!contentlength);
+    } while (!cpm.contentlength);
   }
-  DEBUGF("(lua) yielded with %ld bytes generated", contentlength);
-  isyielding++;
-  v[0].iov_base = content;
-  v[0].iov_len = contentlength;
-  return contentlength;
+  DEBUGF("(lua) yielded with %ld bytes generated", cpm.contentlength);
+  cpm.isyielding++;
+  v[0].iov_base = cpm.content;
+  v[0].iov_len = cpm.contentlength;
+  return cpm.contentlength;
 }
 
 static void OnLuaServerPageCtrlc(int i) {
@@ -2433,9 +2627,8 @@ static int LuaCallWithYield(lua_State *L) {
   if (status == LUA_YIELD) {
     CHECK_GT(lua_gettop(L), 0);  // make sure that coroutine is anchored
     YL = co;
-    generator = YieldGenerator;
-    if (!isyielding) isyielding = 1;
-    istext = false;  // reset istext flag to avoid zipping yielded chunk
+    cpm.generator = YieldGenerator;
+    if (!cpm.isyielding) cpm.isyielding = 1;
     status = LUA_OK;
   }
   return status;
@@ -2444,11 +2637,9 @@ static int LuaCallWithYield(lua_State *L) {
 static ssize_t DeflateGenerator(struct iovec v[3]) {
   int i, rc;
   size_t no;
-  void *res;
-  int level;
   i = 0;
   if (!dg.t) {
-    v[0].iov_base = kGzipHeader;
+    v[0].iov_base = (void *)kGzipHeader;
     v[0].iov_len = sizeof(kGzipHeader);
     ++dg.t;
     ++i;
@@ -2457,15 +2648,15 @@ static ssize_t DeflateGenerator(struct iovec v[3]) {
   }
   if (dg.t != 2) {
     CHECK_EQ(0, dg.s.avail_in);
-    dg.s.next_in = (void *)(content + dg.i);
-    dg.s.avail_in = MIN(dg.z, contentlength - dg.i);
+    dg.s.next_in = (void *)(cpm.content + dg.i);
+    dg.s.avail_in = MIN(dg.z, cpm.contentlength - dg.i);
     dg.c = crc32_z(dg.c, dg.s.next_in, dg.s.avail_in);
     dg.i += dg.s.avail_in;
   }
   dg.s.next_out = dg.b;
   dg.s.avail_out = dg.z;
   no = dg.s.avail_in;
-  rc = deflate(&dg.s, dg.i < contentlength ? Z_SYNC_FLUSH : Z_FINISH);
+  rc = deflate(&dg.s, dg.i < cpm.contentlength ? Z_SYNC_FLUSH : Z_FINISH);
   if (rc != Z_OK && rc != Z_STREAM_END) {
     DIEF("(zip) deflate()→%d oldin:%,zu/%,zu in:%,zu/%,zu out:%,zu/%,zu", rc,
          no, dg.z, dg.s.avail_in, dg.z, dg.s.avail_out, dg.z);
@@ -2487,10 +2678,10 @@ static ssize_t DeflateGenerator(struct iovec v[3]) {
       dg.t = 2;
     }
   } else if (rc == Z_STREAM_END) {
-    CHECK_EQ(contentlength, dg.i);
+    CHECK_EQ(cpm.contentlength, dg.i);
     CHECK_EQ(Z_OK, deflateEnd(&dg.s));
     WRITE32LE(gzip_footer + 0, dg.c);
-    WRITE32LE(gzip_footer + 4, contentlength);
+    WRITE32LE(gzip_footer + 4, cpm.contentlength);
     v[i].iov_base = gzip_footer;
     v[i].iov_len = sizeof(gzip_footer);
     dg.t = 3;
@@ -2500,7 +2691,6 @@ static ssize_t DeflateGenerator(struct iovec v[3]) {
 
 static char *ServeAssetCompressed(struct Asset *a) {
   char *p;
-  uint32_t crc;
   LockInc(&shared->c.deflates);
   LockInc(&shared->c.compressedresponses);
   DEBUGF("(srvr) ServeAssetCompressed()");
@@ -2508,12 +2698,12 @@ static char *ServeAssetCompressed(struct Asset *a) {
   dg.i = 0;
   dg.c = 0;
   if (usingssl) {
-    dg.z = 512 + (rand64() & 1023);
+    dg.z = 512 + (_rand64() & 1023);
   } else {
     dg.z = 65536;
   }
-  gzipped = true;
-  generator = DeflateGenerator;
+  cpm.gzipped = -1;  // signal generator usage with the exact size unknown
+  cpm.generator = DeflateGenerator;
   bzero(&dg.s, sizeof(dg.s));
   CHECK_EQ(Z_OK, deflateInit2(&dg.s, 4, Z_DEFLATED, -MAX_WBITS, DEF_MEM_LEVEL,
                               Z_DEFAULT_STRATEGY));
@@ -2526,7 +2716,6 @@ static char *ServeAssetCompressed(struct Asset *a) {
 static ssize_t InflateGenerator(struct iovec v[3]) {
   int i, rc;
   size_t no;
-  void *res;
   i = 0;
   if (!dg.t) {
     ++dg.t;
@@ -2535,8 +2724,8 @@ static ssize_t InflateGenerator(struct iovec v[3]) {
   }
   if (dg.t != 2) {
     CHECK_EQ(0, dg.s.avail_in);
-    dg.s.next_in = (void *)(content + dg.i);
-    dg.s.avail_in = MIN(dg.z, contentlength - dg.i);
+    dg.s.next_in = (void *)(cpm.content + dg.i);
+    dg.s.avail_in = MIN(dg.z, cpm.contentlength - dg.i);
     dg.i += dg.s.avail_in;
   }
   dg.s.next_out = dg.b;
@@ -2555,7 +2744,7 @@ static ssize_t InflateGenerator(struct iovec v[3]) {
     dg.t = dg.s.avail_out ? 1 : 2;
   } else if (rc == Z_STREAM_END) {
     CHECK_EQ(Z_OK, inflateEnd(&dg.s));
-    CHECK_EQ(ZIP_CFILE_CRC32(zbase + dg.a->cf), dg.c);
+    CHECK_EQ(ZIP_CFILE_CRC32(zmap + dg.a->cf), dg.c);
     dg.t = 3;
   }
   return v[0].iov_len + v[1].iov_len + v[2].iov_len;
@@ -2564,14 +2753,13 @@ static ssize_t InflateGenerator(struct iovec v[3]) {
 static char *ServeAssetDecompressed(struct Asset *a) {
   char *p;
   size_t size;
-  uint32_t crc;
   LockInc(&shared->c.inflates);
   LockInc(&shared->c.decompressedresponses);
-  size = GetZipCfileUncompressedSize(zbase + a->cf);
-  DEBUGF("(srvr) ServeAssetDecompressed(%ld)→%ld", contentlength, size);
-  if (msg.method == kHttpHead) {
-    content = 0;
-    contentlength = size;
+  size = GetZipCfileUncompressedSize(zmap + a->cf);
+  DEBUGF("(srvr) ServeAssetDecompressed(%ld)→%ld", cpm.contentlength, size);
+  if (cpm.msg.method == kHttpHead) {
+    cpm.content = 0;
+    cpm.contentlength = size;
     return SetStatus(200, "OK");
   } else if (!IsTiny()) {
     dg.t = 0;
@@ -2580,14 +2768,14 @@ static char *ServeAssetDecompressed(struct Asset *a) {
     dg.a = a;
     dg.z = 65536;
     CHECK_EQ(Z_OK, inflateInit2(&dg.s, -MAX_WBITS));
-    generator = InflateGenerator;
+    cpm.generator = InflateGenerator;
     dg.b = FreeLater(malloc(dg.z));
     return SetStatus(200, "OK");
   } else if ((p = FreeLater(malloc(size))) &&
-             Inflate(p, size, content, contentlength) &&
-             Verify(p, size, ZIP_CFILE_CRC32(zbase + a->cf))) {
-    content = p;
-    contentlength = size;
+             Inflate(p, size, cpm.content, cpm.contentlength) &&
+             Verify(p, size, ZIP_CFILE_CRC32(zmap + a->cf))) {
+    cpm.content = p;
+    cpm.contentlength = size;
     return SetStatus(200, "OK");
   } else {
     return ServeError(500, "Internal Server Error");
@@ -2605,9 +2793,9 @@ static inline char *ServeAssetPrecompressed(struct Asset *a) {
   uint32_t crc;
   DEBUGF("(srvr) ServeAssetPrecompressed()");
   LockInc(&shared->c.precompressedresponses);
-  gzipped = true;
-  crc = ZIP_CFILE_CRC32(zbase + a->cf);
-  size = GetZipCfileUncompressedSize(zbase + a->cf);
+  crc = ZIP_CFILE_CRC32(zmap + a->cf);
+  size = GetZipCfileUncompressedSize(zmap + a->cf);
+  cpm.gzipped = size;
   WRITE32LE(gzip_footer + 0, crc);
   WRITE32LE(gzip_footer + 4, size);
   return SetStatus(200, "OK");
@@ -2618,34 +2806,35 @@ static char *ServeAssetRange(struct Asset *a) {
   long rangestart, rangelength;
   DEBUGF("(srvr) ServeAssetRange()");
   if (ParseHttpRange(HeaderData(kHttpRange), HeaderLength(kHttpRange),
-                     contentlength, &rangestart, &rangelength) &&
-      rangestart >= 0 && rangelength >= 0 && rangestart < contentlength &&
-      rangestart + rangelength <= contentlength) {
+                     cpm.contentlength, &rangestart, &rangelength) &&
+      rangestart >= 0 && rangelength >= 0 && rangestart < cpm.contentlength &&
+      rangestart + rangelength <= cpm.contentlength) {
     LockInc(&shared->c.partialresponses);
     p = SetStatus(206, "Partial Content");
-    p = AppendContentRange(p, rangestart, rangelength, contentlength);
-    content += rangestart;
-    contentlength = rangelength;
+    p = AppendContentRange(p, rangestart, rangelength, cpm.contentlength);
+    cpm.content += rangestart;
+    cpm.contentlength = rangelength;
     return p;
   } else {
     LockInc(&shared->c.badranges);
     WARNF("(client) bad range %`'.*s", HeaderLength(kHttpRange),
           HeaderData(kHttpRange));
     p = SetStatus(416, "Range Not Satisfiable");
-    p = AppendContentRange(p, -1, -1, contentlength);
-    content = "";
-    contentlength = 0;
+    p = AppendContentRange(p, -1, -1, cpm.contentlength);
+    cpm.content = "";
+    cpm.contentlength = 0;
     return p;
   }
 }
 
 static char *GetAssetPath(uint8_t *zcf, size_t *out_size) {
-  char *p1, *p2;
+  char *p2;
   size_t n1, n2;
+  const char *p1;
   p1 = ZIP_CFILE_NAME(zcf);
   n1 = ZIP_CFILE_NAMESIZE(zcf);
-  p2 = xmalloc(1 + n1 + 1);
   n2 = 1 + n1 + 1;
+  p2 = xmalloc(n2);
   p2[0] = '/';
   memcpy(p2 + 1, p1, n1);
   p2[1 + n1] = '\0';
@@ -2668,9 +2857,9 @@ static char *GetBasicAuthorization(size_t *z) {
   size_t n;
   const char *p, *q;
   struct HttpSlice *g;
-  g = msg.headers + (HasHeader(kHttpProxyAuthorization)
-                         ? kHttpProxyAuthorization
-                         : kHttpAuthorization);
+  g = cpm.msg.headers + (HasHeader(kHttpProxyAuthorization)
+                             ? kHttpProxyAuthorization
+                             : kHttpAuthorization);
   p = inbuf.p + g->a;
   n = g->b - g->a;
   if ((q = memchr(p, ' ', n)) && SlicesEqualCase(p, q - p, "Basic", 5)) {
@@ -2705,11 +2894,10 @@ static void LaunchBrowser(const char *path) {
   }
   // assign a loopback address if no server or unknown server address
   if (!servers.n || !addr.s_addr) addr.s_addr = htonl(INADDR_LOOPBACK);
-  if (*path != '/') path = gc(xasprintf("/%s", path));
-  if ((prog = commandv(GetSystemUrlLauncherCommand(), gc(malloc(PATH_MAX)),
+  if (*path != '/') path = _gc(xasprintf("/%s", path));
+  if ((prog = commandv(GetSystemUrlLauncherCommand(), _gc(malloc(PATH_MAX)),
                        PATH_MAX))) {
-    u = gc(xasprintf("http://%s:%d%s", inet_ntoa(addr), port,
-                     gc(EscapePath(path, -1, 0))));
+    u = _gc(xasprintf("http://%s:%d%s", inet_ntoa(addr), port, path));
     DEBUGF("(srvr) opening browser with command %`'s %s", prog, u);
     ignore.sa_flags = 0;
     ignore.sa_handler = SIG_IGN;
@@ -2725,7 +2913,7 @@ static void LaunchBrowser(const char *path) {
       sigaction(SIGINT, &saveint, 0);
       sigaction(SIGQUIT, &savequit, 0);
       sigprocmask(SIG_SETMASK, &savemask, 0);
-      execv(prog, (char *const[]){prog, u, 0});
+      execv(prog, (char *const[]){(char *)prog, (char *)u, 0});
       _Exit(127);
     }
     while (wait4(pid, &ws, 0, 0) == -1) {
@@ -2755,7 +2943,7 @@ static int GetDecimalWidth(long x) {
 }
 
 static int GetOctalWidth(int x) {
-  return !x ? 1 : x < 8 ? 2 : 1 + bsr(x) / 3;
+  return !x ? 1 : x < 8 ? 2 : 1 + _bsr(x) / 3;
 }
 
 static const char *DescribeCompressionRatio(char rb[8], uint8_t *zcf) {
@@ -2776,15 +2964,15 @@ static char *ServeListing(void) {
   int w[3];
   uint8_t *zcf;
   struct tm tm;
+  char *p, *path;
   const char *and;
-  struct rusage ru;
-  char *p, *q, *path;
   struct timespec lastmod;
+  size_t n, pathlen, rn[6];
   char rb[8], tb[20], *rp[6];
-  size_t i, n, pathlen, rn[6];
   LockInc(&shared->c.listingrequests);
-  if (msg.method != kHttpGet && msg.method != kHttpHead) return BadMethod();
-  appends(&outbuf, "\
+  if (cpm.msg.method != kHttpGet && cpm.msg.method != kHttpHead)
+    return BadMethod();
+  appends(&cpm.outbuf, "\
 <!doctype html>\r\n\
 <meta charset=\"utf-8\">\r\n\
 <title>redbean zip listing</title>\r\n\
@@ -2801,9 +2989,9 @@ td { padding-right: 3em; }\r\n\
 <header><h1>\r\n");
   AppendLogo();
   rp[0] = EscapeHtml(brand, -1, &rn[0]);
-  appendd(&outbuf, rp[0], rn[0]);
+  appendd(&cpm.outbuf, rp[0], rn[0]);
   free(rp[0]);
-  appendf(&outbuf,
+  appendf(&cpm.outbuf,
           "</h1>\r\n"
           "<div class=\"eocdcomment\">%.*s</div>\r\n"
           "<hr>\r\n"
@@ -2813,7 +3001,7 @@ td { padding-right: 3em; }\r\n\
           GetZipCdirComment(zcdir));
   bzero(w, sizeof(w));
   n = GetZipCdirRecords(zcdir);
-  for (zcf = zbase + GetZipCdirOffset(zcdir); n--;
+  for (zcf = zmap + GetZipCdirOffset(zcdir); n--;
        zcf += ZIP_CFILE_HDRSIZE(zcf)) {
     CHECK_EQ(kZipCfileHdrMagic, ZIP_CFILE_MAGIC(zcf));
     path = GetAssetPath(zcf, &pathlen);
@@ -2825,7 +3013,7 @@ td { padding-right: 3em; }\r\n\
     free(path);
   }
   n = GetZipCdirRecords(zcdir);
-  for (zcf = zbase + GetZipCdirOffset(zcdir); n--;
+  for (zcf = zmap + GetZipCdirOffset(zcdir); n--;
        zcf += ZIP_CFILE_HDRSIZE(zcf)) {
     CHECK_EQ(kZipCfileHdrMagic, ZIP_CFILE_MAGIC(zcf));
     path = GetAssetPath(zcf, &pathlen);
@@ -2842,13 +3030,13 @@ td { padding-right: 3em; }\r\n\
       iso8601(tb, &tm);
       if (IsCompressionMethodSupported(ZIP_CFILE_COMPRESSIONMETHOD(zcf)) &&
           IsAcceptablePath(path, pathlen)) {
-        appendf(&outbuf,
+        appendf(&cpm.outbuf,
                 "<a href=\"%.*s\">%-*.*s</a> %s  %0*o %4s  %,*ld  %'s\r\n",
                 rn[2], rp[2], w[0], rn[4], rp[4], tb, w[1],
                 GetZipCfileMode(zcf), DescribeCompressionRatio(rb, zcf), w[2],
                 GetZipCfileUncompressedSize(zcf), rp[3]);
       } else {
-        appendf(&outbuf, "%-*.*s %s  %0*o %4s  %,*ld  %'s\r\n", w[0], rn[4],
+        appendf(&cpm.outbuf, "%-*.*s %s  %0*o %4s  %,*ld  %'s\r\n", w[0], rn[4],
                 rp[4], tb, w[1], GetZipCfileMode(zcf),
                 DescribeCompressionRatio(rb, zcf), w[2],
                 GetZipCfileUncompressedSize(zcf), rp[3]);
@@ -2861,47 +3049,49 @@ td { padding-right: 3em; }\r\n\
     }
     free(path);
   }
-  appends(&outbuf, "\
+  appends(&cpm.outbuf, "\
 </pre><footer><hr>\r\n\
 <table border=\"0\"><tr>\r\n\
 <td valign=\"top\">\r\n\
 <a href=\"/statusz\">/statusz</a>\r\n\
 ");
   if (shared->c.connectionshandled) {
-    appends(&outbuf, "says your redbean<br>\r\n");
-    AppendResourceReport(&outbuf, &shared->children, "<br>\r\n");
+    appends(&cpm.outbuf, "says your redbean<br>\r\n");
+    AppendResourceReport(&cpm.outbuf, &shared->children, "<br>\r\n");
   }
-  appends(&outbuf, "<td valign=\"top\">\r\n");
+  appends(&cpm.outbuf, "<td valign=\"top\">\r\n");
   and = "";
-  x = nowl() - startserver;
+  x = timespec_sub(timespec_real(), startserver).tv_sec;
   y = ldiv(x, 24L * 60 * 60);
   if (y.quot) {
-    appendf(&outbuf, "%,ld day%s ", y.quot, y.quot == 1 ? "" : "s");
+    appendf(&cpm.outbuf, "%,ld day%s ", y.quot, y.quot == 1 ? "" : "s");
     and = "and ";
   }
   y = ldiv(y.rem, 60 * 60);
   if (y.quot) {
-    appendf(&outbuf, "%,ld hour%s ", y.quot, y.quot == 1 ? "" : "s");
+    appendf(&cpm.outbuf, "%,ld hour%s ", y.quot, y.quot == 1 ? "" : "s");
     and = "and ";
   }
   y = ldiv(y.rem, 60);
   if (y.quot) {
-    appendf(&outbuf, "%,ld minute%s ", y.quot, y.quot == 1 ? "" : "s");
+    appendf(&cpm.outbuf, "%,ld minute%s ", y.quot, y.quot == 1 ? "" : "s");
     and = "and ";
   }
-  appendf(&outbuf, "%s%,ld second%s of operation<br>\r\n", and, y.rem,
+  appendf(&cpm.outbuf, "%s%,ld second%s of operation<br>\r\n", and, y.rem,
           y.rem == 1 ? "" : "s");
   x = shared->c.messageshandled;
-  appendf(&outbuf, "%,ld message%s handled<br>\r\n", x, x == 1 ? "" : "s");
+  appendf(&cpm.outbuf, "%,ld message%s handled<br>\r\n", x, x == 1 ? "" : "s");
   x = shared->c.connectionshandled;
-  appendf(&outbuf, "%,ld connection%s handled<br>\r\n", x, x == 1 ? "" : "s");
+  appendf(&cpm.outbuf, "%,ld connection%s handled<br>\r\n", x,
+          x == 1 ? "" : "s");
   x = shared->workers;
-  appendf(&outbuf, "%,ld connection%s active<br>\r\n", x, x == 1 ? "" : "s");
-  appends(&outbuf, "</table>\r\n");
-  appends(&outbuf, "</footer>\r\n");
+  appendf(&cpm.outbuf, "%,ld connection%s active<br>\r\n", x,
+          x == 1 ? "" : "s");
+  appends(&cpm.outbuf, "</table>\r\n");
+  appends(&cpm.outbuf, "</footer>\r\n");
   p = SetStatus(200, "OK");
   p = AppendContentType(p, "text/html");
-  if (msg.version >= 11) {
+  if (cpm.msg.version >= 11) {
     p = stpcpy(p, "Cache-Control: no-store\r\n");
   }
   return CommitOutput(p);
@@ -2912,11 +3102,11 @@ static const char *MergeNames(const char *a, const char *b) {
 }
 
 static void AppendLong1(const char *a, long x) {
-  if (x) appendf(&outbuf, "%s: %ld\r\n", a, x);
+  if (x) appendf(&cpm.outbuf, "%s: %ld\r\n", a, x);
 }
 
 static void AppendLong2(const char *a, const char *b, long x) {
-  if (x) appendf(&outbuf, "%s.%s: %ld\r\n", a, b, x);
+  if (x) appendf(&cpm.outbuf, "%s.%s: %ld\r\n", a, b, x);
 }
 
 static void AppendTimeval(const char *a, struct timeval *tv) {
@@ -2955,15 +3145,17 @@ static void ServeCounters(void) {
 static char *ServeStatusz(void) {
   char *p;
   LockInc(&shared->c.statuszrequests);
-  if (msg.method != kHttpGet && msg.method != kHttpHead) return BadMethod();
+  if (cpm.msg.method != kHttpGet && cpm.msg.method != kHttpHead) {
+    return BadMethod();
+  }
   AppendLong1("pid", getpid());
   AppendLong1("ppid", getppid());
-  AppendLong1("now", nowl());
-  AppendLong1("nowish", shared->nowish);
+  AppendLong1("now", timespec_real().tv_sec);
+  AppendLong1("nowish", shared->nowish.tv_sec);
   AppendLong1("gmtoff", gmtoff);
   AppendLong1("CLK_TCK", CLK_TCK);
-  AppendLong1("startserver", startserver);
-  AppendLong1("lastmeltdown", shared->lastmeltdown);
+  AppendLong1("startserver", startserver.tv_sec);
+  AppendLong1("lastmeltdown", shared->lastmeltdown.tv_sec);
   AppendLong1("workers", shared->workers);
   AppendLong1("assets.n", assets.n);
 #ifndef STATIC
@@ -2976,21 +3168,32 @@ static char *ServeStatusz(void) {
   AppendRusage("children", &shared->children);
   p = SetStatus(200, "OK");
   p = AppendContentType(p, "text/plain");
-  if (msg.version >= 11) {
+  if (cpm.msg.version >= 11) {
     p = stpcpy(p, "Cache-Control: no-store\r\n");
   }
   return CommitOutput(p);
 }
 
 static char *RedirectSlash(void) {
-  size_t n;
+  size_t n, i;
   char *p, *e;
   LockInc(&shared->c.redirects);
   p = SetStatus(307, "Temporary Redirect");
   p = stpcpy(p, "Location: ");
   e = EscapePath(url.path.p, url.path.n, &n);
   p = mempcpy(p, e, n);
-  p = stpcpy(p, "/\r\n");
+  p = stpcpy(p, "/");
+
+  for (i = 0; i < url.params.n; ++i) {
+    p = stpcpy(p, i == 0 ? "?" : "&");
+    p = mempcpy(p, url.params.p[i].key.p, url.params.p[i].key.n);
+    if (url.params.p[i].val.p) {
+      p = stpcpy(p, "=");
+      p = mempcpy(p, url.params.p[i].val.p, url.params.p[i].val.n);
+    }
+  }
+
+  p = stpcpy(p, "\r\n");
   free(e);
   return p;
 }
@@ -3007,7 +3210,7 @@ static char *ServeIndex(const char *path, size_t pathlen) {
 }
 
 static char *GetLuaResponse(void) {
-  return luaheaderp ? luaheaderp : SetStatus(200, "OK");
+  return cpm.luaheaderp ? cpm.luaheaderp : SetStatus(200, "OK");
 }
 
 static bool ShouldServeCrashReportDetails(void) {
@@ -3016,8 +3219,7 @@ static bool ShouldServeCrashReportDetails(void) {
   if (leakcrashreports) {
     return true;
   } else {
-    GetRemoteAddr(&ip, &port);
-    return IsLoopbackIp(ip) || IsPrivateIp(ip);
+    return !GetRemoteAddr(&ip, &port) && (IsLoopbackIp(ip) || IsPrivateIp(ip));
   }
 }
 
@@ -3045,7 +3247,7 @@ static char *ServeLua(struct Asset *a, const char *s, size_t n) {
   size_t codelen;
   lua_State *L = GL;
   LockInc(&shared->c.dynamicrequests);
-  effectivepath.p = s;
+  effectivepath.p = (void *)s;
   effectivepath.n = n;
   if ((code = FreeLater(LoadAsset(a, &codelen)))) {
     int status =
@@ -3072,14 +3274,14 @@ static char *HandleRedirect(struct Redirect *r) {
   if (!r->code && (a = GetAsset(r->location.s, r->location.n))) {
     LockInc(&shared->c.rewrites);
     DEBUGF("(rsp) internal redirect to %`'s", r->location.s);
-    if (!HasString(&loops, r->location.s, r->location.n)) {
-      AddString(&loops, r->location.s, r->location.n);
+    if (!HasString(&cpm.loops, r->location.s, r->location.n)) {
+      AddString(&cpm.loops, r->location.s, r->location.n);
       return RoutePath(r->location.s, r->location.n);
     } else {
       LockInc(&shared->c.loops);
       return SetStatus(508, "Loop Detected");
     }
-  } else if (msg.version < 10) {
+  } else if (cpm.msg.version < 10) {
     return ServeError(505, "HTTP Version Not Supported");
   } else {
     LockInc(&shared->c.redirects);
@@ -3103,7 +3305,7 @@ static char *HandleFolder(const char *path, size_t pathlen) {
   } else {
     LockInc(&shared->c.forbiddens);
     WARNF("(srvr) directory %`'.*s lacks index page", pathlen, path);
-    return ServeError(403, "Forbidden");
+    return ServeErrorWithPath(403, "Forbidden", path, pathlen);
   }
 }
 
@@ -3126,7 +3328,7 @@ static const char *LuaCheckPath(lua_State *L, int idx, size_t *pathlen) {
     if (!IsReasonablePath(path, *pathlen)) {
       WARNF("(srvr) bad path %`'.*s", *pathlen, path);
       luaL_argerror(L, idx, "bad path");
-      unreachable;
+      __builtin_unreachable();
     }
   }
   return path;
@@ -3142,7 +3344,7 @@ static const char *LuaCheckHost(lua_State *L, int idx, size_t *hostlen) {
     if (!IsAcceptableHost(host, *hostlen)) {
       WARNF("(srvr) bad host %`'.*s", *hostlen, host);
       luaL_argerror(L, idx, "bad host");
-      unreachable;
+      __builtin_unreachable();
     }
   }
   return host;
@@ -3152,7 +3354,7 @@ static void OnlyCallFromInitLua(lua_State *L, const char *api) {
   if (isinitialized) {
     luaL_error(L, "%s() should be called %s", api,
                "from the global scope of .init.lua");
-    unreachable;
+    __builtin_unreachable();
   }
 }
 
@@ -3160,15 +3362,15 @@ static void OnlyCallFromMainProcess(lua_State *L, const char *api) {
   if (__isworker) {
     luaL_error(L, "%s() should be called %s", api,
                "from .init.lua or the repl");
-    unreachable;
+    __builtin_unreachable();
   }
 }
 
 static void OnlyCallDuringConnection(lua_State *L, const char *api) {
   if (!ishandlingconnection) {
-    luaL_error(L, "%s() can only be called ", api,
+    luaL_error(L, "%s() can only be called %s", api,
                "while handling a connection");
-    unreachable;
+    __builtin_unreachable();
   }
 }
 
@@ -3176,13 +3378,13 @@ static void OnlyCallDuringRequest(lua_State *L, const char *api) {
   if (!ishandlingrequest) {
     luaL_error(L, "%s() can only be called %s", api,
                "while handling a request");
-    unreachable;
+    __builtin_unreachable();
   }
 }
 
 static int LuaServe(lua_State *L, const char *api, char *impl(void)) {
   OnlyCallDuringRequest(L, api);
-  luaheaderp = impl();
+  cpm.luaheaderp = impl();
   return 0;
 }
 
@@ -3201,7 +3403,7 @@ static int LuaServeAsset(lua_State *L) {
   OnlyCallDuringRequest(L, "ServeAsset");
   path = LuaCheckPath(L, 1, &pathlen);
   if ((a = GetAsset(path, pathlen)) && !S_ISDIR(GetMode(a))) {
-    luaheaderp = ServeAsset(a, path, pathlen);
+    cpm.luaheaderp = ServeAsset(a, path, pathlen);
     lua_pushboolean(L, true);
   } else {
     lua_pushboolean(L, false);
@@ -3214,32 +3416,33 @@ static int LuaServeIndex(lua_State *L) {
   const char *path;
   OnlyCallDuringRequest(L, "ServeIndex");
   path = LuaCheckPath(L, 1, &pathlen);
-  lua_pushboolean(L, !!(luaheaderp = ServeIndex(path, pathlen)));
+  lua_pushboolean(L, !!(cpm.luaheaderp = ServeIndex(path, pathlen)));
   return 1;
 }
 
 static int LuaServeRedirect(lua_State *L) {
-  size_t loclen;
-  const char *location, *eval;
   int code;
+  char *eval;
+  size_t loclen;
+  const char *location;
   OnlyCallDuringRequest(L, "ServeRedirect");
 
   code = luaL_checkinteger(L, 1);
   if (!(300 <= code && code <= 399)) {
     luaL_argerror(L, 1, "bad status code");
-    unreachable;
+    __builtin_unreachable();
   }
   location = luaL_checklstring(L, 2, &loclen);
-  if (msg.version < 10) {
+  if (cpm.msg.version < 10) {
     (void)ServeError(505, "HTTP Version Not Supported");
     lua_pushboolean(L, false);
   } else {
     if (!(eval = EncodeHttpHeaderValue(location, loclen, 0))) {
       luaL_argerror(L, 2, "invalid location");
-      unreachable;
+      __builtin_unreachable();
     }
     VERBOSEF("(rsp) %d redirect to %`'s", code, location);
-    luaheaderp =
+    cpm.luaheaderp =
         AppendHeader(SetStatus(code, GetHttpReason(code)), "Location", eval);
     free(eval);
     lua_pushboolean(L, true);
@@ -3252,7 +3455,7 @@ static int LuaRoutePath(lua_State *L) {
   const char *path;
   OnlyCallDuringRequest(L, "RoutePath");
   path = LuaCheckPath(L, 1, &pathlen);
-  lua_pushboolean(L, !!(luaheaderp = RoutePath(path, pathlen)));
+  lua_pushboolean(L, !!(cpm.luaheaderp = RoutePath(path, pathlen)));
   return 1;
 }
 
@@ -3262,7 +3465,8 @@ static int LuaRouteHost(lua_State *L) {
   OnlyCallDuringRequest(L, "RouteHost");
   host = LuaCheckHost(L, 1, &hostlen);
   path = LuaCheckPath(L, 2, &pathlen);
-  lua_pushboolean(L, !!(luaheaderp = RouteHost(host, hostlen, path, pathlen)));
+  lua_pushboolean(L,
+                  !!(cpm.luaheaderp = RouteHost(host, hostlen, path, pathlen)));
   return 1;
 }
 
@@ -3272,7 +3476,43 @@ static int LuaRoute(lua_State *L) {
   OnlyCallDuringRequest(L, "Route");
   host = LuaCheckHost(L, 1, &hostlen);
   path = LuaCheckPath(L, 2, &pathlen);
-  lua_pushboolean(L, !!(luaheaderp = Route(host, hostlen, path, pathlen)));
+  lua_pushboolean(L, !!(cpm.luaheaderp = Route(host, hostlen, path, pathlen)));
+  return 1;
+}
+
+static int LuaProgramTrustedIp(lua_State *L) {
+  lua_Integer ip, cidr;
+  uint32_t ip32, imask;
+  ip = luaL_checkinteger(L, 1);
+  cidr = luaL_optinteger(L, 2, 32);
+  if (!(0 <= ip && ip <= 0xffffffff)) {
+    luaL_argerror(L, 1, "ip out of range");
+    __builtin_unreachable();
+  }
+  if (!(0 <= cidr && cidr <= 32)) {
+    luaL_argerror(L, 2, "cidr should be 0 .. 32");
+    __builtin_unreachable();
+  }
+  ip32 = ip;
+  imask = ~(0xffffffffu << (32 - cidr));
+  if (ip32 & imask) {
+    luaL_argerror(L, 1,
+                  "ip address isn't the network address; "
+                  "it has bits masked by the cidr");
+    __builtin_unreachable();
+  }
+  ProgramTrustedIp(ip, cidr);
+  return 0;
+}
+
+static int LuaIsTrusted(lua_State *L) {
+  lua_Integer ip;
+  ip = luaL_checkinteger(L, 1);
+  if (!(0 <= ip && ip <= 0xffffffff)) {
+    luaL_argerror(L, 1, "ip out of range");
+    __builtin_unreachable();
+  }
+  lua_pushboolean(L, IsTrustedIp(ip));
   return 1;
 }
 
@@ -3285,18 +3525,18 @@ static int LuaRespond(lua_State *L, char *R(unsigned, const char *)) {
   code = luaL_checkinteger(L, 1);
   if (!(100 <= code && code <= 999)) {
     luaL_argerror(L, 1, "bad status code");
-    unreachable;
+    __builtin_unreachable();
   }
   if (lua_isnoneornil(L, 2)) {
-    luaheaderp = R(code, GetHttpReason(code));
+    cpm.luaheaderp = R(code, GetHttpReason(code));
   } else {
     reason = lua_tolstring(L, 2, &reasonlen);
     if ((p = EncodeHttpHeaderValue(reason, MIN(reasonlen, 128), 0))) {
-      luaheaderp = R(code, p);
+      cpm.luaheaderp = R(code, p);
       free(p);
     } else {
       luaL_argerror(L, 2, "invalid");
-      unreachable;
+      __builtin_unreachable();
     }
   }
   return 0;
@@ -3308,10 +3548,10 @@ static int LuaSetStatus(lua_State *L) {
 
 static int LuaGetStatus(lua_State *L) {
   OnlyCallDuringRequest(L, "GetStatus");
-  if (!luaheaderp) {
+  if (!cpm.statuscode) {
     lua_pushnil(L);
   } else {
-    lua_pushinteger(L, statuscode);
+    lua_pushinteger(L, cpm.statuscode);
   }
   return 1;
 }
@@ -3328,7 +3568,7 @@ static int LuaGetSslIdentity(lua_State *L) {
                       psks.p[sslpskindex - 1].identity_len);
     } else {
       cert = mbedtls_ssl_get_peer_cert(&ssl);
-      lua_pushstring(L, cert ? gc(FormatX509Name(&cert->subject)) : "");
+      lua_pushstring(L, cert ? _gc(FormatX509Name(&cert->subject)) : "");
     }
   }
   return 1;
@@ -3347,9 +3587,9 @@ static int LuaLoadAsset(lua_State *L) {
   if ((a = GetAsset(path, pathlen))) {
     if (!a->file && !IsCompressed(a)) {
       /* fast path: this avoids extra copy */
-      data = ZIP_LFILE_CONTENT(zbase + a->lf);
-      size = GetZipLfileUncompressedSize(zbase + a->lf);
-      if (Verify(data, size, ZIP_LFILE_CRC32(zbase + a->lf))) {
+      data = ZIP_LFILE_CONTENT(zmap + a->lf);
+      size = GetZipLfileUncompressedSize(zmap + a->lf);
+      if (Verify(data, size, ZIP_LFILE_CRC32(zmap + a->lf))) {
         lua_pushlstring(L, data, size);
         return 1;
       }
@@ -3375,27 +3615,26 @@ static void GetDosLocalTime(int64_t utcunixts, uint16_t *out_time,
   *out_date = DOS_DATE(tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday + 1);
 }
 
-static void StoreAsset(char *path, size_t pathlen, char *data, size_t datalen,
-                       int mode) {
+static void StoreAsset(const char *path, size_t pathlen, const char *data,
+                       size_t datalen, int mode) {
   int64_t ft;
-  int i;
   uint32_t crc;
   char *comp, *p;
-  long double now;
+  struct timespec now;
   struct Asset *a;
   struct iovec v[13];
-  uint8_t *cdir, era;
+  uint8_t era;
   const char *use;
   uint16_t gflags, iattrs, mtime, mdate, dosmode, method, disk;
   size_t oldcdirsize, oldcdiroffset, records, cdiroffset, cdirsize, complen,
       uselen;
   if (IsOpenbsd() || IsNetbsd() || IsWindows()) {
-    DIEF("(cfg) StoreAsset() not available on Windows/NetBSD/OpenBSD yet");
+    FATALF("(cfg) StoreAsset() not available on Windows/NetBSD/OpenBSD yet");
   }
-  INFOF("Storing asset %`'s", path);
+  INFOF("(srvr) storing asset %`'s", path);
   disk = gflags = iattrs = 0;
-  if (_isutf8(path, pathlen)) gflags |= kZipGflagUtf8;
-  if (_istext(data, datalen)) iattrs |= kZipIattrText;
+  if (isutf8(path, pathlen)) gflags |= kZipGflagUtf8;
+  if (istext(data, datalen)) iattrs |= kZipIattrText;
   crc = crc32_z(0, data, datalen);
   if (datalen < 100) {
     method = kZipCompressionNone;
@@ -3418,16 +3657,20 @@ static void StoreAsset(char *path, size_t pathlen, char *data, size_t datalen,
     }
   }
   //////////////////////////////////////////////////////////////////////////////
-  CHECK_NE(-1, fcntl(zfd, F_SETLKW, &(struct flock){F_WRLCK}));
+  if (-1 == fcntl(zfd, F_SETLKW, &(struct flock){F_WRLCK})) {
+    WARNF("(srvr) can't place write lock on file descriptor %d: %s", zfd,
+          strerror(errno));
+    return;
+  }
   OpenZip(false);
-  now = nowl();
+  now = timespec_real();
   a = GetAssetZip(path, pathlen);
   if (!mode) mode = a ? GetMode(a) : 0644;
   if (!(mode & S_IFMT)) mode |= S_IFREG;
   if (pathlen > 1 && path[0] == '/') ++path, --pathlen;
   dosmode = !(mode & 0200) ? kNtFileAttributeReadonly : 0;
-  ft = (now + MODERNITYSECONDS) * HECTONANOSECONDS;
-  GetDosLocalTime(now, &mtime, &mdate);
+  ft = (now.tv_sec + MODERNITYSECONDS) * HECTONANOSECONDS;
+  GetDosLocalTime(now.tv_sec, &mtime, &mdate);
   // local file header
   if (uselen >= 0xffffffff || datalen >= 0xffffffff) {
     era = kZipEra2001;
@@ -3454,25 +3697,25 @@ static void StoreAsset(char *path, size_t pathlen, char *data, size_t datalen,
   p = WRITE16LE(p, pathlen);
   p = WRITE16LE(p, v[2].iov_len);
   v[1].iov_len = pathlen;
-  v[1].iov_base = path;
+  v[1].iov_base = (void *)path;
   // file data
   v[3].iov_len = uselen;
-  v[3].iov_base = use;
+  v[3].iov_base = (void *)use;
   // old central directory entries
   oldcdirsize = GetZipCdirSize(zcdir);
   oldcdiroffset = GetZipCdirOffset(zcdir);
   if (a) {
     // to remove an existing asset,
     // first copy the central directory part before its record
-    v[4].iov_base = zbase + oldcdiroffset;
+    v[4].iov_base = zmap + oldcdiroffset;
     v[4].iov_len = a->cf - oldcdiroffset;
     // and then the rest of the central directory
-    v[5].iov_base = zbase + oldcdiroffset +
-                    (v[4].iov_len + ZIP_CFILE_HDRSIZE(zbase + a->cf));
+    v[5].iov_base =
+        zmap + oldcdiroffset + (v[4].iov_len + ZIP_CFILE_HDRSIZE(zmap + a->cf));
     v[5].iov_len =
-        oldcdirsize - (v[4].iov_len + ZIP_CFILE_HDRSIZE(zbase + a->cf));
+        oldcdirsize - (v[4].iov_len + ZIP_CFILE_HDRSIZE(zmap + a->cf));
   } else {
-    v[4].iov_base = zbase + oldcdiroffset;
+    v[4].iov_base = zmap + oldcdiroffset;
     v[4].iov_len = oldcdirsize;
     v[5].iov_base = 0;
     v[5].iov_len = 0;
@@ -3520,7 +3763,7 @@ static void StoreAsset(char *path, size_t pathlen, char *data, size_t datalen,
   p = WRITE16LE(p, mode);
   p = WRITE32LE(p, MIN(zsize, 0xffffffff));
   v[7].iov_len = pathlen;
-  v[7].iov_base = path;
+  v[7].iov_base = (void *)path;
   // zip64 end of central directory
   cdiroffset =
       zsize + v[0].iov_len + v[1].iov_len + v[2].iov_len + v[3].iov_len;
@@ -3549,7 +3792,7 @@ static void StoreAsset(char *path, size_t pathlen, char *data, size_t datalen,
     v[10].iov_base = 0;
   }
   // end of central directory
-  v[12].iov_base = GetZipCdirComment(zcdir);
+  v[12].iov_base = (void *)GetZipCdirComment(zcdir);
   v[12].iov_len = GetZipCdirCommentSize(zcdir);
   v[11].iov_base = p = alloca((v[11].iov_len = kZipCdirHdrMinSize));
   p = WRITE32LE(p, kZipCdirHdrMagic);
@@ -3560,7 +3803,7 @@ static void StoreAsset(char *path, size_t pathlen, char *data, size_t datalen,
   p = WRITE32LE(p, MIN(cdirsize, 0xffffffff));
   p = WRITE32LE(p, MIN(cdiroffset, 0xffffffff));
   p = WRITE16LE(p, v[12].iov_len);
-  CHECK_NE(-1, lseek(zfd, zbase + zsize - zmap, SEEK_SET));
+  CHECK_NE(-1, lseek(zfd, zmap + zsize - zmap, SEEK_SET));
   CHECK_NE(-1, WritevAll(zfd, v, 13));
   CHECK_NE(-1, fcntl(zfd, F_SETLK, &(struct flock){F_UNLCK}));
   //////////////////////////////////////////////////////////////////////////////
@@ -3568,19 +3811,19 @@ static void StoreAsset(char *path, size_t pathlen, char *data, size_t datalen,
   free(comp);
 }
 
-static void StoreFile(char *path) {
+static void StoreFile(const char *path) {
   char *p;
-  size_t plen, tlen;
   struct stat st;
-  char *target = path;
+  size_t plen, tlen;
+  const char *target = path;
   if (startswith(target, "./")) target += 2;
   tlen = strlen(target);
   if (!IsReasonablePath(target, tlen))
-    DIEF("(cfg) error: can't store %`'s: contains '.' or '..' segments",
-         target);
-  if (lstat(path, &st) == -1) DIEF("(cfg) error: can't stat %`'s: %m", path);
+    FATALF("(cfg) error: can't store %`'s: contains '.' or '..' segments",
+           target);
+  if (lstat(path, &st) == -1) FATALF("(cfg) error: can't stat %`'s: %m", path);
   if (!(p = xslurp(path, &plen)))
-    DIEF("(cfg) error: can't read %`'s: %m", path);
+    FATALF("(cfg) error: can't read %`'s: %m", path);
   StoreAsset(target, tlen, p, plen, st.st_mode & 0777);
   free(p);
 }
@@ -3589,13 +3832,14 @@ static void StorePath(const char *dirpath) {
   DIR *d;
   char *path;
   struct dirent *e;
-  if (!isdirectory(dirpath) && !endswith(dirpath, "/"))
+  if (!isdirectory(dirpath) && !endswith(dirpath, "/")) {
     return StoreFile(dirpath);
-  if (!(d = opendir(dirpath))) DIEF("(cfg) error: can't open %`'s", dirpath);
+  }
+  if (!(d = opendir(dirpath))) FATALF("(cfg) error: can't open %`'s", dirpath);
   while ((e = readdir(d))) {
     if (strcmp(e->d_name, ".") == 0) continue;
     if (strcmp(e->d_name, "..") == 0) continue;
-    path = gc(xjoinpaths(dirpath, e->d_name));
+    path = _gc(xjoinpaths(dirpath, e->d_name));
     if (e->d_type == DT_DIR) {
       StorePath(path);
     } else {
@@ -3624,17 +3868,6 @@ static void ReseedRng(mbedtls_ctr_drbg_context *r, const char *s) {
   if (unsecure) return;
   CHECK_EQ(0, mbedtls_ctr_drbg_reseed(r, (void *)s, strlen(s)));
 #endif
-}
-
-static wontreturn void LuaThrowTlsError(lua_State *L, const char *s, int r) {
-  const char *code;
-  code = gc(xasprintf("-0x%04x", -r));
-  if (!IsTiny()) {
-    luaL_error(L, "tls %s failed (%s %s)", s, code, GetTlsError(r));
-  } else {
-    luaL_error(L, "tls %s failed (grep %s)", s, code);
-  }
-  unreachable;
 }
 
 static void LogMessage(const char *d, const char *s, size_t n) {
@@ -3666,464 +3899,31 @@ static void LogBody(const char *d, const char *s, size_t n) {
   }
 }
 
-static int LuaFetch(lua_State *L) {
-#define ssl nope  // TODO(jart): make this file less huge
-  char *p;
-  ssize_t rc;
-  bool usingssl;
-  uint32_t ip;
-  struct Url url;
-  int t, ret, sock, methodidx, hdridx;
-  char *host, *port;
-  struct TlsBio *bio;
-  struct addrinfo *addr;
-  struct Buffer inbuf;     // shadowing intentional
-  struct HttpMessage msg;  // shadowing intentional
-  struct HttpUnchunker u;
-  const char *urlarg, *request, *body, *method;
-  char *conlenhdr = "";
-  char *headers = 0;
-  char *hosthdr = 0;
-  char *agenthdr = brand;
-  char *key, *val, *hdr;
-  size_t keylen, vallen;
-  size_t urlarglen, requestlen, paylen, bodylen;
-  size_t g, i, n, hdrsize;
-  int numredirects = 0, maxredirects = 5;
-  bool followredirect = true;
-  struct addrinfo hints = {.ai_family = AF_INET,
-                           .ai_socktype = SOCK_STREAM,
-                           .ai_protocol = IPPROTO_TCP,
-                           .ai_flags = AI_NUMERICSERV};
-
-  /*
-   * Get args: url [, body | {method = "PUT", body = "..."}]
-   */
-  urlarg = luaL_checklstring(L, 1, &urlarglen);
-  if (lua_istable(L, 2)) {
-    lua_settop(L, 2);  // discard any extra arguments
-    lua_getfield(L, 2, "body");
-    body = luaL_optlstring(L, -1, "", &bodylen);
-    lua_getfield(L, 2, "method");
-    // use GET by default if no method is provided
-    method = strtoupper(luaL_optstring(L, -1, kHttpMethod[kHttpGet]));
-    lua_getfield(L, 2, "followredirect");
-    if (lua_isboolean(L, -1)) followredirect = lua_toboolean(L, -1);
-    lua_getfield(L, 2, "maxredirects");
-    maxredirects = luaL_optinteger(L, -1, maxredirects);
-    lua_getfield(L, 2, "numredirects");
-    numredirects = luaL_optinteger(L, -1, numredirects);
-    lua_getfield(L, 2, "headers");
-    if (!lua_isnil(L, -1)) {
-      if (!lua_istable(L, -1))
-        return luaL_argerror(L, 2, "invalid headers value; table expected");
-
-      lua_pushnil(L);
-      while (lua_next(L, -2)) {
-        if (lua_type(L, -2) == LUA_TSTRING) {  // skip any non-string keys
-          key = lua_tolstring(L, -2, &keylen);
-          if (!IsValidHttpToken(key, keylen))
-            return luaL_argerror(L, 2, "invalid header name");
-
-          val = lua_tolstring(L, -1, &vallen);
-          if (!(hdr = gc(EncodeHttpHeaderValue(val, vallen, 0))))
-            return luaL_argerror(L, 2, "invalid header value encoding");
-
-          // Content-Length and Connection will be overwritten;
-          // skip them to avoid duplicates;
-          // also allow unknown headers
-          if ((hdridx = GetHttpHeader(key, keylen)) == -1 ||
-              hdridx != kHttpContentLength && hdridx != kHttpConnection) {
-            if (hdridx == kHttpUserAgent) {
-              agenthdr = hdr;
-            } else if (hdridx == kHttpHost) {
-              hosthdr = hdr;
-            } else {
-              appendd(&headers, key, keylen);
-              appendw(&headers, READ16LE(": "));
-              appends(&headers, hdr);
-              appendw(&headers, READ16LE("\r\n"));
-            }
-          }
-        }
-        lua_pop(L, 1);  // pop the value, keep the key for the next iteration
-      }
-    }
-    lua_settop(L, 2);  // drop all added elements to keep the stack balanced
-  } else if (lua_isnoneornil(L, 2)) {
-    body = "";
-    bodylen = 0;
-    method = kHttpMethod[kHttpGet];
-  } else {
-    body = luaL_checklstring(L, 2, &bodylen);
-    method = kHttpMethod[kHttpPost];
-  }
-  // provide Content-Length header unless it's zero and not expected
-  methodidx = GetHttpMethod(method, -1);
-  if (bodylen > 0 || !(methodidx == kHttpGet || methodidx == kHttpHead ||
-                       methodidx == kHttpTrace || methodidx == kHttpDelete ||
-                       methodidx == kHttpConnect)) {
-    conlenhdr = gc(xasprintf("Content-Length: %zu\r\n", bodylen));
-  }
-
-  /*
-   * Parse URL.
-   */
-  gc(ParseUrl(urlarg, urlarglen, &url));
-  gc(url.params.p);
-  usingssl = false;
-  if (url.scheme.n) {
-#ifndef UNSECURE
-    if (!unsecure && url.scheme.n == 5 &&
-        !memcasecmp(url.scheme.p, "https", 5)) {
-      usingssl = true;
-    } else
-#endif
-        if (!(url.scheme.n == 4 && !memcasecmp(url.scheme.p, "http", 4))) {
-      luaL_argerror(L, 1, "bad scheme");
-      unreachable;
-    }
-  }
-
-#ifndef UNSECURE
-  if (usingssl && !sslinitialized) TlsInit();
-#endif
-
-  if (url.host.n) {
-    host = gc(strndup(url.host.p, url.host.n));
-    if (url.port.n) {
-      port = gc(strndup(url.port.p, url.port.n));
-#ifndef UNSECURE
-    } else if (usingssl) {
-      port = "443";
-#endif
-    } else {
-      port = "80";
-    }
-  } else {
-    ip = servers.n ? ntohl(servers.p[0].addr.sin_addr.s_addr) : INADDR_LOOPBACK;
-    host =
-        gc(xasprintf("%hhu.%hhu.%hhu.%hhu", ip >> 24, ip >> 16, ip >> 8, ip));
-    port =
-        gc(xasprintf("%d", servers.n ? ntohs(servers.p[0].addr.sin_port) : 80));
-  }
-  if (!IsAcceptableHost(host, -1)) {
-    luaL_argerror(L, 1, "invalid host");
-    unreachable;
-  }
-  if (!hosthdr) hosthdr = gc(xasprintf("%s:%s", host, port));
-
-  url.fragment.p = 0, url.fragment.n = 0;
-  url.scheme.p = 0, url.scheme.n = 0;
-  url.user.p = 0, url.user.n = 0;
-  url.pass.p = 0, url.pass.n = 0;
-  url.host.p = 0, url.host.n = 0;
-  url.port.p = 0, url.port.n = 0;
-  if (!url.path.n || url.path.p[0] != '/') {
-    p = gc(xmalloc(1 + url.path.n));
-    mempcpy(mempcpy(p, "/", 1), url.path.p, url.path.n);
-    url.path.p = p;
-    ++url.path.n;
-  }
-
-  /*
-   * Create HTTP message.
-   */
-  request = gc(xasprintf("%s %s HTTP/1.1\r\n"
-                         "Host: %s\r\n"
-                         "Connection: close\r\n"
-                         "User-Agent: %s\r\n"
-                         "%s%s"
-                         "\r\n%s",
-                         method, gc(EncodeUrl(&url, 0)), hosthdr, agenthdr,
-                         conlenhdr, headers ? headers : "", body));
-  requestlen = strlen(request);
-
-  /*
-   * Perform DNS lookup.
-   */
-  DEBUGF("(ftch) client resolving %s", host);
-  if ((rc = getaddrinfo(host, port, &hints, &addr)) != EAI_SUCCESS) {
-    luaL_error(L, "getaddrinfo(%s:%s) error: EAI_%s %s", host, port,
-               gai_strerror(rc), strerror(errno));
-    unreachable;
-  }
-
-  /*
-   * Connect to server.
-   */
-  ip = ntohl(((struct sockaddr_in *)addr->ai_addr)->sin_addr.s_addr);
-  DEBUGF("(ftch) client connecting %hhu.%hhu.%hhu.%hhu:%d", ip >> 24, ip >> 16,
-         ip >> 8, ip, ntohs(((struct sockaddr_in *)addr->ai_addr)->sin_port));
-  CHECK_NE(-1, (sock = GoodSocket(addr->ai_family, addr->ai_socktype,
-                                  addr->ai_protocol, false, &timeout)));
-  rc = connect(sock, addr->ai_addr, addr->ai_addrlen);
-  freeaddrinfo(addr), addr = 0;
-  if (rc == -1) {
-    close(sock);
-    luaL_error(L, "connect(%s:%s) error: %s", host, port, strerror(errno));
-    unreachable;
-  }
-
-#ifndef UNSECURE
-  if (usingssl) {
-    if (sslcliused) {
-      mbedtls_ssl_session_reset(&sslcli);
-    } else {
-      ReseedRng(&rngcli, "child");
-    }
-    sslcliused = true;
-    DEBUGF("(ftch) client handshaking %`'s", host);
-    if (!evadedragnetsurveillance) {
-      mbedtls_ssl_set_hostname(&sslcli, host);
-    }
-    bio = gc(malloc(sizeof(struct TlsBio)));
-    bio->fd = sock;
-    bio->a = 0;
-    bio->b = 0;
-    bio->c = -1;
-    mbedtls_ssl_set_bio(&sslcli, bio, TlsSend, 0, TlsRecvImpl);
-    while ((ret = mbedtls_ssl_handshake(&sslcli))) {
-      switch (ret) {
-        case MBEDTLS_ERR_SSL_WANT_READ:
-          break;
-        case MBEDTLS_ERR_X509_CERT_VERIFY_FAILED:
-          goto VerifyFailed;
-        default:
-          close(sock);
-          LuaThrowTlsError(L, "handshake", ret);
-          unreachable;
-      }
-    }
-    LockInc(&shared->c.sslhandshakes);
-    VERBOSEF("(ftch) shaken %s:%s %s %s", host, port,
-             mbedtls_ssl_get_ciphersuite(&sslcli),
-             mbedtls_ssl_get_version(&sslcli));
-  }
-#endif /* UNSECURE */
-
-  /*
-   * Send HTTP Message.
-   */
-  DEBUGF("(ftch) client sending %s request", method);
-#ifndef UNSECURE
-  if (usingssl) {
-    ret = mbedtls_ssl_write(&sslcli, request, requestlen);
-    if (ret != requestlen) {
-      if (ret == MBEDTLS_ERR_X509_CERT_VERIFY_FAILED) goto VerifyFailed;
-      close(sock);
-      LuaThrowTlsError(L, "write", ret);
-      unreachable;
-    }
-  } else
-#endif
-      if (WRITE(sock, request, requestlen) != requestlen) {
-    close(sock);
-    luaL_error(L, "write error: %s", strerror(errno));
-    unreachable;
-  }
-  if (logmessages) {
-    LogMessage("sent", request, requestlen);
-  }
-
-  /*
-   * Handle response.
-   */
-  bzero(&inbuf, sizeof(inbuf));
-  InitHttpMessage(&msg, kHttpResponse);
-  for (hdrsize = paylen = t = 0;;) {
-    if (inbuf.n == inbuf.c) {
-      inbuf.c += 1000;
-      inbuf.c += inbuf.c >> 1;
-      inbuf.p = realloc(inbuf.p, inbuf.c);
-    }
-    NOISEF("(ftch) client reading");
-#ifndef UNSECURE
-    if (usingssl) {
-      if ((rc = mbedtls_ssl_read(&sslcli, inbuf.p + inbuf.n,
-                                 inbuf.c - inbuf.n)) < 0) {
-        if (rc == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY) {
-          rc = 0;
-        } else {
-          close(sock);
-          free(inbuf.p);
-          DestroyHttpMessage(&msg);
-          LuaThrowTlsError(L, "read", rc);
-          unreachable;
-        }
-      }
-    } else
-#endif
-        if ((rc = READ(sock, inbuf.p + inbuf.n, inbuf.c - inbuf.n)) == -1) {
-      close(sock);
-      free(inbuf.p);
-      DestroyHttpMessage(&msg);
-      luaL_error(L, "read error: %s", strerror(errno));
-      unreachable;
-    }
-    g = rc;
-    inbuf.n += g;
-    switch (t) {
-      case kHttpClientStateHeaders:
-        if (!g) {
-          WARNF("(ftch) HTTP client %s error", "EOF headers");
-          goto TransportError;
-        }
-        rc = ParseHttpMessage(&msg, inbuf.p, inbuf.n);
-        if (rc == -1) {
-          WARNF("(ftch) HTTP client %s error", "ParseHttpMessage");
-          goto TransportError;
-        }
-        if (rc) {
-          hdrsize = rc;
-          if (logmessages) {
-            LogMessage("received", inbuf.p, hdrsize);
-          }
-          if (100 <= msg.status && msg.status <= 199) {
-            if ((HasHeader(kHttpContentLength) &&
-                 !HeaderEqualCase(kHttpContentLength, "0")) ||
-                (HasHeader(kHttpTransferEncoding) &&
-                 !HeaderEqualCase(kHttpTransferEncoding, "identity"))) {
-              WARNF("(ftch) HTTP client %s error", "Content-Length #1");
-              goto TransportError;
-            }
-            DestroyHttpMessage(&msg);
-            InitHttpMessage(&msg, kHttpResponse);
-            memmove(inbuf.p, inbuf.p + hdrsize, inbuf.n - hdrsize);
-            inbuf.n -= hdrsize;
-            break;
-          }
-          if (msg.status == 204 || msg.status == 304) {
-            goto Finished;
-          }
-          if (HasHeader(kHttpTransferEncoding) &&
-              !HeaderEqualCase(kHttpTransferEncoding, "identity")) {
-            if (HeaderEqualCase(kHttpTransferEncoding, "chunked")) {
-              t = kHttpClientStateBodyChunked;
-              bzero(&u, sizeof(u));
-              goto Chunked;
-            } else {
-              WARNF("(ftch) HTTP client %s error", "Transfer-Encoding");
-              goto TransportError;
-            }
-          } else if (HasHeader(kHttpContentLength)) {
-            rc = ParseContentLength(HeaderData(kHttpContentLength),
-                                    HeaderLength(kHttpContentLength));
-            if (rc == -1) {
-              WARNF("(ftch) HTTP client %s error", "Content-Length #2");
-              goto TransportError;
-            }
-            if ((paylen = rc) <= inbuf.n - hdrsize) {
-              goto Finished;
-            } else {
-              t = kHttpClientStateBodyLengthed;
-            }
-          } else {
-            t = kHttpClientStateBody;
-          }
-        }
-        break;
-      case kHttpClientStateBody:
-        if (!g) {
-          paylen = inbuf.n;
-          goto Finished;
-        }
-        break;
-      case kHttpClientStateBodyLengthed:
-        if (!g) {
-          WARNF("(ftch) HTTP client %s error", "EOF body");
-          goto TransportError;
-        }
-        if (inbuf.n - hdrsize >= paylen) {
-          goto Finished;
-        }
-        break;
-      case kHttpClientStateBodyChunked:
-      Chunked:
-        rc = Unchunk(&u, inbuf.p + hdrsize, inbuf.n - hdrsize, &paylen);
-        if (rc == -1) {
-          WARNF("(ftch) HTTP client %s error", "Unchunk");
-          goto TransportError;
-        }
-        if (rc) goto Finished;
-        break;
-      default:
-        unreachable;
-    }
-  }
-
-Finished:
-  if (paylen && logbodies) LogBody("received", inbuf.p + hdrsize, paylen);
-  VERBOSEF("(ftch) completed %s HTTP%02d %d %s %`'.*s", method, msg.version,
-           msg.status, urlarg, HeaderLength(kHttpServer),
-           HeaderData(kHttpServer));
-  if (followredirect && HasHeader(kHttpLocation) &&
-      (msg.status == 301 || msg.status == 308 ||  // permanent redirects
-       msg.status == 302 || msg.status == 307 ||  // temporary redirects
-       msg.status == 303 /* see other; non-GET changes to GET, body lost */) &&
-      numredirects < maxredirects) {
-    // if 303, then remove body and set method to GET
-    if (msg.status == 303) {
-      body = "";
-      bodylen = 0;
-      method = kHttpMethod[kHttpGet];
-    }
-    // create table if needed
-    if (!lua_istable(L, 2)) {
-      lua_settop(L, 1);          // pop body if present
-      lua_createtable(L, 0, 3);  // body, method, numredirects
-    }
-    lua_pushlstring(L, body, bodylen);
-    lua_setfield(L, -2, "body");
-
-    lua_pushstring(L, method);
-    lua_setfield(L, -2, "method");
-
-    lua_pushinteger(L, numredirects + 1);
-    lua_setfield(L, -2, "numredirects");
-    // replace URL with Location header
-    lua_pushlstring(L, HeaderData(kHttpLocation), HeaderLength(kHttpLocation));
-    lua_replace(L, -3);
-
-    DestroyHttpMessage(&msg);
-    free(inbuf.p);
-    close(sock);
-    return LuaFetch(L);
-  } else {
-    lua_pushinteger(L, msg.status);
-    LuaPushHeaders(L, &msg, inbuf.p);
-    lua_pushlstring(L, inbuf.p + hdrsize, paylen);
-    DestroyHttpMessage(&msg);
-    free(inbuf.p);
-    close(sock);
-    return 3;
-  }
-TransportError:
-  DestroyHttpMessage(&msg);
-  free(inbuf.p);
-  close(sock);
-  luaL_error(L, "transport error");
-  unreachable;
-#ifndef UNSECURE
-VerifyFailed:
-  LockInc(&shared->c.sslverifyfailed);
-  close(sock);
-  LuaThrowTlsError(
-      L, gc(DescribeSslVerifyFailure(sslcli.session_negotiate->verify_result)),
-      ret);
-  unreachable;
-#endif
-#undef ssl
+static int LuaNilError(lua_State *L, const char *fmt, ...) {
+  va_list argp;
+  va_start(argp, fmt);
+  lua_pushnil(L);
+  lua_pushvfstring(L, fmt, argp);
+  va_end(argp);
+  return 2;
 }
 
+static int LuaNilTlsError(lua_State *L, const char *s, int r) {
+  return LuaNilError(L, "tls %s failed (%s %s)", s,
+                     IsTiny() ? "grep" : GetTlsError(r),
+                     _gc(xasprintf("-0x%04x", -r)));
+}
+
+#include "tool/net/fetch.inc"
+
 static int LuaGetDate(lua_State *L) {
-  lua_pushinteger(L, shared->nowish);
+  lua_pushinteger(L, shared->nowish.tv_sec);
   return 1;
 }
 
 static int LuaGetHttpVersion(lua_State *L) {
   OnlyCallDuringRequest(L, "GetHttpVersion");
-  lua_pushinteger(L, msg.version);
+  lua_pushinteger(L, cpm.msg.version);
   return 1;
 }
 
@@ -4134,21 +3934,26 @@ static int LuaGetRedbeanVersion(lua_State *L) {
 
 static int LuaGetMethod(lua_State *L) {
   OnlyCallDuringRequest(L, "GetMethod");
-  if (msg.method) {
-    lua_pushstring(L, kHttpMethod[msg.method]);
+  if (cpm.msg.method) {
+    lua_pushstring(L, kHttpMethod[cpm.msg.method]);
   } else {
-    lua_pushlstring(L, inbuf.p + msg.xmethod.a, msg.xmethod.b - msg.xmethod.a);
+    lua_pushlstring(L, inbuf.p + cpm.msg.xmethod.a,
+                    cpm.msg.xmethod.b - cpm.msg.xmethod.a);
   }
   return 1;
 }
 
-static int LuaGetAddr(lua_State *L, void GetAddr(uint32_t *, uint16_t *)) {
+static int LuaGetAddr(lua_State *L, int GetAddr(uint32_t *, uint16_t *)) {
   uint32_t ip;
   uint16_t port;
-  GetAddr(&ip, &port);
-  lua_pushinteger(L, ip);
-  lua_pushinteger(L, port);
-  return 2;
+  if (!GetAddr(&ip, &port)) {
+    lua_pushinteger(L, ip);
+    lua_pushinteger(L, port);
+    return 2;
+  } else {
+    lua_pushnil(L);
+    return 1;
+  }
 }
 
 static int LuaGetServerAddr(lua_State *L) {
@@ -4177,7 +3982,7 @@ static int LuaLog(lua_State *L) {
       module = ar.short_src;
       line = ar.currentline;
     } else {
-      module = gc(strndup(effectivepath.p, effectivepath.n));
+      module = _gc(strndup(effectivepath.p, effectivepath.n));
       line = -1;
     }
     flogf(level, module, line, NULL, "%s", msg);
@@ -4185,12 +3990,16 @@ static int LuaLog(lua_State *L) {
   return 0;
 }
 
-static int LuaEncodeSmth(lua_State *L,
-                         int Encoder(lua_State *, char **, char *, int)) {
-  int useoutput = false;
-  int maxdepth = 64;
-  char *numformat = "%.14g";
+static int LuaEncodeSmth(lua_State *L, int Encoder(lua_State *, char **, int,
+                                                   struct EncoderConfig)) {
   char *p = 0;
+  int useoutput = false;
+  struct EncoderConfig conf = {
+      .maxdepth = 64,
+      .sorted = true,
+      .pretty = false,
+      .indent = "  ",
+  };
   if (lua_istable(L, 2)) {
     lua_settop(L, 2);  // discard any extra arguments
     lua_getfield(L, 2, "useoutput");
@@ -4198,13 +4007,32 @@ static int LuaEncodeSmth(lua_State *L,
     if (ishandlingrequest && lua_isboolean(L, -1)) {
       useoutput = lua_toboolean(L, -1);
     }
-    lua_getfield(L, 2, "numformat");
-    numformat = luaL_optstring(L, -1, numformat);
+    lua_getfield(L, 2, "maxdepth");
+    if (!lua_isnoneornil(L, -1)) {
+      lua_Integer n = lua_tointeger(L, -1);
+      n = MAX(0, MIN(n, SHRT_MAX));
+      conf.maxdepth = n;
+    }
+    lua_getfield(L, 2, "sorted");
+    if (!lua_isnoneornil(L, -1)) {
+      conf.sorted = lua_toboolean(L, -1);
+    }
+    lua_getfield(L, 2, "pretty");
+    if (!lua_isnoneornil(L, -1)) {
+      conf.pretty = lua_toboolean(L, -1);
+      lua_getfield(L, 2, "indent");
+      if (!lua_isnoneornil(L, -1)) {
+        conf.indent = luaL_checkstring(L, -1);
+      }
+    }
   }
   lua_settop(L, 1);  // keep the passed argument on top
-  Encoder(L, useoutput ? &outbuf : &p, numformat, -1);
+  if (Encoder(L, useoutput ? &cpm.outbuf : &p, -1, conf) == -1) {
+    free(p);
+    return 2;
+  }
   if (useoutput) {
-    lua_pushnil(L);
+    lua_pushboolean(L, true);
   } else {
     lua_pushstring(L, p);
     free(p);
@@ -4218,6 +4046,31 @@ static int LuaEncodeJson(lua_State *L) {
 
 static int LuaEncodeLua(lua_State *L) {
   return LuaEncodeSmth(L, LuaEncodeLuaData);
+}
+
+static int LuaDecodeJson(lua_State *L) {
+  size_t n;
+  const char *p;
+  struct DecodeJson r;
+  p = luaL_checklstring(L, 1, &n);
+  r = DecodeJson(L, p, n);
+  if (UNLIKELY(!r.rc)) {
+    lua_pushnil(L);
+    lua_pushstring(L, "unexpected eof");
+    return 2;
+  }
+  if (UNLIKELY(r.rc == -1)) {
+    lua_pushnil(L);
+    lua_pushstring(L, r.p);
+    return 2;
+  }
+  r = DecodeJson(L, r.p, n - (r.p - p));
+  if (UNLIKELY(r.rc)) {
+    lua_pushnil(L);
+    lua_pushstring(L, "junk after expression");
+    return 2;
+  }
+  return 1;
 }
 
 static int LuaGetUrl(lua_State *L) {
@@ -4260,10 +4113,9 @@ static int LuaGetUser(lua_State *L) {
   OnlyCallDuringRequest(L, "GetUser");
   if (url.user.p) {
     LuaPushUrlView(L, &url.user);
-  } else if ((p = GetBasicAuthorization(&n))) {
+  } else if ((p = gc(GetBasicAuthorization(&n)))) {
     if (!(q = memchr(p, ':', n))) q = p + n;
     lua_pushlstring(L, p, q - p);
-    free(p);
   } else {
     lua_pushnil(L);
   }
@@ -4276,13 +4128,12 @@ static int LuaGetPass(lua_State *L) {
   OnlyCallDuringRequest(L, "GetPass");
   if (url.user.p) {
     LuaPushUrlView(L, &url.pass);
-  } else if ((p = GetBasicAuthorization(&n))) {
+  } else if ((p = gc(GetBasicAuthorization(&n)))) {
     if ((q = memchr(p, ':', n))) {
       lua_pushlstring(L, q + 1, p + n - (q + 1));
     } else {
       lua_pushnil(L);
     }
-    free(p);
   } else {
     lua_pushnil(L);
   }
@@ -4316,6 +4167,26 @@ static int LuaGetBody(lua_State *L) {
   return 1;
 }
 
+static int LuaGetResponseBody(lua_State *L) {
+  char *s = "";
+  // response can be gzipped (>0), text (=0), or generator (<0)
+  int size = cpm.gzipped > 0    ? cpm.gzipped  // original size
+             : cpm.gzipped == 0 ? cpm.contentlength
+                                : 0;
+  OnlyCallDuringRequest(L, "GetResponseBody");
+  if (cpm.gzipped > 0 &&
+      (!(s = FreeLater(malloc(cpm.gzipped))) ||
+       !Inflate(s, cpm.gzipped, cpm.content, cpm.contentlength))) {
+    return LuaNilError(L, "failed to decompress response");
+  }
+  lua_pushlstring(L,
+                  cpm.gzipped > 0    ? s  // return decompressed
+                  : cpm.gzipped == 0 ? cpm.content
+                                     : "",
+                  size);
+  return 1;
+}
+
 static int LuaGetHeader(lua_State *L) {
   int h;
   const char *key;
@@ -4323,15 +4194,16 @@ static int LuaGetHeader(lua_State *L) {
   OnlyCallDuringRequest(L, "GetHeader");
   key = luaL_checklstring(L, 1, &keylen);
   if ((h = GetHttpHeader(key, keylen)) != -1) {
-    if (msg.headers[h].a) {
-      return LuaPushHeader(L, &msg, inbuf.p, h);
+    if (cpm.msg.headers[h].a) {
+      return LuaPushHeader(L, &cpm.msg, inbuf.p, h);
     }
   } else {
-    for (i = 0; i < msg.xheaders.n; ++i) {
-      if (SlicesEqualCase(key, keylen, inbuf.p + msg.xheaders.p[i].k.a,
-                          msg.xheaders.p[i].k.b - msg.xheaders.p[i].k.a)) {
-        LuaPushLatin1(L, inbuf.p + msg.xheaders.p[i].v.a,
-                      msg.xheaders.p[i].v.b - msg.xheaders.p[i].v.a);
+    for (i = 0; i < cpm.msg.xheaders.n; ++i) {
+      if (SlicesEqualCase(
+              key, keylen, inbuf.p + cpm.msg.xheaders.p[i].k.a,
+              cpm.msg.xheaders.p[i].k.b - cpm.msg.xheaders.p[i].k.a)) {
+        LuaPushLatin1(L, inbuf.p + cpm.msg.xheaders.p[i].v.a,
+                      cpm.msg.xheaders.p[i].v.b - cpm.msg.xheaders.p[i].v.a);
         return 1;
       }
     }
@@ -4342,67 +4214,64 @@ static int LuaGetHeader(lua_State *L) {
 
 static int LuaGetHeaders(lua_State *L) {
   OnlyCallDuringRequest(L, "GetHeaders");
-  return LuaPushHeaders(L, &msg, inbuf.p);
+  return LuaPushHeaders(L, &cpm.msg, inbuf.p);
 }
 
 static int LuaSetHeader(lua_State *L) {
   int h;
-  ssize_t rc;
+  char *eval;
   char *p, *q;
-  const char *key, *val, *eval;
-  size_t i, keylen, vallen, evallen;
+  const char *key, *val;
+  size_t keylen, vallen, evallen;
   OnlyCallDuringRequest(L, "SetHeader");
   key = luaL_checklstring(L, 1, &keylen);
-  val = luaL_checklstring(L, 2, &vallen);
+  val = luaL_optlstring(L, 2, 0, &vallen);
+  if (!val) return 0;
   if ((h = GetHttpHeader(key, keylen)) == -1) {
     if (!IsValidHttpToken(key, keylen)) {
       luaL_argerror(L, 1, "invalid");
-      unreachable;
+      __builtin_unreachable();
     }
   }
   if (!(eval = EncodeHttpHeaderValue(val, vallen, &evallen))) {
     luaL_argerror(L, 2, "invalid");
-    unreachable;
+    __builtin_unreachable();
   }
   p = GetLuaResponse();
   while (p - hdrbuf.p + keylen + 2 + evallen + 2 + 512 > hdrbuf.n) {
     hdrbuf.n += hdrbuf.n >> 1;
     q = xrealloc(hdrbuf.p, hdrbuf.n);
-    luaheaderp = p = q + (p - hdrbuf.p);
+    cpm.luaheaderp = p = q + (p - hdrbuf.p);
     hdrbuf.p = q;
   }
   switch (h) {
     case kHttpConnection:
-      if (!SlicesEqualCase(eval, evallen, "close", 5)) {
-        luaL_argerror(L, 2, "unsupported");
-        unreachable;
-      }
-      connectionclose = true;
+      connectionclose = SlicesEqualCase(eval, evallen, "close", 5);
       break;
     case kHttpContentType:
       p = AppendContentType(p, eval);
       break;
     case kHttpReferrerPolicy:
-      referrerpolicy = FreeLater(strdup(eval));
+      cpm.referrerpolicy = FreeLater(strdup(eval));
       break;
     case kHttpServer:
-      branded = true;
+      cpm.branded = true;
       p = AppendHeader(p, "Server", eval);
       break;
     case kHttpExpires:
     case kHttpCacheControl:
-      gotcachecontrol = true;
+      cpm.gotcachecontrol = true;
       p = AppendHeader(p, key, eval);
       break;
     case kHttpXContentTypeOptions:
-      gotxcontenttypeoptions = true;
+      cpm.gotxcontenttypeoptions = true;
       p = AppendHeader(p, key, eval);
       break;
     default:
       p = AppendHeader(p, key, eval);
       break;
   }
-  luaheaderp = p;
+  cpm.luaheaderp = p;
   free(eval);
   return 0;
 }
@@ -4410,7 +4279,7 @@ static int LuaSetHeader(lua_State *L) {
 static int LuaGetCookie(lua_State *L) {
   char *cookie = 0, *cookietmpl, *cookieval;
   OnlyCallDuringRequest(L, "GetCookie");
-  cookietmpl = gc(xasprintf(" %s=", luaL_checkstring(L, 1)));
+  cookietmpl = _gc(xasprintf(" %s=", luaL_checkstring(L, 1)));
   if (HasHeader(kHttpCookie)) {
     appends(&cookie, " ");  // prepend space to simplify cookie search
     appendd(&cookie, HeaderData(kHttpCookie), HeaderLength(kHttpCookie));
@@ -4440,11 +4309,11 @@ static int LuaSetCookie(lua_State *L) {
 
   if (!IsValidHttpToken(key, keylen)) {
     luaL_argerror(L, 1, "invalid");
-    unreachable;
+    __builtin_unreachable();
   }
   if (!IsValidCookieValue(val, vallen)) {
     luaL_argerror(L, 2, "invalid");
-    unreachable;
+    __builtin_unreachable();
   }
 
   ishostpref = keylen > strlen(hostpref) &&
@@ -4455,8 +4324,8 @@ static int LuaSetCookie(lua_State *L) {
   if ((ishostpref || issecurepref) && !usingssl) {
     luaL_argerror(
         L, 1,
-        gc(xasprintf("%s and %s prefixes require SSL", hostpref, securepref)));
-    unreachable;
+        _gc(xasprintf("%s and %s prefixes require SSL", hostpref, securepref)));
+    __builtin_unreachable();
   }
 
   appends(&buf, key);
@@ -4470,10 +4339,10 @@ static int LuaSetCookie(lua_State *L) {
         expires =
             FormatUnixHttpDateTime(FreeLater(xmalloc(30)), lua_tonumber(L, -1));
       } else {
-        expires = lua_tostring(L, -1);
+        expires = (void *)lua_tostring(L, -1);
         if (!ParseHttpDateTime(expires, -1)) {
           luaL_argerror(L, 3, "invalid data format in Expires");
-          unreachable;
+          __builtin_unreachable();
         }
       }
       appends(&buf, "; Expires=");
@@ -4489,7 +4358,7 @@ static int LuaSetCookie(lua_State *L) {
 
     if (lua_getfield(L, 3, "samesite") == LUA_TSTRING ||
         lua_getfield(L, 3, "SameSite") == LUA_TSTRING) {
-      samesite = lua_tostring(L, -1);  // also used in the Secure check
+      samesite = (void *)lua_tostring(L, -1);  // also used in the Secure check
       appends(&buf, "; SameSite=");
       appends(&buf, samesite);
     }
@@ -4577,7 +4446,7 @@ static int LuaWrite(lua_State *L) {
   OnlyCallDuringRequest(L, "Write");
   if (!lua_isnil(L, 1)) {
     data = luaL_checklstring(L, 1, &size);
-    appendd(&outbuf, data, size);
+    appendd(&cpm.outbuf, data, size);
   }
   return 0;
 }
@@ -4594,7 +4463,8 @@ static int LuaProgramPort(lua_State *L) {
 
 static int LuaProgramCache(lua_State *L) {
   OnlyCallFromMainProcess(L, "ProgramCache");
-  return LuaProgramInt(L, ProgramCache);
+  ProgramCache(luaL_checkinteger(L, 1), luaL_optstring(L, 2, NULL));
+  return 0;
 }
 
 static int LuaProgramTimeout(lua_State *L) {
@@ -4644,6 +4514,29 @@ static int LuaProgramUniprocess(lua_State *L) {
   return 1;
 }
 
+static int LuaProgramHeartbeatInterval(lua_State *L) {
+  int64_t millis;
+  OnlyCallFromMainProcess(L, "ProgramHeartbeatInterval");
+  if (!lua_isnoneornil(L, 1)) {
+    millis = luaL_checkinteger(L, 1);
+    millis = MAX(100, millis);
+    heartbeatinterval = timespec_frommillis(millis);
+  }
+  lua_pushinteger(L, timespec_tomillis(heartbeatinterval));
+  return 1;
+}
+
+static int LuaProgramMaxWorkers(lua_State *L) {
+  OnlyCallFromMainProcess(L, "ProgramMaxWorkers");
+  if (!lua_isinteger(L, 1) && !lua_isnoneornil(L, 1)) {
+    return luaL_argerror(L, 1, "invalid number of workers; integer expected");
+  }
+  lua_pushinteger(L, maxworkers);
+  if (lua_isinteger(L, 1)) maxworkers = lua_tointeger(L, 1);
+  maxworkers = MAX(maxworkers, 1);
+  return 1;
+}
+
 static int LuaProgramAddr(lua_State *L) {
   uint32_t ip;
   OnlyCallFromInitLua(L, "ProgramAddr");
@@ -4668,6 +4561,12 @@ static int LuaProgramBrand(lua_State *L) {
 }
 
 static int LuaProgramDirectory(lua_State *L) {
+  struct stat st;
+  const char *path = luaL_checkstring(L, 1);
+  // check to raise a Lua error, to allow it to be handled
+  if (stat(path, &st) == -1 || !S_ISDIR(st.st_mode)) {
+    return luaL_argerror(L, 1, "not a directory");
+  }
   return LuaProgramString(L, ProgramDirectory);
 }
 
@@ -4690,7 +4589,7 @@ static int LuaProgramSslPresharedKey(lua_State *L) {
   p2 = luaL_checklstring(L, 2, &n2);
   if (!n1 || n1 > MBEDTLS_PSK_MAX_LEN || !n2) {
     luaL_argerror(L, 1, "bad preshared key length");
-    unreachable;
+    __builtin_unreachable();
   }
   psk.key = memcpy(malloc(n1), p1, n1);
   psk.key_len = n1;
@@ -4712,11 +4611,11 @@ static int LuaProgramSslPresharedKey(lua_State *L) {
 }
 
 static int LuaProgramSslCiphersuite(lua_State *L) {
-  mbedtls_ssl_ciphersuite_t *suite;
+  const mbedtls_ssl_ciphersuite_t *suite;
   OnlyCallFromInitLua(L, "ProgramSslCiphersuite");
   if (!(suite = GetCipherSuite(luaL_checkstring(L, 1)))) {
     luaL_argerror(L, 1, "unsupported or unknown ciphersuite");
-    unreachable;
+    __builtin_unreachable();
   }
   suites.p = realloc(suites.p, (++suites.n + 1) * sizeof(*suites.p));
   suites.p[suites.n - 1] = suite->id;
@@ -4744,7 +4643,7 @@ static int LuaProgramCertificate(lua_State *L) {
 
 static int LuaProgramHeader(lua_State *L) {
   ProgramHeader(
-      gc(xasprintf("%s: %s", luaL_checkstring(L, 1), luaL_checkstring(L, 2))));
+      _gc(xasprintf("%s: %s", luaL_checkstring(L, 1), luaL_checkstring(L, 2))));
   return 0;
 }
 
@@ -4816,11 +4715,11 @@ static int LuaGetZipPaths(lua_State *L) {
   char *path;
   uint8_t *zcf;
   size_t i, n, pathlen, prefixlen;
-  char *prefix = luaL_optlstring(L, 1, "", &prefixlen);
+  const char *prefix = luaL_optlstring(L, 1, "", &prefixlen);
   lua_newtable(L);
   i = 0;
   n = GetZipCdirRecords(zcdir);
-  for (zcf = zbase + GetZipCdirOffset(zcdir); n--;
+  for (zcf = zmap + GetZipCdirOffset(zcdir); n--;
        zcf += ZIP_CFILE_HDRSIZE(zcf)) {
     CHECK_EQ(kZipCfileHdrMagic, ZIP_CFILE_MAGIC(zcf));
     path = GetAssetPath(zcf, &pathlen);
@@ -4857,7 +4756,7 @@ static int LuaGetAssetLastModifiedTime(lua_State *L) {
     if (a->file) {
       zuluseconds = a->file->st.st_mtim.tv_sec;
     } else {
-      GetZipCfileTimestamps(zbase + a->cf, &lm, 0, 0, gmtoff);
+      GetZipCfileTimestamps(zmap + a->cf, &lm, 0, 0, gmtoff);
       zuluseconds = lm.tv_sec;
     }
     lua_pushinteger(L, zuluseconds);
@@ -4876,7 +4775,7 @@ static int LuaGetAssetSize(lua_State *L) {
     if (a->file) {
       lua_pushinteger(L, a->file->st.st_size);
     } else {
-      lua_pushinteger(L, GetZipLfileUncompressedSize(zbase + a->lf));
+      lua_pushinteger(L, GetZipLfileUncompressedSize(zmap + a->lf));
     }
   } else {
     lua_pushnil(L);
@@ -4897,6 +4796,207 @@ static int LuaIsAssetCompressed(lua_State *L) {
   return 1;
 }
 
+static bool Blackhole(uint32_t ip) {
+  char buf[4];
+  if (blackhole.fd <= 0) return false;
+  WRITE32BE(buf, ip);
+  if (sendto(blackhole.fd, &buf, 4, 0, (struct sockaddr *)&blackhole.addr,
+             sizeof(blackhole.addr)) != -1) {
+    return true;
+  } else {
+    VERBOSEF("(token) sendto(%s) failed: %m", blackhole.addr.sun_path);
+    errno = 0;
+    return false;
+  }
+}
+
+static int LuaBlackhole(lua_State *L) {
+  lua_Integer ip;
+  ip = luaL_checkinteger(L, 1);
+  if (!(0 <= ip && ip <= 0xffffffff)) {
+    luaL_argerror(L, 1, "ip out of range");
+    __builtin_unreachable();
+  }
+  lua_pushboolean(L, Blackhole(ip));
+  return 1;
+}
+
+wontreturn static void Replenisher(void) {
+  struct timespec ts;
+  VERBOSEF("(token) replenish worker started");
+  signal(SIGINT, OnTerm);
+  signal(SIGHUP, OnTerm);
+  signal(SIGTERM, OnTerm);
+  signal(SIGUSR1, SIG_IGN);  // make sure reload won't kill this
+  signal(SIGUSR2, SIG_IGN);  // make sure meltdown won't kill this
+  ts = timespec_real();
+  while (!terminated) {
+    if (clock_nanosleep(CLOCK_REALTIME, TIMER_ABSTIME, &ts, 0)) {
+      errno = 0;
+      continue;
+    }
+    ReplenishTokens(tokenbucket.w, (1ul << tokenbucket.cidr) / 8);
+    ts = timespec_add(ts, tokenbucket.replenish);
+    DEBUGF("(token) replenished tokens");
+  }
+  VERBOSEF("(token) replenish worker exiting");
+  _Exit(0);
+}
+
+static int LuaAcquireToken(lua_State *L) {
+  uint32_t ip;
+  if (!tokenbucket.cidr) {
+    luaL_error(L, "ProgramTokenBucket() needs to be called first");
+    __builtin_unreachable();
+  }
+  GetClientAddr(&ip, 0);
+  lua_pushinteger(L, AcquireToken(tokenbucket.b, luaL_optinteger(L, 1, ip),
+                                  tokenbucket.cidr));
+  return 1;
+}
+
+static int LuaCountTokens(lua_State *L) {
+  uint32_t ip;
+  if (!tokenbucket.cidr) {
+    luaL_error(L, "ProgramTokenBucket() needs to be called first");
+    __builtin_unreachable();
+  }
+  GetClientAddr(&ip, 0);
+  lua_pushinteger(L, CountTokens(tokenbucket.b, luaL_optinteger(L, 1, ip),
+                                 tokenbucket.cidr));
+  return 1;
+}
+
+static int LuaProgramTokenBucket(lua_State *L) {
+  if (tokenbucket.cidr) {
+    luaL_error(L, "ProgramTokenBucket() can only be called once");
+    __builtin_unreachable();
+  }
+  lua_Number replenish = luaL_optnumber(L, 1, 1);  // per second
+  lua_Integer cidr = luaL_optinteger(L, 2, 24);
+  lua_Integer reject = luaL_optinteger(L, 3, 30);
+  lua_Integer ignore = luaL_optinteger(L, 4, MIN(reject / 2, 15));
+  lua_Integer ban = luaL_optinteger(L, 5, MIN(ignore / 10, 1));
+  if (!(1 / 3600. <= replenish && replenish <= 1e6)) {
+    luaL_argerror(L, 1, "require 1/3600 <= replenish <= 1e6");
+    __builtin_unreachable();
+  }
+  if (!(8 <= cidr && cidr <= 32)) {
+    luaL_argerror(L, 2, "require 8 <= cidr <= 32");
+    __builtin_unreachable();
+  }
+  if (!(-1 <= reject && reject <= 126)) {
+    luaL_argerror(L, 3, "require -1 <= reject <= 126");
+    __builtin_unreachable();
+  }
+  if (!(-1 <= ignore && ignore <= 126)) {
+    luaL_argerror(L, 4, "require -1 <= ignore <= 126");
+    __builtin_unreachable();
+  }
+  if (!(-1 <= ban && ban <= 126)) {
+    luaL_argerror(L, 5, "require -1 <= ban <= 126");
+    __builtin_unreachable();
+  }
+  if (!(ignore <= reject)) {
+    luaL_argerror(L, 4, "require ignore <= reject");
+    __builtin_unreachable();
+  }
+  if (!(ban <= ignore)) {
+    luaL_argerror(L, 5, "require ban <= ignore");
+    __builtin_unreachable();
+  }
+  VERBOSEF("(token) deploying %,ld buckets "
+           "(one for every %ld ips) "
+           "each holding 127 tokens which "
+           "replenish %g times per second, "
+           "reject at %d tokens, "
+           "ignore at %d tokens, and "
+           "ban at %d tokens",
+           1L << cidr,                 //
+           4294967296 / (1L << cidr),  //
+           replenish,                  //
+           reject,                     //
+           ignore,                     //
+           ban);
+  if (ignore == -1) ignore = -128;
+  if (ban == -1) ban = -128;
+  if (ban >= 0 && (IsLinux() || IsBsd())) {
+    uint32_t testip = 0;
+    blackhole.addr.sun_family = AF_UNIX;
+    strlcpy(blackhole.addr.sun_path, "/var/run/blackhole.sock",
+            sizeof(blackhole.addr.sun_path));
+    if ((blackhole.fd = socket(AF_UNIX, SOCK_DGRAM, 0)) == -1) {
+      WARNF("(token) socket(AF_UNIX) failed: %m");
+      ban = -1;
+    } else if (sendto(blackhole.fd, &testip, 4, 0,
+                      (struct sockaddr *)&blackhole.addr,
+                      sizeof(blackhole.addr)) == -1) {
+      VERBOSEF("(token) error: sendto(%`'s) failed: %m",
+               blackhole.addr.sun_path);
+      VERBOSEF("(token) redbean isn't able to protect your kernel from ddos");
+      VERBOSEF("(token) please run the blackholed program; see our website!");
+    }
+  }
+  tokenbucket.b = _mapshared(ROUNDUP(1ul << cidr, FRAMESIZE));
+  memset(tokenbucket.b, 127, 1ul << cidr);
+  tokenbucket.cidr = cidr;
+  tokenbucket.reject = reject;
+  tokenbucket.ignore = ignore;
+  tokenbucket.ban = ban;
+  tokenbucket.replenish = timespec_fromnanos(1 / replenish * 1e9);
+  int pid = fork();
+  npassert(pid != -1);
+  if (!pid) Replenisher();
+  return 0;
+}
+
+static const char *GetContentTypeExt(const char *path, size_t n) {
+  const char *r, *e;
+  int top;
+  lua_State *L = GL;
+  if ((r = FindContentType(path, n))) return r;
+
+  // extract the last .; use the entire path if none is present
+  if ((e = memrchr(path, '.', n))) {
+    n -= e - path + 1;
+    path = e + 1;
+  }
+  top = lua_gettop(L);
+  lua_pushlightuserdata(L, (void *)&ctIdx);  // push address as unique key
+  CHECK_EQ(lua_gettable(L, LUA_REGISTRYINDEX), LUA_TTABLE);
+
+  lua_pushlstring(L, path, n);
+  if (lua_gettable(L, -2) == LUA_TSTRING)
+    r = FreeLater(strdup(lua_tostring(L, -1)));
+  lua_settop(L, top);
+  return r;
+}
+
+static int LuaProgramContentType(lua_State *L) {
+  const char *ext = luaL_checkstring(L, 1);
+  const char *ct;
+  int n = lua_gettop(L);
+
+  lua_pushlightuserdata(L, (void *)&ctIdx);  // push address as unique key
+  CHECK_EQ(lua_gettable(L, LUA_REGISTRYINDEX), LUA_TTABLE);
+
+  if (n == 1) {
+    ext = FreeLater(xasprintf(".%s", ext));
+    if ((ct = GetContentTypeExt(ext, strlen(ext)))) {
+      lua_pushstring(L, ct);
+    } else {
+      lua_pushnil(L);
+    }
+    return 1;
+  } else {
+    ct = luaL_checkstring(L, 2);
+    lua_pushstring(L, ext);
+    lua_pushstring(L, ct);
+    lua_settable(L, -3);  // table[ext] = ct
+    return 0;
+  }
+}
+
 static int LuaIsDaemon(lua_State *L) {
   lua_pushboolean(L, daemonize);
   return 1;
@@ -4908,9 +5008,9 @@ static int LuaGetAssetComment(lua_State *L) {
   size_t pathlen, m;
   path = LuaCheckPath(L, 1, &pathlen);
   if ((a = GetAssetZip(path, pathlen)) &&
-      (m = strnlen(ZIP_CFILE_COMMENT(zbase + a->cf),
-                   ZIP_CFILE_COMMENTSIZE(zbase + a->cf)))) {
-    lua_pushlstring(L, ZIP_CFILE_COMMENT(zbase + a->cf), m);
+      (m = strnlen(ZIP_CFILE_COMMENT(zmap + a->cf),
+                   ZIP_CFILE_COMMENTSIZE(zmap + a->cf)))) {
+    lua_pushlstring(L, ZIP_CFILE_COMMENT(zmap + a->cf), m);
   } else {
     lua_pushnil(L);
   }
@@ -4932,11 +5032,12 @@ static bool LuaRunAsset(const char *path, bool mandatory) {
   if ((a = GetAsset(path, pathlen))) {
     if ((code = FreeLater(LoadAsset(a, &codelen)))) {
       lua_State *L = GL;
-      effectivepath.p = path;
+      effectivepath.p = (void *)path;
       effectivepath.n = pathlen;
       DEBUGF("(lua) LuaRunAsset(%`'s)", path);
-      status =
-          luaL_loadbuffer(L, code, codelen, FreeLater(xasprintf("@%s", path)));
+      status = luaL_loadbuffer(
+          L, code, codelen,
+          FreeLater(xasprintf("@%s%s", a->file ? "" : "/zip", path)));
       if (status != LUA_OK || LuaCallWithTrace(L, 0, 0, NULL) != LUA_OK) {
         LogLuaError("lua code", lua_tostring(L, -1));
         lua_pop(L, 1);  // pop error
@@ -4950,6 +5051,7 @@ static bool LuaRunAsset(const char *path, bool mandatory) {
 // <SORTED>
 // list of functions that can't be run from the repl
 static const char *const kDontAutoComplete[] = {
+    "Compress",                  // deprecated
     "GetBody",                   //
     "GetClientAddr",             //
     "GetClientFd",               //
@@ -4970,6 +5072,7 @@ static const char *const kDontAutoComplete[] = {
     "GetPayload",                // deprecated
     "GetPort",                   //
     "GetRemoteAddr",             //
+    "GetResponseBody",           //
     "GetScheme",                 //
     "GetServerAddr",             //
     "GetSslIdentity",            //
@@ -5009,157 +5112,175 @@ static const char *const kDontAutoComplete[] = {
     "SetCookie",                 //
     "SetHeader",                 //
     "SslInit",                   // TODO
+    "Uncompress",                // deprecated
     "Write",                     //
 };
 // </SORTED>
 
 static const luaL_Reg kLuaFuncs[] = {
-    {"Benchmark", LuaBenchmark},                          //
-    {"Bsf", LuaBsf},                                      //
-    {"Bsr", LuaBsr},                                      //
-    {"CategorizeIp", LuaCategorizeIp},                    //
-    {"Compress", LuaCompress},                            //
-    {"Crc32", LuaCrc32},                                  //
-    {"Crc32c", LuaCrc32c},                                //
-    {"Decimate", LuaDecimate},                            //
-    {"DecodeBase64", LuaDecodeBase64},                    //
-    {"DecodeLatin1", LuaDecodeLatin1},                    //
-    {"EncodeBase64", LuaEncodeBase64},                    //
-    {"EncodeJson", LuaEncodeJson},                        //
-    {"EncodeLatin1", LuaEncodeLatin1},                    //
-    {"EncodeLua", LuaEncodeLua},                          //
-    {"EncodeUrl", LuaEncodeUrl},                          //
-    {"EscapeFragment", LuaEscapeFragment},                //
-    {"EscapeHost", LuaEscapeHost},                        //
-    {"EscapeHtml", LuaEscapeHtml},                        //
-    {"EscapeIp", LuaEscapeIp},                            //
-    {"EscapeLiteral", LuaEscapeLiteral},                  //
-    {"EscapeParam", LuaEscapeParam},                      //
-    {"EscapePass", LuaEscapePass},                        //
-    {"EscapePath", LuaEscapePath},                        //
-    {"EscapeSegment", LuaEscapeSegment},                  //
-    {"EscapeUser", LuaEscapeUser},                        //
-    {"Fetch", LuaFetch},                                  //
-    {"FormatHttpDateTime", LuaFormatHttpDateTime},        //
-    {"FormatIp", LuaFormatIp},                            //
-    {"GetAssetComment", LuaGetAssetComment},              //
+    {"Barf", LuaBarf},                                          //
+    {"Benchmark", LuaBenchmark},                                //
+    {"Bsf", LuaBsf},                                            //
+    {"Bsr", LuaBsr},                                            //
+    {"CategorizeIp", LuaCategorizeIp},                          //
+    {"Compress", LuaCompress},                                  //
+    {"Crc32", LuaCrc32},                                        //
+    {"Crc32c", LuaCrc32c},                                      //
+    {"Decimate", LuaDecimate},                                  //
+    {"DecodeBase64", LuaDecodeBase64},                          //
+    {"DecodeHex", LuaDecodeHex},                                //
+    {"DecodeJson", LuaDecodeJson},                              //
+    {"DecodeLatin1", LuaDecodeLatin1},                          //
+    {"Deflate", LuaDeflate},                                    //
+    {"EncodeBase64", LuaEncodeBase64},                          //
+    {"EncodeHex", LuaEncodeHex},                                //
+    {"EncodeJson", LuaEncodeJson},                              //
+    {"EncodeLatin1", LuaEncodeLatin1},                          //
+    {"EncodeLua", LuaEncodeLua},                                //
+    {"EncodeUrl", LuaEncodeUrl},                                //
+    {"EscapeFragment", LuaEscapeFragment},                      //
+    {"EscapeHost", LuaEscapeHost},                              //
+    {"EscapeHtml", LuaEscapeHtml},                              //
+    {"EscapeIp", LuaEscapeIp},                                  //
+    {"EscapeLiteral", LuaEscapeLiteral},                        //
+    {"EscapeParam", LuaEscapeParam},                            //
+    {"EscapePass", LuaEscapePass},                              //
+    {"EscapePath", LuaEscapePath},                              //
+    {"EscapeSegment", LuaEscapeSegment},                        //
+    {"EscapeUser", LuaEscapeUser},                              //
+    {"Fetch", LuaFetch},                                        //
+    {"FormatHttpDateTime", LuaFormatHttpDateTime},              //
+    {"FormatIp", LuaFormatIp},                                  //
+    {"GetAssetComment", LuaGetAssetComment},                    //
     {"GetAssetLastModifiedTime", LuaGetAssetLastModifiedTime},  //
-    {"GetAssetMode", LuaGetAssetMode},                    //
-    {"GetAssetSize", LuaGetAssetSize},                    //
-    {"GetBody", LuaGetBody},                              //
-    {"GetClientAddr", LuaGetClientAddr},                  //
-    {"GetClientFd", LuaGetClientFd},                      //
-    {"GetCookie", LuaGetCookie},                          //
-    {"GetCpuCore", LuaGetCpuCore},                        //
-    {"GetCpuCount", LuaGetCpuCount},                      //
-    {"GetCpuNode", LuaGetCpuNode},                        //
-    {"GetCryptoHash", LuaGetCryptoHash},                  //
-    {"GetDate", LuaGetDate},                              //
-    {"GetEffectivePath", LuaGetEffectivePath},            //
-    {"GetFragment", LuaGetFragment},                      //
-    {"GetHeader", LuaGetHeader},                          //
-    {"GetHeaders", LuaGetHeaders},                        //
-    {"GetHost", LuaGetHost},                              //
-    {"GetHostOs", LuaGetHostOs},                          //
-    {"GetHttpReason", LuaGetHttpReason},                  //
-    {"GetHttpVersion", LuaGetHttpVersion},                //
-    {"GetLogLevel", LuaGetLogLevel},                      //
-    {"GetMethod", LuaGetMethod},                          //
-    {"GetMonospaceWidth", LuaGetMonospaceWidth},          //
-    {"GetParam", LuaGetParam},                            //
-    {"GetParams", LuaGetParams},                          //
-    {"GetPass", LuaGetPass},                              //
-    {"GetPath", LuaGetPath},                              //
-    {"GetPort", LuaGetPort},                              //
-    {"GetRandomBytes", LuaGetRandomBytes},                //
-    {"GetRedbeanVersion", LuaGetRedbeanVersion},          //
-    {"GetRemoteAddr", LuaGetRemoteAddr},                  //
-    {"GetScheme", LuaGetScheme},                          //
-    {"GetServerAddr", LuaGetServerAddr},                  //
-    {"GetStatus", LuaGetStatus},                          //
-    {"GetTime", LuaGetTime},                              //
-    {"GetUrl", LuaGetUrl},                                //
-    {"GetUser", LuaGetUser},                              //
-    {"GetZipPaths", LuaGetZipPaths},                      //
-    {"HasControlCodes", LuaHasControlCodes},              //
-    {"HasParam", LuaHasParam},                            //
-    {"HidePath", LuaHidePath},                            //
-    {"IndentLines", LuaIndentLines},                      //
-    {"IsAcceptableHost", LuaIsAcceptableHost},            //
-    {"IsAcceptablePath", LuaIsAcceptablePath},            //
-    {"IsAcceptablePort", LuaIsAcceptablePort},            //
-    {"IsClientUsingSsl", LuaIsClientUsingSsl},            //
-    {"IsAssetCompressed", LuaIsAssetCompressed},          //
-    {"IsDaemon", LuaIsDaemon},                            //
-    {"IsHeaderRepeatable", LuaIsHeaderRepeatable},        //
-    {"IsHiddenPath", LuaIsHiddenPath},                    //
-    {"IsLoopbackIp", LuaIsLoopbackIp},                    //
-    {"IsPrivateIp", LuaIsPrivateIp},                      //
-    {"IsPublicIp", LuaIsPublicIp},                        //
-    {"IsReasonablePath", LuaIsReasonablePath},            //
-    {"IsValidHttpToken", LuaIsValidHttpToken},            //
-    {"LaunchBrowser", LuaLaunchBrowser},                  //
-    {"Lemur64", LuaLemur64},                              //
-    {"LoadAsset", LuaLoadAsset},                          //
-    {"Log", LuaLog},                                      //
-    {"Md5", LuaMd5},                                      //
-    {"MeasureEntropy", LuaMeasureEntropy},                //
-    {"ParseHost", LuaParseHost},                          //
-    {"ParseHttpDateTime", LuaParseHttpDateTime},          //
-    {"ParseIp", LuaParseIp},                              //
-    {"ParseParams", LuaParseParams},                      //
-    {"ParseUrl", LuaParseUrl},                            //
-    {"Popcnt", LuaPopcnt},                                //
-    {"ProgramAddr", LuaProgramAddr},                      //
-    {"ProgramBrand", LuaProgramBrand},                    //
-    {"ProgramCache", LuaProgramCache},                    //
-    {"ProgramDirectory", LuaProgramDirectory},            //
-    {"ProgramGid", LuaProgramGid},                        //
-    {"ProgramHeader", LuaProgramHeader},                  //
-    {"ProgramLogBodies", LuaProgramLogBodies},            //
-    {"ProgramLogMessages", LuaProgramLogMessages},        //
-    {"ProgramLogPath", LuaProgramLogPath},                //
-    {"ProgramMaxPayloadSize", LuaProgramMaxPayloadSize},  //
-    {"ProgramPidPath", LuaProgramPidPath},                //
-    {"ProgramPort", LuaProgramPort},                      //
-    {"ProgramRedirect", LuaProgramRedirect},              //
-    {"ProgramTimeout", LuaProgramTimeout},                //
-    {"ProgramUid", LuaProgramUid},                        //
-    {"ProgramUniprocess", LuaProgramUniprocess},          //
-    {"Rand64", LuaRand64},                                //
-    {"Rdrand", LuaRdrand},                                //
-    {"Rdseed", LuaRdseed},                                //
-    {"Rdtsc", LuaRdtsc},                                  //
-    {"ResolveIp", LuaResolveIp},                          //
-    {"Route", LuaRoute},                                  //
-    {"RouteHost", LuaRouteHost},                          //
-    {"RoutePath", LuaRoutePath},                          //
-    {"ServeAsset", LuaServeAsset},                        //
-    {"ServeError", LuaServeError},                        //
-    {"ServeIndex", LuaServeIndex},                        //
-    {"ServeListing", LuaServeListing},                    //
-    {"ServeRedirect", LuaServeRedirect},                  //
-    {"ServeStatusz", LuaServeStatusz},                    //
-    {"SetCookie", LuaSetCookie},                          //
-    {"SetHeader", LuaSetHeader},                          //
-    {"SetLogLevel", LuaSetLogLevel},                      //
-    {"SetStatus", LuaSetStatus},                          //
-    {"Sha1", LuaSha1},                                    //
-    {"Sha224", LuaSha224},                                //
-    {"Sha256", LuaSha256},                                //
-    {"Sha384", LuaSha384},                                //
-    {"Sha512", LuaSha512},                                //
-    {"Sleep", LuaSleep},                                  //
-    {"Slurp", LuaSlurp},                                  //
-    {"StoreAsset", LuaStoreAsset},                        //
-    {"Uncompress", LuaUncompress},                        //
-    {"Underlong", LuaUnderlong},                          //
-    {"VisualizeControlCodes", LuaVisualizeControlCodes},  //
-    {"Write", LuaWrite},                                  //
-    {"bin", LuaBin},                                      //
-    {"hex", LuaHex},                                      //
-    {"oct", LuaOct},                                      //
+    {"GetAssetMode", LuaGetAssetMode},                          //
+    {"GetAssetSize", LuaGetAssetSize},                          //
+    {"GetBody", LuaGetBody},                                    //
+    {"GetClientAddr", LuaGetClientAddr},                        //
+    {"GetClientFd", LuaGetClientFd},                            //
+    {"GetCookie", LuaGetCookie},                                //
+    {"GetCpuCore", LuaGetCpuCore},                              //
+    {"GetCpuCount", LuaGetCpuCount},                            //
+    {"GetCpuNode", LuaGetCpuNode},                              //
+    {"GetCryptoHash", LuaGetCryptoHash},                        //
+    {"GetDate", LuaGetDate},                                    //
+    {"GetEffectivePath", LuaGetEffectivePath},                  //
+    {"GetFragment", LuaGetFragment},                            //
+    {"GetHeader", LuaGetHeader},                                //
+    {"GetHeaders", LuaGetHeaders},                              //
+    {"GetHost", LuaGetHost},                                    //
+    {"GetHostIsa", LuaGetHostIsa},                              //
+    {"GetHostOs", LuaGetHostOs},                                //
+    {"GetHttpReason", LuaGetHttpReason},                        //
+    {"GetHttpVersion", LuaGetHttpVersion},                      //
+    {"GetLogLevel", LuaGetLogLevel},                            //
+    {"GetMethod", LuaGetMethod},                                //
+    {"GetMonospaceWidth", LuaGetMonospaceWidth},                //
+    {"GetParam", LuaGetParam},                                  //
+    {"GetParams", LuaGetParams},                                //
+    {"GetPass", LuaGetPass},                                    //
+    {"GetPath", LuaGetPath},                                    //
+    {"GetPort", LuaGetPort},                                    //
+    {"GetRandomBytes", LuaGetRandomBytes},                      //
+    {"GetRedbeanVersion", LuaGetRedbeanVersion},                //
+    {"GetRemoteAddr", LuaGetRemoteAddr},                        //
+    {"GetResponseBody", LuaGetResponseBody},                    //
+    {"GetScheme", LuaGetScheme},                                //
+    {"GetServerAddr", LuaGetServerAddr},                        //
+    {"GetStatus", LuaGetStatus},                                //
+    {"GetTime", LuaGetTime},                                    //
+    {"GetUrl", LuaGetUrl},                                      //
+    {"GetUser", LuaGetUser},                                    //
+    {"GetZipPaths", LuaGetZipPaths},                            //
+    {"HasControlCodes", LuaHasControlCodes},                    //
+    {"HasParam", LuaHasParam},                                  //
+    {"HidePath", LuaHidePath},                                  //
+    {"HighwayHash64", LuaHighwayHash64},                        //
+    {"IndentLines", LuaIndentLines},                            //
+    {"Inflate", LuaInflate},                                    //
+    {"IsAcceptableHost", LuaIsAcceptableHost},                  //
+    {"IsAcceptablePath", LuaIsAcceptablePath},                  //
+    {"IsAcceptablePort", LuaIsAcceptablePort},                  //
+    {"IsAssetCompressed", LuaIsAssetCompressed},                //
+    {"IsClientUsingSsl", LuaIsClientUsingSsl},                  //
+    {"IsDaemon", LuaIsDaemon},                                  //
+    {"IsHeaderRepeatable", LuaIsHeaderRepeatable},              //
+    {"IsHiddenPath", LuaIsHiddenPath},                          //
+    {"IsLoopbackIp", LuaIsLoopbackIp},                          //
+    {"IsPrivateIp", LuaIsPrivateIp},                            //
+    {"IsPublicIp", LuaIsPublicIp},                              //
+    {"IsReasonablePath", LuaIsReasonablePath},                  //
+    {"IsTrustedIp", LuaIsTrusted},                              // undocumented
+    {"IsValidHttpToken", LuaIsValidHttpToken},                  //
+    {"LaunchBrowser", LuaLaunchBrowser},                        //
+    {"Lemur64", LuaLemur64},                                    //
+    {"LoadAsset", LuaLoadAsset},                                //
+    {"Log", LuaLog},                                            //
+    {"Md5", LuaMd5},                                            //
+    {"MeasureEntropy", LuaMeasureEntropy},                      //
+    {"ParseHost", LuaParseHost},                                //
+    {"ParseHttpDateTime", LuaParseHttpDateTime},                //
+    {"ParseIp", LuaParseIp},                                    //
+    {"ParseParams", LuaParseParams},                            //
+    {"ParseUrl", LuaParseUrl},                                  //
+    {"Popcnt", LuaPopcnt},                                      //
+    {"ProgramAddr", LuaProgramAddr},                            //
+    {"ProgramBrand", LuaProgramBrand},                          //
+    {"ProgramCache", LuaProgramCache},                          //
+    {"ProgramContentType", LuaProgramContentType},              //
+    {"ProgramDirectory", LuaProgramDirectory},                  //
+    {"ProgramGid", LuaProgramGid},                              //
+    {"ProgramHeader", LuaProgramHeader},                        //
+    {"ProgramHeartbeatInterval", LuaProgramHeartbeatInterval},  //
+    {"ProgramLogBodies", LuaProgramLogBodies},                  //
+    {"ProgramLogMessages", LuaProgramLogMessages},              //
+    {"ProgramLogPath", LuaProgramLogPath},                      //
+    {"ProgramMaxPayloadSize", LuaProgramMaxPayloadSize},        //
+    {"ProgramMaxWorkers", LuaProgramMaxWorkers},                //
+    {"ProgramPidPath", LuaProgramPidPath},                      //
+    {"ProgramPort", LuaProgramPort},                            //
+    {"ProgramRedirect", LuaProgramRedirect},                    //
+    {"ProgramTimeout", LuaProgramTimeout},                      //
+    {"ProgramTrustedIp", LuaProgramTrustedIp},                  // undocumented
+    {"ProgramUid", LuaProgramUid},                              //
+    {"ProgramUniprocess", LuaProgramUniprocess},                //
+    {"Rand64", LuaRand64},                                      //
+    {"Rdrand", LuaRdrand},                                      //
+    {"Rdseed", LuaRdseed},                                      //
+    {"Rdtsc", LuaRdtsc},                                        //
+    {"ResolveIp", LuaResolveIp},                                //
+    {"Route", LuaRoute},                                        //
+    {"RouteHost", LuaRouteHost},                                //
+    {"RoutePath", LuaRoutePath},                                //
+    {"ServeAsset", LuaServeAsset},                              //
+    {"ServeError", LuaServeError},                              //
+    {"ServeIndex", LuaServeIndex},                              //
+    {"ServeListing", LuaServeListing},                          //
+    {"ServeRedirect", LuaServeRedirect},                        //
+    {"ServeStatusz", LuaServeStatusz},                          //
+    {"SetCookie", LuaSetCookie},                                //
+    {"SetHeader", LuaSetHeader},                                //
+    {"SetLogLevel", LuaSetLogLevel},                            //
+    {"SetStatus", LuaSetStatus},                                //
+    {"Sha1", LuaSha1},                                          //
+    {"Sha224", LuaSha224},                                      //
+    {"Sha256", LuaSha256},                                      //
+    {"Sha384", LuaSha384},                                      //
+    {"Sha512", LuaSha512},                                      //
+    {"Sleep", LuaSleep},                                        //
+    {"Slurp", LuaSlurp},                                        //
+    {"StoreAsset", LuaStoreAsset},                              //
+    {"Uncompress", LuaUncompress},                              //
+    {"Underlong", LuaUnderlong},                                //
+    {"VisualizeControlCodes", LuaVisualizeControlCodes},        //
+    {"Write", LuaWrite},                                        //
+    {"bin", LuaBin},                                            //
+    {"hex", LuaHex},                                            //
+    {"oct", LuaOct},                                            //
 #ifndef UNSECURE
+    {"AcquireToken", LuaAcquireToken},                          //
+    {"Blackhole", LuaBlackhole},                                // undocumented
+    {"CountTokens", LuaCountTokens},                            //
     {"EvadeDragnetSurveillance", LuaEvadeDragnetSurveillance},  //
     {"GetSslIdentity", LuaGetSslIdentity},                      //
     {"ProgramCertificate", LuaProgramCertificate},              //
@@ -5171,19 +5292,22 @@ static const luaL_Reg kLuaFuncs[] = {
     {"ProgramSslPresharedKey", LuaProgramSslPresharedKey},      //
     {"ProgramSslRequired", LuaProgramSslRequired},              //
     {"ProgramSslTicketLifetime", LuaProgramSslTicketLifetime},  //
+    {"ProgramTokenBucket", LuaProgramTokenBucket},              //
 #endif
     // deprecated
-    {"GetPayload", LuaGetBody},                           //
-    {"GetComment", LuaGetAssetComment},                   //
-    {"GetVersion", LuaGetHttpVersion},                    //
-    {"IsCompressed", LuaIsAssetCompressed},               //
-    {"GetLastModifiedTime", LuaGetAssetLastModifiedTime}, //
+    {"GetPayload", LuaGetBody},                            //
+    {"GetComment", LuaGetAssetComment},                    //
+    {"GetVersion", LuaGetHttpVersion},                     //
+    {"IsCompressed", LuaIsAssetCompressed},                //
+    {"GetLastModifiedTime", LuaGetAssetLastModifiedTime},  //
 };
 
 static const luaL_Reg kLuaLibs[] = {
     {"argon2", luaopen_argon2},      //
     {"lsqlite3", luaopen_lsqlite3},  //
     {"maxmind", LuaMaxmind},         //
+    {"finger", LuaFinger},           //
+    {"path", LuaPath},               //
     {"re", LuaRe},                   //
     {"unix", LuaUnix},               //
 };
@@ -5211,22 +5335,11 @@ static void LuaSetConstant(lua_State *L, const char *s, long x) {
   lua_setglobal(L, s);
 }
 
-static char *GetDefaultLuaPath(void) {
-  char *s;
-  size_t i;
-  for (s = 0, i = 0; i < stagedirs.n; ++i) {
-    appendf(&s, "%s/.lua/?.lua;%s/.lua/?/init.lua;", stagedirs.p[i].s,
-            stagedirs.p[i].s);
-  }
-  appends(&s, "/zip/.lua/?.lua;/zip/.lua/?/init.lua");
-  return s;
-}
-
 static void LuaStart(void) {
 #ifndef STATIC
   size_t i;
   lua_State *L = GL = luaL_newstate();
-  g_lua_path_default = GetDefaultLuaPath();
+  g_lua_path_default = DEFAULTLUAPATH;
   luaL_openlibs(L);
   for (i = 0; i < ARRAYLEN(kLuaLibs); ++i) {
     luaL_requiref(L, kLuaLibs[i].name, kLuaLibs[i].func, 1);
@@ -5242,6 +5355,12 @@ static void LuaStart(void) {
   LuaSetConstant(L, "kLogWarn", kLogWarn);
   LuaSetConstant(L, "kLogError", kLogError);
   LuaSetConstant(L, "kLogFatal", kLogFatal);
+  LuaSetConstant(L, "kUrlPlus", kUrlPlus);
+  LuaSetConstant(L, "kUrlLatin1", kUrlLatin1);
+  // create a list of custom content types
+  lua_pushlightuserdata(L, (void *)&ctIdx);  // push address as unique key
+  lua_newtable(L);
+  lua_settable(L, LUA_REGISTRYINDEX);  // registry[&ctIdx] = {}
 #endif
 }
 
@@ -5250,7 +5369,7 @@ static bool ShouldAutocomplete(const char *s) {
   l = 0;
   r = ARRAYLEN(kDontAutoComplete) - 1;
   while (l <= r) {
-    m = (l + r) >> 1;
+    m = (l & r) + ((l ^ r) >> 1);  // floor((a+b)/2)
     c = strcmp(kDontAutoComplete[m], s);
     if (c < 0) {
       l = m + 1;
@@ -5278,12 +5397,17 @@ static void HandleCompletions(const char *p, linenoiseCompletions *c) {
 static void LuaPrint(lua_State *L) {
   int i, n;
   char *b = 0;
-  const char *s;
   n = lua_gettop(L);
   if (n > 0) {
     for (i = 1; i <= n; i++) {
       if (i > 1) appendw(&b, '\t');
-      LuaEncodeLuaData(L, &b, "g", i);
+      struct EncoderConfig conf = {
+          .maxdepth = 64,
+          .sorted = true,
+          .pretty = true,
+          .indent = "  ",
+      };
+      LuaEncodeLuaData(L, &b, i, conf);
     }
     appendw(&b, '\n');
     WRITE(1, b, appendz(b).i);
@@ -5291,7 +5415,21 @@ static void LuaPrint(lua_State *L) {
   }
 }
 
-static void LuaInterpreter(lua_State *L) {
+static void EnableRawMode(void) {
+  if (lua_repl_isterminal) {
+    strace_enabled(-1);
+    linenoiseEnableRawMode(0);
+    strace_enabled(+1);
+  }
+}
+
+static void DisableRawMode(void) {
+  strace_enabled(-1);
+  linenoiseDisableRawMode();
+  strace_enabled(+1);
+}
+
+static int LuaInterpreter(lua_State *L) {
   int i, n, sig, status;
   const char *script;
   if (optind < __argc) {
@@ -5307,14 +5445,12 @@ static void LuaInterpreter(lua_State *L) {
       status = lua_runchunk(L, n, LUA_MULTRET);
       TRACE_END;
     }
-    lua_report(L, status);
+    return lua_report(L, status);
   } else {
     lua_repl_blocking = true;
     lua_repl_completions_callback = HandleCompletions;
-    lua_initrepl(GL, "redbean");
-    if (lua_repl_isterminal) {
-      linenoiseEnableRawMode(0);
-    }
+    lua_initrepl(GL);
+    EnableRawMode();
     for (;;) {
       status = lua_loadline(L);
       if (status == -1) break;  // eof
@@ -5338,13 +5474,47 @@ static void LuaInterpreter(lua_State *L) {
         lua_report(GL, status);
       }
     }
-    linenoiseDisableRawMode();
+    DisableRawMode();
     lua_freerepl();
     lua_settop(GL, 0);  // clear stack
     if ((sig = linenoiseGetInterrupt())) {
       raise(sig);
     }
+    return status;
   }
+}
+
+static void LuaDestroy(void) {
+#ifndef STATIC
+  lua_State *L = GL;
+  lua_close(L);
+#endif
+}
+
+static void MemDestroy(void) {
+  FreeAssets();
+  CollectGarbage();
+  inbuf.p = 0, inbuf.n = 0, inbuf.c = 0;
+  Free(&inbuf_actual.p), inbuf_actual.n = inbuf_actual.c = 0;
+  Free(&unmaplist.p), unmaplist.n = unmaplist.c = 0;
+  Free(&freelist.p), freelist.n = freelist.c = 0;
+  Free(&hdrbuf.p), hdrbuf.n = hdrbuf.c = 0;
+  Free(&servers.p), servers.n = 0;
+  Free(&ports.p), ports.n = 0;
+  Free(&ips.p), ips.n = 0;
+  Free(&cpm.outbuf);
+  FreeStrings(&stagedirs);
+  FreeStrings(&hidepaths);
+  Free(&cachedirective);
+  Free(&launchbrowser);
+  Free(&serverheader);
+  Free(&trustedips.p);
+  Free(&interfaces);
+  Free(&extrahdrs);
+  Free(&pidpath);
+  Free(&logpath);
+  Free(&brand);
+  Free(&polls);
 }
 
 static void LuaInit(void) {
@@ -5352,8 +5522,13 @@ static void LuaInit(void) {
   lua_State *L = GL;
   LuaSetArgv(L);
   if (interpretermode) {
-    LuaInterpreter(L);
-    exit(0);
+    int rc = LuaInterpreter(L);
+    LuaDestroy();
+    MemDestroy();
+    if (IsModeDbg()) {
+      CheckForMemoryLeaks();
+    }
+    exit(rc);
   }
   if (LuaRunAsset("/.init.lua", true)) {
     hasonhttprequest = IsHookDefined("OnHttpRequest");
@@ -5362,25 +5537,27 @@ static void LuaInit(void) {
     hasonprocessdestroy = IsHookDefined("OnProcessDestroy");
     hasonworkerstart = IsHookDefined("OnWorkerStart");
     hasonworkerstop = IsHookDefined("OnWorkerStop");
+    hasonloglatency = IsHookDefined("OnLogLatency");
   } else {
     DEBUGF("(srvr) no /.init.lua defined");
   }
 #endif
 }
 
-static void LuaReload(void) {
+static void LuaOnServerReload(bool reindex) {
 #ifndef STATIC
   if (!LuaRunAsset("/.reload.lua", false)) {
     DEBUGF("(srvr) no /.reload.lua defined");
   }
-#endif
-}
 
-static void LuaDestroy(void) {
-#ifndef STATIC
   lua_State *L = GL;
-  lua_close(L);
-  free(g_lua_path_default);
+  lua_getglobal(L, "OnServerReload");
+  lua_pushboolean(L, reindex);
+  if (LuaCallWithTrace(L, 1, 0, NULL) != LUA_OK) {
+    LogLuaError("OnServerReload", lua_tostring(L, -1));
+    lua_pop(L, 1);  // pop error
+  }
+  AssertLuaStackIsAt(L, 0);
 #endif
 }
 
@@ -5388,7 +5565,7 @@ static const char *DescribeClose(void) {
   if (killed) return "killed";
   if (meltdown) return "meltdown";
   if (terminated) return "terminated";
-  if (connectionclose) return "connectionclose";
+  if (connectionclose) return "connection closed";
   return "destroyed";
 }
 
@@ -5408,7 +5585,7 @@ static ssize_t SendString(const char *s) {
   ssize_t rc;
   struct iovec iov;
   n = strlen(s);
-  iov.iov_base = s;
+  iov.iov_base = (void *)s;
   iov.iov_len = n;
   if (logmessages) {
     LogMessage("sending", s, n);
@@ -5443,11 +5620,24 @@ Content-Length: 0\r\n\
 \r\n");
 }
 
+static ssize_t SendTooManyRequests(void) {
+  return SendString("\
+HTTP/1.1 429 Too Many Requests\r\n\
+Connection: close\r\n\
+Content-Type: text/plain\r\n\
+Content-Length: 22\r\n\
+\r\n\
+429 Too Many Requests\n");
+}
+
 static void EnterMeltdownMode(void) {
-  if (shared->lastmeltdown && nowl() - shared->lastmeltdown < 1) return;
-  WARNF("(srvr) redbean is melting down (%,d workers)", shared->workers);
+  if (timespec_cmp(timespec_sub(timespec_real(), shared->lastmeltdown),
+                   (struct timespec){1}) < 0) {
+    return;
+  }
+  WARNF("(srvr) server is melting down (%,d workers)", shared->workers);
   LOGIFNEG1(kill(0, SIGUSR2));
-  shared->lastmeltdown = nowl();
+  shared->lastmeltdown = timespec_real();
   ++shared->c.meltdowns;
 }
 
@@ -5491,12 +5681,6 @@ static char *HandleExpectFailed(void) {
 static char *HandleHugePayload(void) {
   LockInc(&shared->c.hugepayloads);
   return ServeFailure(413, "Payload Too Large");
-}
-
-static char *HandlePayloadSlowloris(void) {
-  LockInc(&shared->c.slowloris);
-  LogClose("payload slowloris");
-  return ServeFailure(408, "Request Timeout");
 }
 
 static char *HandleTransferRefused(void) {
@@ -5552,37 +5736,28 @@ static void HandleForkFailure(void) {
   EnterMeltdownMode();
   SendServiceUnavailable();
   close(client);
-  DIEF("(srvr) too many processes: %m");
+  WARNF("(srvr) too many processes: %m");
 }
 
 static void HandleFrag(size_t got) {
   LockInc(&shared->c.frags);
-  if (++frags == 32) {
-    SendTimeout();
-    LogClose("slowloris");
-    LockInc(&shared->c.slowloris);
-    return;
-  } else {
-    DEBUGF("(stat) %s fragged msg added %,ld bytes to %,ld byte buffer",
-           DescribeClient(), amtread, got);
-  }
+  DEBUGF("(stat) %s fragged msg added %,ld bytes to %,ld byte buffer",
+         DescribeClient(), amtread, got);
 }
 
 static void HandleReload(void) {
   LockInc(&shared->c.reloads);
-  Reindex();
-  LuaReload();
+  LuaOnServerReload(Reindex());
+  invalidated = false;
 }
 
 static void HandleHeartbeat(void) {
   size_t i;
-  sigset_t mask;
-  if (nowl() - lastrefresh > 60 * 60) RefreshTime();
-  UpdateCurrentDate(nowl());
+  UpdateCurrentDate(timespec_real());
   Reindex();
   getrusage(RUSAGE_SELF, &shared->server);
 #ifndef STATIC
-  LuaRunAsset("/.heartbeat.lua", false);
+  CallSimpleHookIfDefined("OnServerHeartbeat");
   CollectGarbage();
 #endif
   for (i = 1; i < servers.n; ++i) {
@@ -5600,9 +5775,9 @@ static char *OpenAsset(struct Asset *a) {
   struct stat *st;
   if (a->file->st.st_size) {
     size = a->file->st.st_size;
-    if (msg.method == kHttpHead) {
-      content = 0;
-      contentlength = size;
+    if (cpm.msg.method == kHttpHead) {
+      cpm.content = 0;
+      cpm.contentlength = size;
     } else {
     OpenAgain:
       if ((fd = open(a->file->path.s, O_RDONLY)) != -1) {
@@ -5610,16 +5785,16 @@ static char *OpenAsset(struct Asset *a) {
         if (data != MAP_FAILED) {
           LockInc(&shared->c.maps);
           UnmapLater(fd, data, size);
-          content = data;
-          contentlength = size;
+          cpm.content = data;
+          cpm.contentlength = size;
         } else if ((st = _gc(malloc(sizeof(struct stat)))) &&
                    fstat(fd, st) != -1 && (data = malloc(st->st_size))) {
           /* probably empty file or zipos handle */
           LockInc(&shared->c.slurps);
           FreeLater(data);
           if (ReadAll(fd, data, st->st_size) != -1) {
-            content = data;
-            contentlength = st->st_size;
+            cpm.content = data;
+            cpm.contentlength = st->st_size;
             close(fd);
           } else {
             return HandleMapFailed(a, fd);
@@ -5635,8 +5810,8 @@ static char *OpenAsset(struct Asset *a) {
       }
     }
   } else {
-    content = "";
-    contentlength = 0;
+    cpm.content = "";
+    cpm.contentlength = 0;
   }
   return 0;
 }
@@ -5656,7 +5831,7 @@ static char *ServeServerOptions(void) {
 }
 
 static void SendContinueIfNeeded(void) {
-  if (msg.version >= 11 && HeaderEqualCase(kHttpExpect, "100-continue")) {
+  if (cpm.msg.version >= 11 && HeaderEqualCase(kHttpExpect, "100-continue")) {
     LockInc(&shared->c.continues);
     SendContinue();
   }
@@ -5666,13 +5841,14 @@ static char *ReadMore(void) {
   size_t got;
   ssize_t rc;
   LockInc(&shared->c.frags);
-  if (++frags == 64) return HandlePayloadSlowloris();
   if ((rc = reader(client, inbuf.p + amtread, inbuf.n - amtread)) != -1) {
     if (!(got = rc)) return HandlePayloadDisconnect();
     amtread += got;
   } else if (errno == EINTR) {
     LockInc(&shared->c.readinterrupts);
-    if (killed || ((meltdown || terminated) && nowl() - startread > 1)) {
+    if (killed || ((meltdown || terminated) &&
+                   timespec_cmp(timespec_sub(timespec_real(), startread),
+                                (struct timespec){1}) >= 0)) {
       return HandlePayloadDrop();
     }
   } else {
@@ -5690,7 +5866,7 @@ static char *SynchronizeLength(void) {
       if ((p = ReadMore())) return p;
     }
   }
-  msgsize = hdrsize + payloadlength;
+  cpm.msgsize = hdrsize + payloadlength;
   return NULL;
 }
 
@@ -5704,7 +5880,7 @@ static char *SynchronizeChunked(void) {
     if ((p = ReadMore())) return p;
   }
   if (transferlength == -1) return HandleHugePayload();
-  msgsize = hdrsize + transferlength;
+  cpm.msgsize = hdrsize + transferlength;
   return NULL;
 }
 
@@ -5725,10 +5901,10 @@ static char *SynchronizeStream(void) {
     } else {
       return HandleBadContentLength();
     }
-  } else if (msg.method == kHttpPost || msg.method == kHttpPut) {
+  } else if (cpm.msg.method == kHttpPost || cpm.msg.method == kHttpPut) {
     return HandleLengthRequired();
   } else {
-    msgsize = hdrsize;
+    cpm.msgsize = hdrsize;
     payloadlength = 0;
     return NULL;
   }
@@ -5736,11 +5912,11 @@ static char *SynchronizeStream(void) {
 
 static void ParseRequestParameters(void) {
   uint32_t ip;
-  FreeLater(ParseRequestUri(inbuf.p + msg.uri.a, msg.uri.b - msg.uri.a, &url));
+  FreeLater(ParseUrl(inbuf.p + cpm.msg.uri.a, cpm.msg.uri.b - cpm.msg.uri.a,
+                     &url, kUrlPlus | kUrlLatin1));
   if (!url.host.p) {
-    GetRemoteAddr(&ip, 0);
-    if (HasHeader(kHttpXForwardedHost) &&
-        (IsPrivateIp(ip) || IsLoopbackIp(ip))) {
+    if (HasHeader(kHttpXForwardedHost) &&  //
+        !GetRemoteAddr(&ip, 0) && IsTrustedIp(ip)) {
       FreeLater(ParseHost(HeaderData(kHttpXForwardedHost),
                           HeaderLength(kHttpXForwardedHost), &url));
     } else if (HasHeader(kHttpHost)) {
@@ -5772,8 +5948,8 @@ static bool HasAtMostThisElement(int h, const char *s) {
     if (!SlicesEqualCase(s, n, HeaderData(h), HeaderLength(h))) {
       return false;
     }
-    for (i = 0; i < msg.xheaders.n; ++i) {
-      x = msg.xheaders.p + i;
+    for (i = 0; i < cpm.msg.xheaders.n; ++i) {
+      x = cpm.msg.xheaders.p + i;
       if (GetHttpHeader(inbuf.p + x->k.a, x->k.b - x->k.a) == h &&
           !SlicesEqualCase(inbuf.p + x->v.a, x->v.b - x->v.a, s, n)) {
         return false;
@@ -5785,25 +5961,26 @@ static bool HasAtMostThisElement(int h, const char *s) {
 
 static char *HandleRequest(void) {
   char *p;
-  if (msg.version == 11) {
+  if (cpm.msg.version == 11) {
     LockInc(&shared->c.http11);
-  } else if (msg.version < 10) {
+  } else if (cpm.msg.version < 10) {
     LockInc(&shared->c.http09);
-  } else if (msg.version == 10) {
+  } else if (cpm.msg.version == 10) {
     LockInc(&shared->c.http10);
   } else {
     return HandleVersionNotSupported();
   }
   if ((p = SynchronizeStream())) return p;
   if (logbodies) LogBody("received", inbuf.p + hdrsize, payloadlength);
-  if (msg.version < 11 || HeaderEqualCase(kHttpConnection, "close")) {
+  if (cpm.msg.version < 11 || HeaderEqualCase(kHttpConnection, "close")) {
     connectionclose = true;
   }
-  if (msg.method == kHttpOptions &&
-      SlicesEqual(inbuf.p + msg.uri.a, msg.uri.b - msg.uri.a, "*", 1)) {
+  if (cpm.msg.method == kHttpOptions &&
+      SlicesEqual(inbuf.p + cpm.msg.uri.a, cpm.msg.uri.b - cpm.msg.uri.a, "*",
+                  1)) {
     return ServeServerOptions();
   }
-  if (msg.method == kHttpConnect) {
+  if (cpm.msg.method == kHttpConnect) {
     return HandleConnectRefused();
   }
   if (!HasAtMostThisElement(kHttpExpect, "100-continue")) {
@@ -5819,10 +5996,10 @@ static char *HandleRequest(void) {
     return ServeFailure(400, "Bad URI");
   }
   INFOF("(req) received %s HTTP%02d %.*s %s %`'.*s %`'.*s", DescribeClient(),
-        msg.version, msg.xmethod.b - msg.xmethod.a, inbuf.p + msg.xmethod.a,
-        FreeLater(EncodeUrl(&url, 0)), HeaderLength(kHttpReferer),
-        HeaderData(kHttpReferer), HeaderLength(kHttpUserAgent),
-        HeaderData(kHttpUserAgent));
+        cpm.msg.version, cpm.msg.xmethod.b - cpm.msg.xmethod.a,
+        inbuf.p + cpm.msg.xmethod.a, FreeLater(EncodeUrl(&url, 0)),
+        HeaderLength(kHttpReferer), HeaderData(kHttpReferer),
+        HeaderLength(kHttpUserAgent), HeaderData(kHttpUserAgent));
   if (HasHeader(kHttpContentType) &&
       IsMimeType(HeaderData(kHttpContentType), HeaderLength(kHttpContentType),
                  "application/x-www-form-urlencoded")) {
@@ -5841,8 +6018,7 @@ static char *Route(const char *host, size_t hostlen, const char *path,
   // reset the redirect loop check, as it can only be looping inside
   // this function (as it always serves something); otherwise
   // successful RoutePath and Route may fail with "508 loop detected"
-  loops.n = 0;
-  if (logmessages) LogMessage("received", inbuf.p, hdrsize);
+  cpm.loops.n = 0;
   if (hostlen && (p = RouteHost(host, hostlen, path, pathlen))) {
     return p;
   }
@@ -5855,14 +6031,13 @@ static char *Route(const char *host, size_t hostlen, const char *path,
     return ServeStatusz();
   } else {
     LockInc(&shared->c.notfounds);
-    return ServeError(404, "Not Found");
+    return ServeErrorWithPath(404, "Not Found", path, pathlen);
   }
 }
 
 static char *RoutePath(const char *path, size_t pathlen) {
   int m;
   long r;
-  char *p;
   struct Asset *a;
   DEBUGF("(srvr) RoutePath(%`'.*s)", pathlen, path);
   if ((a = GetAsset(path, pathlen))) {
@@ -5878,7 +6053,7 @@ static char *RoutePath(const char *path, size_t pathlen) {
     } else {
       LockInc(&shared->c.forbiddens);
       WARNF("(srvr) asset %`'.*s %#o isn't readable", pathlen, path, m);
-      return ServeError(403, "Forbidden");
+      return ServeErrorWithPath(403, "Forbidden", path, pathlen);
     }
   } else if ((r = FindRedirect(path, pathlen)) != -1) {
     return HandleRedirect(redirects.p + r);
@@ -5921,8 +6096,8 @@ static inline bool IsLua(struct Asset *a) {
           ('.' | 'l' << 8 | 'u' << 16 | 'a' << 24)) {
     return true;
   }
-  p = ZIP_CFILE_NAME(zbase + a->cf);
-  n = ZIP_CFILE_NAMESIZE(zbase + a->cf);
+  p = ZIP_CFILE_NAME(zmap + a->cf);
+  n = ZIP_CFILE_NAMESIZE(zmap + a->cf);
   return n > 4 &&
          READ32LE(p + n - 4) == ('.' | 'l' << 8 | 'u' << 16 | 'a' << 24);
 }
@@ -5932,10 +6107,10 @@ static char *HandleAsset(struct Asset *a, const char *path, size_t pathlen) {
 #ifndef STATIC
   if (IsLua(a)) return ServeLua(a, path, pathlen);
 #endif
-  if (msg.method == kHttpGet || msg.method == kHttpHead) {
+  if (cpm.msg.method == kHttpGet || cpm.msg.method == kHttpHead) {
     LockInc(&shared->c.staticrequests);
     p = ServeAsset(a, path, pathlen);
-    if (!gotxcontenttypeoptions) {
+    if (!cpm.gotxcontenttypeoptions) {
       p = stpcpy(p, "X-Content-Type-Options: nosniff\r\n");
     }
     return p;
@@ -5946,27 +6121,26 @@ static char *HandleAsset(struct Asset *a, const char *path, size_t pathlen) {
 
 static const char *GetContentType(struct Asset *a, const char *path, size_t n) {
   const char *r;
-  if (a->file && (r = FindContentType(a->file->path.s, a->file->path.n))) {
+  if (a->file && (r = GetContentTypeExt(a->file->path.s, a->file->path.n))) {
     return r;
   }
   return firstnonnull(
-      FindContentType(path, n),
-      firstnonnull(FindContentType(ZIP_CFILE_NAME(zbase + a->cf),
-                                   ZIP_CFILE_NAMESIZE(zbase + a->cf)),
+      GetContentTypeExt(path, n),
+      firstnonnull(GetContentTypeExt(ZIP_CFILE_NAME(zmap + a->cf),
+                                     ZIP_CFILE_NAMESIZE(zmap + a->cf)),
                    a->istext ? "text/plain" : "application/octet-stream"));
 }
 
 static bool IsNotModified(struct Asset *a) {
-  if (msg.version < 10) return false;
+  if (cpm.msg.version < 10) return false;
   if (!HasHeader(kHttpIfModifiedSince)) return false;
-  return a->lastmodified >=
+  return a->lastmodified <=
          ParseHttpDateTime(HeaderData(kHttpIfModifiedSince),
                            HeaderLength(kHttpIfModifiedSince));
 }
 
 static char *ServeAsset(struct Asset *a, const char *path, size_t pathlen) {
   char *p;
-  uint32_t crc;
   const char *ct;
   ct = GetContentType(a, path, pathlen);
   if (IsNotModified(a)) {
@@ -5974,8 +6148,8 @@ static char *ServeAsset(struct Asset *a, const char *path, size_t pathlen) {
     p = SetStatus(304, "Not Modified");
   } else {
     if (!a->file) {
-      content = (char *)ZIP_LFILE_CONTENT(zbase + a->lf);
-      contentlength = GetZipCfileCompressedSize(zbase + a->cf);
+      cpm.content = (char *)ZIP_LFILE_CONTENT(zmap + a->lf);
+      cpm.contentlength = GetZipCfileCompressedSize(zmap + a->cf);
     } else if ((p = OpenAsset(a))) {
       return p;
     }
@@ -5985,20 +6159,25 @@ static char *ServeAsset(struct Asset *a, const char *path, size_t pathlen) {
       } else {
         p = ServeAssetDecompressed(a);
       }
-    } else if (msg.version >= 11 && HasHeader(kHttpRange)) {
+    } else if (cpm.msg.version >= 11 && HasHeader(kHttpRange)) {
       p = ServeAssetRange(a);
     } else if (!a->file) {
       LockInc(&shared->c.identityresponses);
       DEBUGF("(zip) ServeAssetZipIdentity(%`'s)", ct);
-      if (Verify(content, contentlength, ZIP_LFILE_CRC32(zbase + a->lf))) {
+      if (Verify(cpm.content, cpm.contentlength,
+                 ZIP_LFILE_CRC32(zmap + a->lf))) {
         p = SetStatus(200, "OK");
       } else {
         return ServeError(500, "Internal Server Error");
       }
-    } else if (!IsTiny() && msg.method != kHttpHead && !IsSslCompressed() &&
-               ClientAcceptsGzip() &&
-               ((contentlength >= 100 && startswithi(ct, "text/")) ||
-                (contentlength >= 1000 && MeasureEntropy(content, 1000) < 7))) {
+    } else if (!IsTiny() && cpm.msg.method != kHttpHead && !IsSslCompressed() &&
+               ClientAcceptsGzip() && !ShouldAvoidGzip() &&
+               !(a->file &&
+                 IsNoCompressExt(a->file->path.s, a->file->path.n)) &&
+               ((cpm.contentlength >= 100 && startswithi(ct, "text/")) ||
+                (cpm.contentlength >= 1000 &&
+                 MeasureEntropy(cpm.content, 1000) < 7))) {
+      VERBOSEF("serving compressed asset");
       p = ServeAssetCompressed(a);
     } else {
       p = ServeAssetIdentity(a, ct);
@@ -6007,9 +6186,9 @@ static char *ServeAsset(struct Asset *a, const char *path, size_t pathlen) {
   p = AppendContentType(p, ct);
   p = stpcpy(p, "Vary: Accept-Encoding\r\n");
   p = AppendHeader(p, "Last-Modified", a->lastmodifiedstr);
-  if (msg.version >= 11) {
-    if (!gotcachecontrol) {
-      p = AppendCache(p, cacheseconds);
+  if (cpm.msg.version >= 11) {
+    if (!cpm.gotcachecontrol) {
+      p = AppendCache(p, cacheseconds, cachedirective);
     }
     if (!IsCompressed(a)) {
       p = stpcpy(p, "Accept-Ranges: bytes\r\n");
@@ -6019,18 +6198,22 @@ static char *ServeAsset(struct Asset *a, const char *path, size_t pathlen) {
 }
 
 static char *SetStatus(unsigned code, const char *reason) {
-  if (msg.version == 10) {
+  if (cpm.msg.version == 10) {
     if (code == 307) code = 302;
     if (code == 308) code = 301;
   }
-  statuscode = code;
-  hascontenttype = istext = false;  // reset, as the headers are reset
-  gotxcontenttypeoptions = 0;
-  gotcachecontrol = 0;
-  referrerpolicy = 0;
-  branded = 0;
+  cpm.statuscode = code;
+  cpm.hascontenttype = false;
+  // reset, as the headers are reset.
+  // istext is `true`, as the default content type
+  // is text/html, which will be set later
+  cpm.istext = true;
+  cpm.gotxcontenttypeoptions = 0;
+  cpm.gotcachecontrol = 0;
+  cpm.referrerpolicy = 0;
+  cpm.branded = 0;
   stpcpy(hdrbuf.p, "HTTP/1.0 000 ");
-  hdrbuf.p[7] += msg.version & 1;
+  hdrbuf.p[7] += cpm.msg.version & 1;
   hdrbuf.p[9] += code / 100;
   hdrbuf.p[10] += code / 10 % 10;
   hdrbuf.p[11] += code % 10;
@@ -6039,17 +6222,18 @@ static char *SetStatus(unsigned code, const char *reason) {
 }
 
 static inline bool MustNotIncludeMessageBody(void) { /* RFC2616 § 4.4 */
-  return msg.method == kHttpHead || (100 <= statuscode && statuscode <= 199) ||
-         statuscode == 204 || statuscode == 304;
+  return cpm.msg.method == kHttpHead ||
+         (100 <= cpm.statuscode && cpm.statuscode <= 199) ||
+         cpm.statuscode == 204 || cpm.statuscode == 304;
 }
 
 static bool TransmitResponse(char *p) {
   int iovlen;
   struct iovec iov[4];
   long actualcontentlength;
-  if (msg.version >= 10) {
-    actualcontentlength = contentlength;
-    if (gzipped) {
+  if (cpm.msg.version >= 10) {
+    actualcontentlength = cpm.contentlength;
+    if (cpm.gzipped) {
       actualcontentlength += sizeof(kGzipHeader) + sizeof(gzip_footer);
       p = stpcpy(p, "Content-Encoding: gzip\r\n");
     }
@@ -6063,23 +6247,23 @@ static bool TransmitResponse(char *p) {
     iov[0].iov_len = p - hdrbuf.p;
     iovlen = 1;
     if (!MustNotIncludeMessageBody()) {
-      if (gzipped) {
-        iov[iovlen].iov_base = kGzipHeader;
+      if (cpm.gzipped) {
+        iov[iovlen].iov_base = (void *)kGzipHeader;
         iov[iovlen].iov_len = sizeof(kGzipHeader);
         ++iovlen;
       }
-      iov[iovlen].iov_base = content;
-      iov[iovlen].iov_len = contentlength;
+      iov[iovlen].iov_base = cpm.content;
+      iov[iovlen].iov_len = cpm.contentlength;
       ++iovlen;
-      if (gzipped) {
+      if (cpm.gzipped) {
         iov[iovlen].iov_base = gzip_footer;
         iov[iovlen].iov_len = sizeof(gzip_footer);
         ++iovlen;
       }
     }
   } else {
-    iov[0].iov_base = content;
-    iov[0].iov_len = contentlength;
+    iov[0].iov_base = cpm.content;
+    iov[0].iov_len = cpm.contentlength;
     iovlen = 1;
   }
   Send(iov, iovlen);
@@ -6093,7 +6277,7 @@ static bool StreamResponse(char *p) {
   struct iovec iov[6];
   char *s, chunkbuf[23];
   assert(!MustNotIncludeMessageBody());
-  if (msg.version >= 11) {
+  if (cpm.msg.version >= 11) {
     p = stpcpy(p, "Transfer-Encoding: chunked\r\n");
   } else {
     assert(connectionclose);
@@ -6104,11 +6288,11 @@ static bool StreamResponse(char *p) {
     LogMessage("sending", hdrbuf.p, p - hdrbuf.p);
   }
   bzero(iov, sizeof(iov));
-  if (msg.version >= 10) {
+  if (cpm.msg.version >= 10) {
     iov[0].iov_base = hdrbuf.p;
     iov[0].iov_len = p - hdrbuf.p;
   }
-  if (msg.version >= 11) {
+  if (cpm.msg.version >= 11) {
     iov[5].iov_base = "\r\n";
     iov[5].iov_len = 2;
   }
@@ -6119,8 +6303,8 @@ static bool StreamResponse(char *p) {
     iov[3].iov_len = 0;
     iov[4].iov_base = 0;
     iov[4].iov_len = 0;
-    if ((rc = generator(iov + 2)) <= 0) break;
-    if (msg.version >= 11) {
+    if ((rc = cpm.generator(iov + 2)) <= 0) break;
+    if (cpm.msg.version >= 11) {
       s = chunkbuf;
       s += uint64toarray_radix16(rc, s);
       s = AppendCrlf(s);
@@ -6132,7 +6316,7 @@ static bool StreamResponse(char *p) {
     iov[0].iov_len = 0;
   }
   if (rc != -1) {
-    if (msg.version >= 11) {
+    if (cpm.msg.version >= 11) {
       iov[0].iov_base = "0\r\n\r\n";
       iov[0].iov_len = 5;
       Send(iov, 1);
@@ -6145,11 +6329,15 @@ static bool StreamResponse(char *p) {
 
 static bool HandleMessageActual(void) {
   int rc;
+  long reqtime, contime;
   char *p;
-  long double now;
-  if ((rc = ParseHttpMessage(&msg, inbuf.p, amtread)) != -1) {
+  struct timespec now;
+  if ((rc = ParseHttpMessage(&cpm.msg, inbuf.p, amtread)) != -1) {
     if (!rc) return false;
     hdrsize = rc;
+    if (logmessages) {
+      LogMessage("received", inbuf.p, hdrsize);
+    }
     p = HandleRequest();
   } else {
     LockInc(&shared->c.badmessages);
@@ -6159,40 +6347,43 @@ static bool HandleMessageActual(void) {
     }
     return true;
   }
-  if (!msgsize) {
+  if (!cpm.msgsize) {
     amtread = 0;
     connectionclose = true;
     LockInc(&shared->c.synchronizationfailures);
     DEBUGF("(clnt) could not synchronize message stream");
   }
-  if (msg.version >= 10) {
+  if (cpm.msg.version >= 10) {
     p = AppendCrlf(stpcpy(stpcpy(p, "Date: "), shared->currentdate));
-    if (!branded) p = stpcpy(p, serverheader);
+    if (!cpm.branded) p = stpcpy(p, serverheader);
     if (extrahdrs) p = stpcpy(p, extrahdrs);
     if (connectionclose) {
       p = stpcpy(p, "Connection: close\r\n");
-    } else if (timeout.tv_sec < 0 && msg.version >= 11) {
+    } else if (timeout.tv_sec < 0 && cpm.msg.version >= 11) {
       p = stpcpy(p, "Connection: keep-alive\r\n");
     }
   }
   // keep content-type update *before* referrerpolicy
   // https://datatracker.ietf.org/doc/html/rfc2616#section-7.2.1
-  if (!hascontenttype && contentlength > 0) {
+  if (!cpm.hascontenttype && cpm.contentlength > 0) {
     p = AppendContentType(p, "text/html");
   }
-  if (referrerpolicy) {
+  if (cpm.referrerpolicy) {
     p = stpcpy(p, "Referrer-Policy: ");
-    p = stpcpy(p, referrerpolicy);
+    p = stpcpy(p, cpm.referrerpolicy);
     p = stpcpy(p, "\r\n");
   }
-  if (loglatency || LOGGABLE(kLogDebug)) {
-    now = nowl();
-    LOGF(kLogDebug, "(stat) %`'.*s latency r: %,ldµs c: %,ldµs",
-         msg.uri.b - msg.uri.a, inbuf.p + msg.uri.a,
-         (long)((now - startrequest) * 1e6L),
-         (long)((now - startconnection) * 1e6L));
+  if (loglatency || LOGGABLE(kLogDebug) || hasonloglatency) {
+    now = timespec_real();
+    reqtime = timespec_tomicros(timespec_sub(now, startrequest));
+    contime = timespec_tomicros(timespec_sub(now, startconnection));
+    if (hasonloglatency) LuaOnLogLatency(reqtime, contime);
+    if (loglatency || LOGGABLE(kLogDebug))
+      LOGF(kLogDebug, "(stat) %`'.*s latency r: %,ldµs c: %,ldµs",
+           cpm.msg.uri.b - cpm.msg.uri.a, inbuf.p + cpm.msg.uri.a, reqtime,
+           contime);
   }
-  if (!generator) {
+  if (!cpm.generator) {
     return TransmitResponse(p);
   } else {
     return StreamResponse(p);
@@ -6208,23 +6399,8 @@ static bool HandleMessage(void) {
 }
 
 static void InitRequest(void) {
-  assert(!outbuf);
-  frags = 0;
-  outbuf = 0;
-  gzipped = 0;
-  branded = 0;
-  content = 0;
-  msgsize = 0;
-  loops.n = 0;
-  generator = 0;
-  luaheaderp = 0;
-  isyielding = 0;
-  contentlength = 0;
-  referrerpolicy = 0;
-  gotcachecontrol = 0;
-  gotxcontenttypeoptions = 0;
-  hascontenttype = istext = false;
-  InitHttpMessage(&msg, kHttpRequest);
+  assert(!cpm.outbuf);
+  bzero(&cpm, sizeof(cpm));
 }
 
 static bool IsSsl(unsigned char c) {
@@ -6236,20 +6412,20 @@ static bool IsSsl(unsigned char c) {
 }
 
 static void HandleMessages(void) {
-  char *p;
   bool once;
   ssize_t rc;
   size_t got;
+  (void)once;
   for (once = false;;) {
     InitRequest();
-    startread = nowl();
+    startread = timespec_real();
     for (;;) {
-      if (!msg.i && amtread) {
-        startrequest = nowl();
+      if (!cpm.msg.i && amtread) {
+        startrequest = timespec_real();
         if (HandleMessage()) break;
       }
       if ((rc = reader(client, inbuf.p + amtread, inbuf.n - amtread)) != -1) {
-        startrequest = nowl();
+        startrequest = timespec_real();
         got = rc;
         amtread += got;
         if (amtread) {
@@ -6291,19 +6467,25 @@ static void HandleMessages(void) {
         LockInc(&shared->c.readtimeouts);
         if (amtread) SendTimeout();
         NotifyClose();
-        LogClose("readtimeout");
+        LogClose("read timeout");
         return;
       } else if (errno == ECONNRESET) {
         LockInc(&shared->c.readresets);
-        LogClose("readreset");
+        LogClose("read reset");
         return;
       } else {
         LockInc(&shared->c.readerrors);
-        WARNF("(clnt) %s readerror: %m", DescribeClient());
+        if (errno == EBADF) {  // don't warn on close/bad fd
+          LogClose("read badf");
+        } else {
+          WARNF("(clnt) %s read error: %m", DescribeClient());
+        }
         return;
       }
       if (killed || (terminated && !amtread) ||
-          (meltdown && (!amtread || nowl() - startread > 1))) {
+          (meltdown &&
+           (!amtread || timespec_cmp(timespec_sub(timespec_real(), startread),
+                                     (struct timespec){1}) >= 0))) {
         if (amtread) {
           LockInc(&shared->c.dropped);
           SendServiceUnavailable();
@@ -6314,10 +6496,9 @@ static void HandleMessages(void) {
       }
       if (invalidated) {
         HandleReload();
-        invalidated = false;
       }
     }
-    if (msgsize == amtread) {
+    if (cpm.msgsize == amtread) {
       amtread = 0;
       if (killed) {
         LogClose(DescribeClose());
@@ -6328,11 +6509,11 @@ static void HandleMessages(void) {
         return;
       }
     } else {
-      CHECK_LT(msgsize, amtread);
+      CHECK_LT(cpm.msgsize, amtread);
       LockInc(&shared->c.pipelinedrequests);
-      DEBUGF("(stat) %,ld pipelinedrequest bytes", amtread - msgsize);
-      memmove(inbuf.p, inbuf.p + msgsize, amtread - msgsize);
-      amtread -= msgsize;
+      DEBUGF("(stat) %,ld pipelinedrequest bytes", amtread - cpm.msgsize);
+      memmove(inbuf.p, inbuf.p + cpm.msgsize, amtread - cpm.msgsize);
+      amtread -= cpm.msgsize;
       if (killed) {
         LogClose(DescribeClose());
         return;
@@ -6345,7 +6526,6 @@ static void HandleMessages(void) {
     CollectGarbage();
     if (invalidated) {
       HandleReload();
-      invalidated = false;
     }
   }
 }
@@ -6364,119 +6544,54 @@ static int ExitWorker(void) {
   }
   if (monitortty) {
     terminatemonitor = true;
-    _wait0(monitortid);
+    if (monitorth) {
+      pthread_join(monitorth, 0);
+      monitorth = 0;
+    }
   }
   _Exit(0);
 }
 
-static const struct sock_filter kSandboxOnline[] = {
-    _SECCOMP_MACHINE(AUDIT_ARCH_X86_64),  //
-    _SECCOMP_LOAD_SYSCALL_NR(),           //
-    _SECCOMP_ALLOW_SYSCALL(0x013),        // readv
-    _SECCOMP_ALLOW_SYSCALL(0x014),        // writev
-    _SECCOMP_ALLOW_SYSCALL(0x009),        // mmap
-    _SECCOMP_ALLOW_SYSCALL(0x00b),        // munmap
-    _SECCOMP_ALLOW_SYSCALL(0x000),        // read
-    _SECCOMP_ALLOW_SYSCALL(0x001),        // write
-    _SECCOMP_ALLOW_SYSCALL(0x003),        // close
-    _SECCOMP_ALLOW_SYSCALL(0x008),        // lseek
-    _SECCOMP_ALLOW_SYSCALL(0x04f),        // getcwd
-    _SECCOMP_ALLOW_SYSCALL(0x027),        // getpid
-    _SECCOMP_ALLOW_SYSCALL(0x066),        // getuid
-    _SECCOMP_ALLOW_SYSCALL(0x068),        // getgid
-    _SECCOMP_ALLOW_SYSCALL(0x06e),        // getppid
-    _SECCOMP_ALLOW_SYSCALL(0x06f),        // getpgrp
-    _SECCOMP_ALLOW_SYSCALL(0x07c),        // getsid
-    _SECCOMP_ALLOW_SYSCALL(0x06b),        // geteuid
-    _SECCOMP_ALLOW_SYSCALL(0x06c),        // getegid
-    _SECCOMP_ALLOW_SYSCALL(0x061),        // getrlimit
-    _SECCOMP_ALLOW_SYSCALL(0x00f),        // rt_sigreturn
-    _SECCOMP_ALLOW_SYSCALL(0x0e7),        // exit_group
-    _SECCOMP_ALLOW_SYSCALL(0x106),        // newfstatat
-    _SECCOMP_ALLOW_SYSCALL(0x0e4),        // clock_gettime
-    _SECCOMP_ALLOW_SYSCALL(0x03f),        // uname
-    _SECCOMP_ALLOW_SYSCALL(0x048),        // fcntl
-    _SECCOMP_ALLOW_SYSCALL(0x029),        // socket
-    _SECCOMP_ALLOW_SYSCALL(0x02a),        // connect
-    _SECCOMP_ALLOW_SYSCALL(0x02c),        // sendto
-    _SECCOMP_ALLOW_SYSCALL(0x02d),        // recvfrom
-    _SECCOMP_ALLOW_SYSCALL(0x036),        // setsockopt
-    _SECCOMP_LOG_AND_RETURN_ERRNO(1),     // EPERM
-};
-
-static const struct sock_filter kSandboxOffline[] = {
-    _SECCOMP_MACHINE(AUDIT_ARCH_X86_64),  //
-    _SECCOMP_LOAD_SYSCALL_NR(),           //
-    _SECCOMP_ALLOW_SYSCALL(0x013),        // readv
-    _SECCOMP_ALLOW_SYSCALL(0x014),        // writev
-    _SECCOMP_ALLOW_SYSCALL(0x000),        // read
-    _SECCOMP_ALLOW_SYSCALL(0x001),        // write
-    _SECCOMP_ALLOW_SYSCALL(0x009),        // mmap
-    _SECCOMP_ALLOW_SYSCALL(0x00b),        // munmap
-    _SECCOMP_ALLOW_SYSCALL(0x003),        // close
-    _SECCOMP_ALLOW_SYSCALL(0x008),        // lseek
-    _SECCOMP_ALLOW_SYSCALL(0x04f),        // getcwd
-    _SECCOMP_ALLOW_SYSCALL(0x027),        // getpid
-    _SECCOMP_ALLOW_SYSCALL(0x066),        // getuid
-    _SECCOMP_ALLOW_SYSCALL(0x068),        // getgid
-    _SECCOMP_ALLOW_SYSCALL(0x06e),        // getppid
-    _SECCOMP_ALLOW_SYSCALL(0x06f),        // getpgrp
-    _SECCOMP_ALLOW_SYSCALL(0x07c),        // getsid
-    _SECCOMP_ALLOW_SYSCALL(0x06b),        // geteuid
-    _SECCOMP_ALLOW_SYSCALL(0x06c),        // getegid
-    _SECCOMP_ALLOW_SYSCALL(0x061),        // getrlimit
-    _SECCOMP_ALLOW_SYSCALL(0x00f),        // rt_sigreturn
-    _SECCOMP_ALLOW_SYSCALL(0x0e7),        // exit_group
-    _SECCOMP_ALLOW_SYSCALL(0x106),        // newfstatat
-    _SECCOMP_ALLOW_SYSCALL(0x0e4),        // clock_gettime
-    _SECCOMP_ALLOW_SYSCALL(0x03f),        // uname
-    _SECCOMP_ALLOW_SYSCALL(0x048),        // fcntl
-    _SECCOMP_LOG_AND_RETURN_ERRNO(1),     // EPERM
-};
-
-static const struct sock_fprog kSandboxOnlineProg = {
-    .len = ARRAYLEN(kSandboxOnline),
-    .filter = kSandboxOnline,
-};
-
-static const struct sock_fprog kSandboxOfflineProg = {
-    .len = ARRAYLEN(kSandboxOffline),
-    .filter = kSandboxOffline,
-};
+static void UnveilRedbean(void) {
+  size_t i;
+  for (i = 0; i < stagedirs.n; ++i) {
+    unveil(stagedirs.p[i].s, "r");
+  }
+  unveil(0, 0);
+}
 
 static int EnableSandbox(void) {
-  const struct sock_fprog *sandbox;
+  __pledge_mode = PLEDGE_PENALTY_RETURN_EPERM | PLEDGE_STDERR_LOGGING;
   switch (sandboxed) {
     case 0:
       return 0;
-    case 1:
+    case 1:  // -S
       DEBUGF("(stat) applying '%s' sandbox policy", "online");
-      sandbox = &kSandboxOnlineProg;
-      break;
-    default:
+      UnveilRedbean();
+      return pledge("stdio rpath inet dns id", 0);
+    case 2:  // -SS
       DEBUGF("(stat) applying '%s' sandbox policy", "offline");
-      sandbox = &kSandboxOfflineProg;
-      break;
-  }
-  if (prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, sandbox) != -1) {
-    return 0;
-  } else {
-    return -1;
+      UnveilRedbean();
+      return pledge("stdio rpath id", 0);
+    default:  // -SSS
+      DEBUGF("(stat) applying '%s' sandbox policy", "contained");
+      UnveilRedbean();
+      return pledge("stdio", 0);
   }
 }
 
-static int MemoryMonitor(void *arg) {
+static void *MemoryMonitor(void *arg) {
   static struct termios oldterm;
   static int tty;
   sigset_t ss;
-  bool done, ok;
+  bool ok;
   size_t intervals;
   struct winsize ws;
   unsigned char rez;
   struct termios term;
-  char *b, *addr, title[128];
+  char *b, *addr;
   struct MemoryInterval *mi, *mi2;
-  long i, j, k, n, x, y, pi, gen, pages;
+  long i, j, gen, pages;
   int rc, id, color, color2, workers;
   id = atomic_load_explicit(&shared->workers, memory_order_relaxed);
   DEBUGF("(memv) started for pid %d on tid %d", getpid(), gettid());
@@ -6491,10 +6606,10 @@ static int MemoryMonitor(void *arg) {
   sigaddset(&ss, SIGUSR2);
   sigprocmask(SIG_BLOCK, &ss, 0);
 
-  _spinlock(&shared->montermlock);
+  pthread_spin_lock(&shared->montermlock);
   if (!id) {
     if ((tty = open(monitortty, O_RDWR | O_NOCTTY)) != -1) {
-      ioctl(tty, TCGETS, &oldterm);
+      tcgetattr(tty, &oldterm);
       term = oldterm;
       term.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
       term.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
@@ -6503,11 +6618,11 @@ static int MemoryMonitor(void *arg) {
       term.c_cflag |= CS8;
       term.c_cc[VMIN] = 1;
       term.c_cc[VTIME] = 0;
-      ioctl(tty, TCSETS, &term);
+      tcsetattr(tty, TCSANOW, &term);
       WRITE(tty, "\e[?25l", 6);
     }
   }
-  _spunlock(&shared->montermlock);
+  pthread_spin_unlock(&shared->montermlock);
 
   if (tty != -1) {
     for (gen = 0, mi = 0, b = 0; !terminatemonitor;) {
@@ -6522,8 +6637,8 @@ static int MemoryMonitor(void *arg) {
       intervals = atomic_load_explicit(&_mmi.i, memory_order_relaxed);
       if ((mi2 = realloc(mi, (intervals += 3) * sizeof(*mi)))) {
         mi = mi2;
-        mi[0].x = (intptr_t)_base >> 16;
-        mi[0].size = _etext - _base;
+        mi[0].x = (intptr_t)__executable_start >> 16;
+        mi[0].size = _etext - __executable_start;
         mi[0].flags = 0;
         mi[1].x = (intptr_t)_etext >> 16;
         mi[1].size = _edata - _etext;
@@ -6546,18 +6661,19 @@ static int MemoryMonitor(void *arg) {
 
         ws.ws_col = 80;
         ws.ws_row = 40;
-        getttysize(tty, &ws);
+        tcgetwinsize(tty, &ws);
 
         appendr(&b, 0);
         appends(&b, "\e[H\e[1m");
 
-        for (pi = k = x = y = i = 0; i < intervals; ++i) {
+        for (i = 0; i < intervals; ++i) {
           addr = (char *)((int64_t)((uint64_t)mi[i].x << 32) >> 16);
           color = 0;
           appendf(&b, "\e[0m%lx", addr);
-          pages = (mi[i].size + PAGESIZE - 1) / PAGESIZE;
+          int pagesz = getauxval(AT_PAGESZ);
+          pages = (mi[i].size + pagesz - 1) / pagesz;
           for (j = 0; j < pages; ++j) {
-            rc = mincore(addr + j * PAGESIZE, PAGESIZE, &rez);
+            rc = mincore(addr + j * pagesz, pagesz, &rez);
             if (!rc) {
               if (rez & 1) {
                 if (mi[i].flags & MAP_SHARED) {
@@ -6589,11 +6705,11 @@ static int MemoryMonitor(void *arg) {
                 " GEN=%ld\e[J",
                 id, getpid(), ws.ws_col, ws.ws_row, workers, gen);
 
-        _spinlock(&shared->montermlock);
+        pthread_spin_lock(&shared->montermlock);
         WRITE(tty, b, appendz(b).i);
         appendr(&b, 0);
         usleep(MONITOR_MICROS);
-        _spunlock(&shared->montermlock);
+        pthread_spin_unlock(&shared->montermlock);
       } else {
         // running out of memory temporarily is a real possibility here
         // the right thing to do, is stand aside and let lua try to fix
@@ -6606,7 +6722,7 @@ static int MemoryMonitor(void *arg) {
       appendr(&b, 0);
       appends(&b, "\e[H\e[J\e[?25h");
       WRITE(tty, b, appendz(b).i);
-      ioctl(tty, TCSETS, &oldterm);
+      tcsetattr(tty, TCSANOW, &oldterm);
     }
 
     DEBUGF("(memv) exiting...");
@@ -6620,31 +6736,61 @@ static int MemoryMonitor(void *arg) {
 }
 
 static void MonitorMemory(void) {
-  if ((monitortls = __initialize_tls(malloc(64)))) {
-    if ((monitorstack = mmap(0, GetStackSize(), PROT_READ | PROT_WRITE,
-                             MAP_STACK | MAP_ANONYMOUS, -1, 0)) != MAP_FAILED) {
-      monitortid = (int *)(monitortls + 0x38);
-      if ((*monitortid =
-               clone(MemoryMonitor, monitorstack, GetStackSize(),
-                     CLONE_VM | CLONE_THREAD | CLONE_FS | CLONE_FILES |
-                         CLONE_SIGHAND | CLONE_SETTLS | CLONE_CHILD_CLEARTID,
-                     0, 0, monitortls, 64, monitortid)) != -1) {
-        return;
-      }
-      munmap(monitorstack, GetStackSize());
-    }
-    free(monitortls);
+  errno_t err;
+  if ((err = pthread_create(&monitorth, 0, MemoryMonitor, 0))) {
+    WARNF("(memv) failed to start memory monitor %s", strerror(err));
   }
-  WARNF("(memv) failed to start memory monitor %m");
-  monitortty = 0;
 }
 
 static int HandleConnection(size_t i) {
-  int pid, rc = 0;
+  uint32_t ip;
+  int pid, tok, rc = 0;
   clientaddrsize = sizeof(clientaddr);
-  if ((client = accept4(servers.p[i].fd, &clientaddr, &clientaddrsize,
-                        SOCK_CLOEXEC)) != -1) {
-    startconnection = nowl();
+  if ((client = accept4(servers.p[i].fd, (struct sockaddr *)&clientaddr,
+                        &clientaddrsize, SOCK_CLOEXEC)) != -1) {
+    LockInc(&shared->c.accepts);
+    GetClientAddr(&ip, 0);
+    if (tokenbucket.cidr && tokenbucket.reject >= 0) {
+      if (!IsTrustedIp(ip)) {
+        tok = AcquireToken(tokenbucket.b, ip, tokenbucket.cidr);
+        if (tok <= tokenbucket.ban && tokenbucket.ban >= 0) {
+          WARNF("(token) banning %hhu.%hhu.%hhu.%hhu who only has %d tokens",
+                ip >> 24, ip >> 16, ip >> 8, ip, tok);
+          LockInc(&shared->c.bans);
+          Blackhole(ip);
+          close(client);
+          return 0;
+        } else if (tok <= tokenbucket.ignore && tokenbucket.ignore >= 0) {
+          DEBUGF("(token) ignoring %hhu.%hhu.%hhu.%hhu who only has %d tokens",
+                 ip >> 24, ip >> 16, ip >> 8, ip, tok);
+          LockInc(&shared->c.ignores);
+          close(client);
+          return 0;
+        } else if (tok < tokenbucket.reject) {
+          WARNF("(token) rejecting %hhu.%hhu.%hhu.%hhu who only has %d tokens",
+                ip >> 24, ip >> 16, ip >> 8, ip, tok);
+          LockInc(&shared->c.rejects);
+          SendTooManyRequests();
+          close(client);
+          return 0;
+        } else {
+          DEBUGF("(token) %hhu.%hhu.%hhu.%hhu has %d tokens", ip >> 24,
+                 ip >> 16, ip >> 8, ip, tok - 1);
+        }
+      } else {
+        DEBUGF("(token) won't acquire token for trusted ip %hhu.%hhu.%hhu.%hhu",
+               ip >> 24, ip >> 16, ip >> 8, ip);
+      }
+    } else {
+      DEBUGF("(token) can't acquire accept() token for client");
+    }
+    startconnection = timespec_real();
+    if (UNLIKELY(maxworkers) && shared->workers >= maxworkers) {
+      EnterMeltdownMode();
+      SendServiceUnavailable();
+      close(client);
+      return 0;
+    }
     VERBOSEF("(srvr) accept %s via %s", DescribeClient(), DescribeServer());
     messageshandled = 0;
     if (hasonclientconnection && LuaOnClientConnection()) {
@@ -6692,7 +6838,7 @@ static int HandleConnection(size_t i) {
     }
     HandleMessages();
     DEBUGF("(stat) %s closing after %,ldµs", DescribeClient(),
-           (long)((nowl() - startconnection) * 1e6L));
+           timespec_tomicros(timespec_sub(timespec_real(), startconnection)));
     if (!pid) {
       if (hasonworkerstop) {
         CallSimpleHook("OnWorkerStop");
@@ -6764,24 +6910,26 @@ static int HandleConnection(size_t i) {
 }
 
 static void MakeExecutableModifiable(void) {
+#ifdef __x86_64__
   int ft;
-  size_t n;
-  extern char ape_rom_vaddr[] __attribute__((__weak__));
-  if (!(SUPPORT_VECTOR & (METAL | WINDOWS | XNU))) return;
+  if (!(SUPPORT_VECTOR & (_HOSTMETAL | _HOSTWINDOWS | _HOSTXNU))) return;
   if (IsWindows()) return;  // TODO
   if (IsOpenbsd()) return;  // TODO
   if (IsNetbsd()) return;   // TODO
   if (endswith(zpath, ".com.dbg")) return;
   close(zfd);
-  ft = __ftrace;
-  if ((zfd = OpenExecutable()) == -1) {
-    WARNF("(srvr) can't restore .ape");
+  ft = ftrace_enabled(0);
+  if ((zfd = __open_executable()) == -1) {
+    WARNF("(srvr) can't open executable for modification: %m");
   }
   if (ft > 0) {
     __ftrace = 0;
     ftrace_install();
-    __ftrace = ft;
+    ftrace_enabled(ft);
   }
+#else
+  // TODO
+#endif
 }
 
 static int HandleReadline(void) {
@@ -6805,13 +6953,13 @@ static int HandleReadline(void) {
         errno = 0;
         return 0;
       } else {
-        WARNF("unexpected terminal error %d% m", status);
+        WARNF("(srvr) unexpected terminal error %d% m", status);
         errno = 0;
         return 0;
       }
     }
-    linenoiseDisableRawMode();
-    LUA_REPL_LOCK;
+    DisableRawMode();
+    lua_repl_lock();
     if (status == LUA_OK) {
       status = lua_runchunk(L, 0, LUA_MULTRET);
     }
@@ -6820,10 +6968,8 @@ static int HandleReadline(void) {
     } else {
       lua_report(L, status);
     }
-    LUA_REPL_UNLOCK;
-    if (lua_repl_isterminal) {
-      linenoiseEnableRawMode(0);
-    }
+    lua_repl_unlock();
+    EnableRawMode();
   }
 }
 
@@ -6838,14 +6984,14 @@ static int HandlePoll(int ms) {
         if (polls[pollid].fd < 0) continue;
         if (polls[pollid].fd) {
           // handle listen socket
-          LUA_REPL_LOCK;
+          lua_repl_lock();
           serverid = pollid - 1;
           assert(0 <= serverid && serverid < servers.n);
           serveraddr = &servers.p[serverid].addr;
           ishandlingconnection = true;
           rc = HandleConnection(serverid);
           ishandlingconnection = false;
-          LUA_REPL_UNLOCK;
+          lua_repl_unlock();
           if (rc == -1) return -1;
 #ifndef STATIC
         } else {
@@ -6858,12 +7004,8 @@ static int HandlePoll(int ms) {
 #ifndef STATIC
     } else if (__replmode) {
       // handle refresh repl line
-      if (!IsWindows()) {
-        rc = HandleReadline();
-        if (rc < 0) return rc;
-      } else {
-        linenoiseRefreshLine(lua_repl_linenoise);
-      }
+      rc = HandleReadline();
+      if (rc < 0) return rc;
 #endif
     }
   } else {
@@ -6884,13 +7026,14 @@ static int HandlePoll(int ms) {
 static void Listen(void) {
   char ipbuf[16];
   size_t i, j, n;
-  uint32_t ip, port, addrsize, *ifs, *ifp;
+  uint32_t ip, port, addrsize, *ifp;
+  bool hasonserverlisten = IsHookDefined("OnServerListen");
   if (!ports.n) {
     ProgramPort(8080);
   }
   if (!ips.n) {
-    if ((ifs = GetHostIps()) && *ifs) {
-      for (ifp = ifs; *ifp; ++ifp) {
+    if (interfaces && *interfaces) {
+      for (ifp = interfaces; *ifp; ++ifp) {
         sprintf(ipbuf, "%hhu.%hhu.%hhu.%hhu", *ifp >> 24, *ifp >> 16, *ifp >> 8,
                 *ifp);
         ProgramAddr(ipbuf);
@@ -6898,7 +7041,6 @@ static void Listen(void) {
     } else {
       ProgramAddr("0.0.0.0");
     }
-    free(ifs);
   }
   servers.p = malloc(ips.n * ports.n * sizeof(*servers.p));
   for (n = i = 0; i < ips.n; ++i) {
@@ -6911,7 +7053,14 @@ static void Listen(void) {
                                         IPPROTO_TCP, true, &timeout)) == -1) {
         DIEF("(srvr) socket: %m");
       }
-      if (bind(servers.p[n].fd, &servers.p[n].addr,
+      if (hasonserverlisten &&
+          LuaOnServerListen(servers.p[n].fd, ips.p[i], ports.p[j])) {
+        close(servers.p[n].fd);
+        n--;  // skip this server instance
+        continue;
+      }
+
+      if (bind(servers.p[n].fd, (struct sockaddr *)&servers.p[n].addr,
                sizeof(servers.p[n].addr)) == -1) {
         DIEF("(srvr) bind error: %m: %hhu.%hhu.%hhu.%hhu:%hu", ips.p[i] >> 24,
              ips.p[i] >> 16, ips.p[i] >> 8, ips.p[i], ports.p[j]);
@@ -6920,7 +7069,8 @@ static void Listen(void) {
         DIEF("(srvr) listen error: %m");
       }
       addrsize = sizeof(servers.p[n].addr);
-      if (getsockname(servers.p[n].fd, &servers.p[n].addr, &addrsize) == -1) {
+      if (getsockname(servers.p[n].fd, (struct sockaddr *)&servers.p[n].addr,
+                      &addrsize) == -1) {
         DIEF("(srvr) getsockname error: %m");
       }
       port = ntohs(servers.p[n].addr.sin_port);
@@ -6934,6 +7084,9 @@ static void Listen(void) {
       }
     }
   }
+  // shrink allocated memory in case some of the sockets were skipped
+  if (n < ips.n * ports.n)
+    servers.p = realloc(servers.p, n * sizeof(*servers.p));
   servers.n = n;
   polls = malloc((1 + n) * sizeof(*polls));
   polls[0].fd = -1;
@@ -6955,29 +7108,30 @@ static void HandleShutdown(void) {
     KillGroup();
   }
   WaitAll();
+  INFOF("(srvr) shutdown complete");
 }
 
 // this function coroutines with linenoise
-static int EventLoop(int ms) {
-  long double t;
+int EventLoop(int ms) {
+  struct timespec t;
   DEBUGF("(repl) event loop");
   while (!terminated) {
     errno = 0;
     if (zombied) {
-      LUA_REPL_LOCK;
+      lua_repl_lock();
       ReapZombies();
-      LUA_REPL_UNLOCK;
+      lua_repl_unlock();
     } else if (invalidated) {
-      LUA_REPL_LOCK;
+      lua_repl_lock();
       HandleReload();
-      LUA_REPL_UNLOCK;
-      invalidated = false;
+      lua_repl_unlock();
     } else if (meltdown) {
-      LUA_REPL_LOCK;
+      lua_repl_lock();
       EnterMeltdownMode();
-      LUA_REPL_UNLOCK;
+      lua_repl_unlock();
       meltdown = false;
-    } else if ((t = nowl()) - lastheartbeat > HEARTBEAT / 1000.) {
+    } else if (timespec_cmp(timespec_sub((t = timespec_real()), lastheartbeat),
+                            heartbeatinterval) >= 0) {
       lastheartbeat = t;
       HandleHeartbeat();
     } else if (HandlePoll(ms) == -1) {
@@ -6992,47 +7146,19 @@ static void ReplEventLoop(void) {
   DEBUGF("ReplEventLoop()");
   polls[0].fd = 0;
   lua_repl_completions_callback = HandleCompletions;
-  lua_initrepl(L, "redbean");
-  if (lua_repl_isterminal) {
-    linenoiseEnableRawMode(0);
-  }
+  lua_initrepl(L);
+  EnableRawMode();
   EventLoop(100);
-  linenoiseDisableRawMode();
+  DisableRawMode();
   lua_freerepl();
   lua_settop(L, 0);  // clear stack
   polls[0].fd = -1;
 }
 
-static uint32_t WindowsReplThread(void *arg) {
-  int sig;
-  lua_State *L = GL;
-  DEBUGF("(repl) started windows thread");
-  lua_repl_blocking = true;
-  lua_repl_completions_callback = HandleCompletions;
-  lua_initrepl(L, "redbean");
-  if (lua_repl_isterminal) {
-    linenoiseEnableRawMode(0);
-  }
-  for (;;) {
-    if (HandleReadline() == -1) {
-      break;
-    }
-  }
-  linenoiseDisableRawMode();
-  lua_freerepl();
-  LUA_REPL_LOCK;
-  lua_settop(L, 0);  // clear stack
-  LUA_REPL_UNLOCK;
-  if ((sig = linenoiseGetInterrupt())) {
-    raise(sig);
-  }
-  DEBUGF("(repl) terminating windows thread");
-  return 0;
-}
-
 static void InstallSignalHandler(int sig, void *handler) {
   struct sigaction sa = {.sa_sigaction = handler};
-  CHECK_NE(-1, sigaction(sig, &sa, 0));
+  if (sigaction(sig, &sa, 0) == -1)
+    WARNF("(srvr) failed to set signal handler #%d: %m", sig);
 }
 
 static void SigInit(void) {
@@ -7050,8 +7176,8 @@ static void TlsInit(void) {
   int suite;
   if (unsecure) return;
 
-  if (suiteb && !X86_HAVE(AES)) {
-    WARNF("you're using suite b crypto but you don't have aes-ni");
+  if (suiteb && !mbedtls_aes_uses_hardware()) {
+    WARNF("(srvr) requested suiteb crypto, but hardware aes not present");
   }
 
   if (!sslinitialized) {
@@ -7103,8 +7229,8 @@ static void TlsInit(void) {
   }
   mbedtls_ssl_set_bio(&ssl, &g_bio, TlsSend, 0, TlsRecv);
   conf.disable_compression = confcli.disable_compression = true;
-  DCHECK_EQ(0, mbedtls_ssl_conf_alpn_protocols(&conf, kAlpn));
-  DCHECK_EQ(0, mbedtls_ssl_conf_alpn_protocols(&confcli, kAlpn));
+  DCHECK_EQ(0, mbedtls_ssl_conf_alpn_protocols(&conf, (void *)kAlpn));
+  DCHECK_EQ(0, mbedtls_ssl_conf_alpn_protocols(&confcli, (void *)kAlpn));
   DCHECK_EQ(0, mbedtls_ssl_setup(&ssl, &conf));
   DCHECK_EQ(0, mbedtls_ssl_setup(&sslcli, &confcli));
 #endif
@@ -7126,32 +7252,12 @@ static void TlsDestroy(void) {
 #endif
 }
 
-static void MemDestroy(void) {
-  FreeAssets();
-  CollectGarbage();
-  inbuf.p = 0, inbuf.n = 0, inbuf.c = 0;
-  Free(&inbuf_actual.p), inbuf_actual.n = inbuf_actual.c = 0;
-  Free(&unmaplist.p), unmaplist.n = unmaplist.c = 0;
-  Free(&freelist.p), freelist.n = freelist.c = 0;
-  Free(&hdrbuf.p), hdrbuf.n = hdrbuf.c = 0;
-  Free(&servers.p), servers.n = 0;
-  Free(&ports.p), ports.n = 0;
-  Free(&ips.p), ips.n = 0;
-  Free(&outbuf);
-  FreeStrings(&stagedirs);
-  FreeStrings(&hidepaths);
-  Free(&launchbrowser);
-  Free(&serverheader);
-  Free(&extrahdrs);
-  Free(&pidpath);
-  Free(&logpath);
-  Free(&brand);
-  Free(&polls);
-}
-
 static void GetOpts(int argc, char *argv[]) {
   int opt;
+  bool got_e_arg = false;
   bool storeasset = false;
+  // only generate ecp cert under blinkenlights (rsa is slow)
+  norsagen = IsGenuineBlink();
   while ((opt = getopt(argc, argv, GETOPTS)) != -1) {
     switch (opt) {
       CASE('S', ++sandboxed);
@@ -7168,6 +7274,7 @@ static void GetOpts(int argc, char *argv[]) {
       CASE('u', uniprocess = true);
       CASE('g', loglatency = true);
       CASE('m', logmessages = true);
+      CASE('w', launchbrowser = strdup(optarg));
       CASE('l', ProgramAddr(optarg));
       CASE('H', ProgramHeader(optarg));
       CASE('L', ProgramLogPath(optarg));
@@ -7177,71 +7284,117 @@ static void GetOpts(int argc, char *argv[]) {
       CASE('G', ProgramGid(atoi(optarg)));
       CASE('p', ProgramPort(ParseInt(optarg)));
       CASE('R', ProgramRedirectArg(0, optarg));
-      CASE('c', ProgramCache(ParseInt(optarg)));
-      CASE('r', ProgramRedirectArg(307, optarg));
-      CASE('t', ProgramTimeout(ParseInt(optarg)));
-      CASE('h', PrintUsage(1, EXIT_SUCCESS));
-      CASE('M', ProgramMaxPayloadSize(ParseInt(optarg)));
+      case 'c':;  // accept "num" or "num,directive"
+        char *p;
+        long ret = strtol(optarg, &p, 0);
+        ProgramCache(ret, *p ? p + 1 : NULL);  // skip separator, if any
+        break;
+        CASE('r', ProgramRedirectArg(307, optarg));
+        CASE('t', ProgramTimeout(ParseInt(optarg)));
+        CASE('h', PrintUsage(1, EXIT_SUCCESS));
+        CASE('M', ProgramMaxPayloadSize(ParseInt(optarg)));
 #if !IsTiny()
-      CASE('W', monitortty = optarg);
-#endif
-#ifndef STATIC
-      CASE('e', LuaEvalCode(optarg));
-      CASE('F', LuaEvalFile(optarg));
-      CASE('i', interpretermode = true);
-      CASE('E', leakcrashreports = true);
-      CASE('A', storeasset = true; StorePath(optarg));
-#endif
-#ifndef UNSECURE
-      CASE('B', suiteb = true);
-      CASE('V', ++mbedtls_debug_threshold);
-      CASE('k', sslfetchverify = false);
-      CASE('j', sslclientverify = true);
-      CASE('T', ProgramSslTicketLifetime(ParseInt(optarg)));
-      CASE('C', ProgramFile(optarg, ProgramCertificate));
-      CASE('K', ProgramFile(optarg, ProgramPrivateKey));
-#endif
+        CASE('W', monitortty = optarg);
       case 'f':
         funtrace = true;
         if (ftrace_install() == -1) {
-          WARNF("ftrace failed to install %m");
+          WARNF("(srvr) ftrace failed to install %m");
         }
         break;
+#endif
+#ifndef STATIC
+        CASE('F', LuaEvalFile(optarg));
+        CASE('*', selfmodifiable = true);
+        CASE('i', interpretermode = true);
+        CASE('E', leakcrashreports = true);
+      case 'e':
+        got_e_arg = true;
+        LuaEvalCode(optarg);
+        break;
+      case 'A':
+        if (!storeasset) {
+          storeasset = true;
+          MakeExecutableModifiable();
+        }
+        StorePath(optarg);
+        break;
+#endif
+#ifndef UNSECURE
+        CASE('B', suiteb = true);
+        CASE('V', ++mbedtls_debug_threshold);
+        CASE('k', sslfetchverify = false);
+        CASE('j', sslclientverify = true);
+        CASE('T', ProgramSslTicketLifetime(ParseInt(optarg)));
+        CASE('C', ProgramFile(optarg, ProgramCertificate));
+        CASE('K', ProgramFile(optarg, ProgramPrivateKey));
+#endif
       default:
         PrintUsage(2, EX_USAGE);
     }
   }
   // if storing asset(s) is requested, don't need to continue
   if (storeasset) exit(0);
+  // we don't want to drop into a repl after using -e in -i mode
+  if (interpretermode && got_e_arg) exit(0);
 }
 
 void RedBean(int argc, char *argv[]) {
+  char ibuf[21];
+  int fd;
   if (IsLinux()) {
+    // disable weird linux capabilities
+    for (int e = errno, i = 0;; ++i) {
+      if (prctl(PR_CAPBSET_DROP, i) == -1) {
+        errno = e;
+        break;
+      }
+    }
     // disable sneak privilege since we don't use them
     // seccomp will fail later if this fails
     prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
   }
   reader = read;
   writer = WritevAll;
-  gmtoff = GetGmtOffset((lastrefresh = startserver = nowl()));
+  gmtoff = GetGmtOffset((lastrefresh = startserver = timespec_real()).tv_sec);
   mainpid = getpid();
+  heartbeatinterval.tv_sec = 5;
   CHECK_GT(CLK_TCK, 0);
   CHECK_NE(MAP_FAILED,
            (shared = mmap(NULL, ROUNDUP(sizeof(struct Shared), FRAMESIZE),
                           PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS,
                           -1, 0)));
+  if (daemonize) {
+    for (int i = 0; i < 256; ++i) {
+      close(i);
+    }
+    open("/dev/null", O_RDONLY);
+    open("/dev/null", O_WRONLY);
+    open("/dev/null", O_WRONLY);
+  }
   zpath = GetProgramExecutableName();
   CHECK_NE(-1, (zfd = open(zpath, O_RDONLY)));
   CHECK_NE(-1, fstat(zfd, &zst));
   OpenZip(true);
-  MakeExecutableModifiable();
   SetDefaults();
+  // this can fail with EPERM if we're running under pledge()
+  if (!interpretermode && !(interfaces = GetHostIps())) {
+    WARNF("(srvr) failed to query system network interface addresses: %m");
+  }
   LuaStart();
   GetOpts(argc, argv);
+#ifndef STATIC
+  if (selfmodifiable) {
+    MakeExecutableModifiable();
+  }
+#endif
   LuaInit();
   oldloglevel = __log_level;
   if (uniprocess) {
     shared->workers = 1;
+  }
+  if (daemonize) {
+    if (!logpath) ProgramLogPath("/dev/null");
+    dup2(2, 1);
   }
   SigInit();
   Listen();
@@ -7251,14 +7404,14 @@ void RedBean(int argc, char *argv[]) {
   }
   if (daemonize) {
     Daemonize();
-  } else {
-    if (logpath) {
-      close(2);
-      open(logpath, O_APPEND | O_WRONLY | O_CREAT, 0640);
-    }
-    ChangeUser();
   }
-  UpdateCurrentDate(nowl());
+  if (pidpath) {
+    fd = open(pidpath, O_CREAT | O_WRONLY, 0644);
+    WRITE(fd, ibuf, FormatInt32(ibuf, getpid()) - ibuf);
+    close(fd);
+  }
+  ChangeUser();
+  UpdateCurrentDate(timespec_real());
   CollectGarbage();
   hdrbuf.n = 4 * 1024;
   hdrbuf.p = xmalloc(hdrbuf.n);
@@ -7276,21 +7429,30 @@ void RedBean(int argc, char *argv[]) {
     }
   }
 #ifdef STATIC
-  EventLoop(HEARTBEAT);
+  EventLoop(timespec_tomillis(heartbeatinterval));
 #else
   GetHostsTxt();    // for effect
   GetResolvConf();  // for effect
   if (daemonize || uniprocess || !linenoiseIsTerminal()) {
-    EventLoop(HEARTBEAT);
-  } else if (IsWindows()) {
-    uint32_t tid;
-    CreateThread(0, 0, NT2SYSV(WindowsReplThread), 0, 0, &tid);
-    EventLoop(100);
+    EventLoop(timespec_tomillis(heartbeatinterval));
   } else {
     ReplEventLoop();
   }
 #endif
   if (!isexitingworker) {
+    if (!IsTiny()) {
+      terminatemonitor = true;
+      if (monitorth) {
+        pthread_join(monitorth, 0);
+        monitorth = 0;
+      }
+    }
+#ifndef STATIC
+    if (replth) {
+      pthread_join(replth, 0);
+      replth = 0;
+    }
+#endif
     HandleShutdown();
     CallSimpleHookIfDefined("OnServerStop");
   }
@@ -7299,24 +7461,32 @@ void RedBean(int argc, char *argv[]) {
     TlsDestroy();
     MemDestroy();
   }
-  if (!IsTiny()) {
-    if (monitortty) {
-      terminatemonitor = true;
-      _wait0(monitortid);
-      munmap(monitorstack, GetStackSize());
-      free(monitortls);
-    }
-  }
-  if (!isexitingworker) {
-    INFOF("(srvr) shutdown complete");
-  }
 }
 
 int main(int argc, char *argv[]) {
+  lua_progname = "redbean";
+
+#if !IsTiny()
+  ShowCrashReports();
+#endif
+
   LoadZipArgs(&argc, &argv);
   RedBean(argc, argv);
+
+  // try to detect memory leaks upon:
+  // 1. main process exit
+  // 2. unwound worker exit
   if (IsModeDbg()) {
+    if (isexitingworker) {
+      if (replth) {
+        pthread_join(replth, 0);
+        replth = 0;
+      }
+      linenoiseDisableRawMode();
+      linenoiseHistoryFree();
+    }
     CheckForMemoryLeaks();
   }
+
   return 0;
 }

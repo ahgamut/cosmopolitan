@@ -16,8 +16,8 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/bits.h"
-#include "libc/bits/pushpop.h"
+#include "libc/intrin/bits.h"
+#include "libc/intrin/pushpop.internal.h"
 #include "libc/intrin/repmovsb.h"
 #include "libc/nexgen32e/kompressor.h"
 #include "libc/str/str.h"
@@ -32,7 +32,8 @@
  * @see rldecode() for a 16-byte decompressor
  */
 textstartup void *lz4cpy(void *dest, const void *blockdata, size_t blocksize) {
-  unsigned char *op, *ip, *ipe, *match;
+  unsigned char *op, *match;
+  const unsigned char *ip, *ipe;
   unsigned token, length, fifteen, offset, matchlen;
   for (op = dest, ip = blockdata, ipe = ip + blocksize;;) {
     token = *ip++;
@@ -43,7 +44,7 @@ textstartup void *lz4cpy(void *dest, const void *blockdata, size_t blocksize) {
         length += *ip;
       } while (*ip++ == 255);
     }
-    repmovsb(&op, &ip, length);
+    repmovsb((void **)&op, (const void **)&ip, length);
     if (ip >= ipe) break;
     offset = READ16LE(ip);
     matchlen = token & fifteen;
@@ -54,7 +55,7 @@ textstartup void *lz4cpy(void *dest, const void *blockdata, size_t blocksize) {
       } while (*ip++ == 255);
     }
     match = op - offset;
-    repmovsb(&op, &match, (matchlen += 4));
+    repmovsb((void **)&op, (const void **)&match, (matchlen += 4));
   }
   return op;
 }

@@ -16,40 +16,22 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/fmt/conv.h"
-#include "libc/nexgen32e/rdtsc.h"
+#include "libc/calls/struct/timespec.internal.h"
+#include "libc/errno.h"
+#include "libc/fmt/wintime.internal.h"
+#include "libc/nt/struct/filetime.h"
 #include "libc/nt/synchronization.h"
 #include "libc/sysv/consts/clock.h"
-#include "libc/sysv/errfuns.h"
 
-textwindows int sys_clock_gettime_nt(int clockid, struct timespec *ts) {
-  int64_t ms;
-  struct timespec res;
+textwindows int sys_clock_gettime_nt(int clock, struct timespec *ts) {
   struct NtFileTime ft;
-  static struct timespec mono;
-  if (!ts) return efault();
-  if (clockid == CLOCK_REALTIME) {
+  if (clock == CLOCK_REALTIME) {
     GetSystemTimeAsFileTime(&ft);
     *ts = FileTimeToTimeSpec(ft);
     return 0;
-  } else if (clockid == CLOCK_MONOTONIC || clockid == CLOCK_MONOTONIC_RAW) {
-    ms = GetTickCount64();
-    res.tv_sec = ms / 1000;
-    res.tv_nsec = ms % 1000 * 1000000;
-    res.tv_nsec += rdtsc() / 3 % 1000000000;
-    if (res.tv_nsec > 1000000000) {
-      res.tv_nsec -= 1000000000;
-      res.tv_sec += 1;
-    }
-    if (res.tv_sec > mono.tv_sec ||
-        (res.tv_sec == mono.tv_sec && res.tv_nsec > mono.tv_nsec)) {
-      mono = res;
-    } else {
-      res = mono;
-    }
-    *ts = res;
-    return 0;
+  } else if (clock == CLOCK_MONOTONIC) {
+    return sys_clock_gettime_mono(ts);
   } else {
-    return einval();
+    return -EINVAL;
   }
 }

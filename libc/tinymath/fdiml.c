@@ -17,11 +17,14 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/math.h"
+#if !(LDBL_MANT_DIG == 53 && LDBL_MAX_EXP == 1024)
 
 /**
  * Returns positive difference.
  */
 long double fdiml(long double x, long double y) {
-  if (isnan(x) || isnan(y)) return NAN;
+  if (isunordered(x, y)) return NAN;
   return x > y ? x - y : 0;
 }
+
+#endif /* long double is long */

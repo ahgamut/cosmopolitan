@@ -19,12 +19,12 @@
 #include "libc/dce.h"
 #include "libc/runtime/runtime.h"
 #include "libc/x/x.h"
+#include "libc/x/xasprintf.h"
 
 /**
  * Returns home directory.
  */
 char *xhomedir(void) {
-  int fd;
   const char *a, *b;
   if ((a = getenv("HOME"))) {
     b = "";

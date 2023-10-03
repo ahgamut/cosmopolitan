@@ -16,9 +16,9 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/str/blake2.h"
 #include "libc/assert.h"
 #include "libc/macros.internal.h"
-#include "libc/str/blake2.h"
 #include "libc/str/str.h"
 
 #define ROR(v, n) (((v) >> (n)) | ((v) << (64 - (n))))
@@ -126,7 +126,7 @@ int BLAKE2B256_Update(struct Blake2b *b2b, const void *in_data, size_t len) {
     return 0;
   }
   // More input remains therefore we must have filled |b2b->block|.
-  assert(b2b->block_used == BLAKE2B_CBLOCK);
+  unassert(b2b->block_used == BLAKE2B_CBLOCK);
   Blake2bTransform(b2b, b2b->block.words, BLAKE2B_CBLOCK,
                    /*is_final_block=*/0);
   b2b->block_used = 0;
@@ -166,6 +166,10 @@ int BLAKE2B256_Final(struct Blake2b *b2b,
  *     blake2b256 n=256                     1 ns/byte            662 mb/s
  *     blake2b256 n=22851                   1 ns/byte            683 mb/s
  *
+ * @param data is binary memory to hash
+ * @param len is bytes in `data`
+ * @param out receives 32 byte binary digest
+ * @return 0 on success (always successful)
  */
 int BLAKE2B256(const void *data, size_t len,
                uint8_t out[BLAKE2B256_DIGEST_LENGTH]) {

@@ -18,9 +18,10 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
 #include "libc/mem/mem.h"
-#include "libc/rand/rand.h"
+#include "libc/stdio/rand.h"
 #include "libc/str/blake2.h"
 #include "libc/str/str.h"
+#include "libc/str/tab.internal.h"
 #include "libc/testlib/ezbench.h"
 #include "libc/testlib/hyperion.h"
 #include "libc/testlib/testlib.h"
@@ -67,7 +68,7 @@ TEST(BLAKE2B256Test, ABC) {
 
 BENCH(blake2, bench) {
   char fun[256];
-  rngset(fun, 256, rand64, -1);
+  rngset(fun, 256, _rand64, -1);
   EZBENCH_N("blake2b256", 0, EZBLAKE2B256(0, 0));
   EZBENCH_N("blake2b256", 8, EZBLAKE2B256("helloooo", 8));
   EZBENCH_N("blake2b256", 31, EZBLAKE2B256(fun, 31));

@@ -1,7 +1,9 @@
 #ifndef COSMOPOLITAN_LIBC_LOG_GDB_H_
 #define COSMOPOLITAN_LIBC_LOG_GDB_H_
 #include "libc/calls/calls.h"
-#include "libc/calls/wait4.h"
+#include "libc/calls/struct/rusage.h"
+#include "libc/dce.h"
+#include "libc/proc/proc.internal.h"
 #include "libc/sysv/consts/nr.h"
 #include "libc/sysv/consts/w.h"
 #if !(__ASSEMBLER__ + __LINKER__ + 0)
@@ -40,6 +42,7 @@ int AttachDebugger(intptr_t);
     Pid;                                                             \
   })
 
+#ifdef __x86_64__
 #define __inline_wait4(PID, OPT_OUT_WSTATUS, OPTIONS, OPT_OUT_RUSAGE)     \
   ({                                                                      \
     int64_t WaAx;                                                         \
@@ -55,6 +58,9 @@ int AttachDebugger(intptr_t);
     }                                                                     \
     WaAx;                                                                 \
   })
+#else
+#define __inline_wait4 wait4
+#endif
 
 COSMOPOLITAN_C_END_
 #endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */

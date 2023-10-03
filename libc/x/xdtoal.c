@@ -20,14 +20,25 @@
 #include "libc/mem/mem.h"
 #include "libc/x/x.h"
 #include "third_party/gdtoa/gdtoa.h"
+#if !(LDBL_MANT_DIG == 53 && LDBL_MAX_EXP == 1024)
 
 /**
- * Converts double to string the easy way.
+ * Converts long double to string the easy way.
  *
  * @return string that needs to be free'd
  */
 char *xdtoal(long double d) {
-  char *p = xmalloc(32);
+  char *p;
+#if LDBL_MANT_DIG == 113
+  p = xmalloc(64);
+  g_Qfmt_p(p, &d, 16, 64, NIK(2, 0, 0));
+#elif LDBL_MANT_DIG == 64
+  p = xmalloc(32);
   g_xfmt_p(p, &d, 16, 32, NIK(2, 0, 0));
+#else
+#error "unsupported long double"
+#endif
   return p;
 }
+
+#endif /* long double is long */

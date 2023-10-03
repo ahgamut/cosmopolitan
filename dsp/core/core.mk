@@ -8,16 +8,8 @@ DSP_CORE = $(DSP_CORE_A_DEPS) $(DSP_CORE_A)
 DSP_CORE_A = o/$(MODE)/dsp/core/core.a
 DSP_CORE_A_FILES := $(wildcard dsp/core/*)
 DSP_CORE_A_HDRS = $(filter %.h,$(DSP_CORE_A_FILES))
-DSP_CORE_A_SRCS_S = $(filter %.S,$(DSP_CORE_A_FILES))
-DSP_CORE_A_SRCS_C = $(filter %.c,$(DSP_CORE_A_FILES))
-
-DSP_CORE_A_SRCS =				\
-	$(DSP_CORE_A_SRCS_S)			\
-	$(DSP_CORE_A_SRCS_C)
-
-DSP_CORE_A_OBJS =				\
-	$(DSP_CORE_A_SRCS_S:%.S=o/$(MODE)/%.o)	\
-	$(DSP_CORE_A_SRCS_C:%.c=o/$(MODE)/%.o)
+DSP_CORE_A_SRCS = $(filter %.c,$(DSP_CORE_A_FILES))
+DSP_CORE_A_OBJS = $(DSP_CORE_A_SRCS:%.c=o/$(MODE)/%.o)
 
 DSP_CORE_A_CHECKS =				\
 	$(DSP_CORE_A).pkg			\
@@ -28,8 +20,7 @@ DSP_CORE_A_DIRECTDEPS =				\
 	LIBC_MEM				\
 	LIBC_NEXGEN32E				\
 	LIBC_STR				\
-	LIBC_TINYMATH				\
-	LIBC_STUBS
+	LIBC_TINYMATH
 
 DSP_CORE_A_DEPS :=				\
 	$(call uniq,$(foreach x,$(DSP_CORE_A_DIRECTDEPS),$($(x))))
@@ -47,16 +38,16 @@ o/$(MODE)/dsp/core/c1331.o			\
 o/$(MODE)/dsp/core/magikarp.o			\
 o/$(MODE)/dsp/core/c93654369.o			\
 o/$(MODE)/dsp/core/float2short.o		\
-o/$(MODE)/dsp/core/scalevolume.o:		\
-		OVERRIDE_CFLAGS +=		\
+o/$(MODE)/dsp/core/scalevolume.o: private	\
+		CFLAGS +=			\
 			$(MATHEMATICAL)
 
-o/tiny/dsp/core/scalevolume.o:			\
-		OVERRIDE_CFLAGS +=		\
+o/tiny/dsp/core/scalevolume.o: private		\
+		CFLAGS +=			\
 			-Os
 
-o/$(MODE)/dsp/core/det3.o:			\
-		OVERRIDE_CFLAGS +=		\
+o/$(MODE)/dsp/core/det3.o: private		\
+		CFLAGS +=			\
 			-ffast-math
 
 DSP_CORE_LIBS = $(foreach x,$(DSP_CORE_ARTIFACTS),$($(x)))

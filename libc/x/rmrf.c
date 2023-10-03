@@ -16,51 +16,53 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/assert.h"
 #include "libc/calls/calls.h"
-#include "libc/calls/struct/dirent.h"
-#include "libc/calls/struct/stat.h"
-#include "libc/mem/mem.h"
-#include "libc/runtime/runtime.h"
-#include "libc/stdio/stdio.h"
-#include "libc/str/str.h"
-#include "libc/sysv/consts/dt.h"
-#include "libc/sysv/consts/s.h"
+#include "libc/dce.h"
+#include "libc/errno.h"
+#include "libc/stdio/ftw.h"
+#include "libc/sysv/errfuns.h"
 #include "libc/x/x.h"
 
-static int rmrfdir(const char *dirpath) {
+static inline bool IsSlash(char c) {
+  return c == '/' || c == '\\';
+}
+
+static inline int IsAlpha(int c) {
+  return ('A' <= c && c <= 'Z') || ('a' <= c && c <= 'z');
+}
+
+static int rmrf_callback(const char *fpath,      //
+                         const struct stat *st,  //
+                         int typeflag,           //
+                         struct FTW *ftwbuf) {   //
   int rc;
-  DIR *d;
-  char *path;
-  struct dirent *e;
-  if (!(d = opendir(dirpath))) return -1;
-  while ((e = readdir(d))) {
-    if (!strcmp(e->d_name, ".")) continue;
-    if (!strcmp(e->d_name, "..")) continue;
-    assert(!strchr(e->d_name, '/'));
-    path = xjoinpaths(dirpath, e->d_name);
-    if (e->d_type == DT_DIR) {
-      rc = rmrfdir(path);
-    } else {
-      rc = unlink(path);
+  if (typeflag == FTW_DNR) {
+    if (!(rc = chmod(fpath, 0700))) {
+      return nftw(fpath, rmrf_callback, 128 - ftwbuf->level,
+                  FTW_PHYS | FTW_DEPTH);
     }
-    free(path);
-    if (rc == -1) {
-      closedir(d);
-      return -1;
-    }
+  } else if (typeflag == FTW_DP) {
+    rc = rmdir(fpath);
+  } else {
+    rc = unlink(fpath);
   }
-  rc = closedir(d);
-  rc |= rmdir(dirpath);
+  if (rc == -1 && errno == ENOENT) {
+    rc = 0;
+  }
   return rc;
 }
 
 /**
  * Recursively removes file or directory.
+ * @return 0 on success, or -1 w/ errno
  */
 int rmrf(const char *path) {
-  struct stat st;
-  if (stat(path, &st) == -1) return -1;
-  if (!S_ISDIR(st.st_mode)) return unlink(path);
-  return rmrfdir(path);
+  if ((IsSlash(path[0]) && !path[1]) ||
+      (IsWindows() && ((IsSlash(path[0]) && IsAlpha(path[1]) &&
+                        (!path[2] || (IsSlash(path[2]) && !path[3]))) ||
+                       (IsAlpha(path[0]) && path[1] == ':' &&
+                        (!path[2] || (IsSlash(path[2]) && !path[3])))))) {
+    return enotsup();  // if you really want rmrf("/") try rmrf("/.")
+  }
+  return nftw(path, rmrf_callback, 128, FTW_PHYS | FTW_DEPTH);
 }

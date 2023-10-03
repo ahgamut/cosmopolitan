@@ -17,7 +17,6 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "ape/relocations.h"
-#include "libc/alg/arraylist2.internal.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/stat.h"
 #include "libc/errno.h"
@@ -25,9 +24,10 @@
 #include "libc/intrin/kprintf.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
+#include "libc/mem/arraylist2.internal.h"
 #include "libc/mem/mem.h"
 #include "libc/runtime/runtime.h"
-#include "libc/stdio/append.internal.h"
+#include "libc/stdio/append.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/map.h"
@@ -62,7 +62,7 @@ void Process(const char *p, const char *pe, const char *path, bool isheader) {
   int level;
   bool noformat;
   const char *p2, *dq, *name;
-  for (noformat = level = 0; p < pe; p = p2) {
+  for (noformat = false, level = 0; p < pe; p = p2) {
     p2 = memchr(p, '\n', pe - p);
     p2 = p2 ? p2 + 1 : pe;
     if (LOOKINGAT(p, pe, "#if")) {
@@ -102,6 +102,7 @@ void Visit(const char *path) {
   if (endswith(path, "/internal.h")) return;
   if (endswith(path, ".internal.inc")) return;
   if (endswith(path, "/internal.inc")) return;
+  if (startswith(path, "libc/isystem/")) return;
   isheader = endswith(path, ".h");
   if (isheader && isinterned(visited, path)) return;
   appends(&output, "\n\f\n/*!BEGIN ");
@@ -145,12 +146,6 @@ int main(int argc, char *argv[]) {
   visited = newinterner();
   appends(&output, "#ifndef COSMOPOLITAN_H_\n");
   appends(&output, "#define COSMOPOLITAN_H_\n");
-  /* appends(&output, "#define IMAGE_BASE_VIRTUAL "); */
-  /* appendf(&output, "%p", IMAGE_BASE_VIRTUAL); */
-  /* appends(&output, "\n"); */
-  /* appends(&output, "#define IMAGE_BASE_PHYSICAL "); */
-  /* appendf(&output, "%p", IMAGE_BASE_PHYSICAL); */
-  /* appends(&output, "\n"); */
   getargs_init(&ga, argv + 1);
   while ((src = getargs_next(&ga))) {
     Visit(src);

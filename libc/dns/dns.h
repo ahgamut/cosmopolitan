@@ -1,8 +1,7 @@
 #ifndef COSMOPOLITAN_LIBC_DNS_DNS_H_
 #define COSMOPOLITAN_LIBC_DNS_DNS_H_
-#include "libc/calls/weirdtypes.h"
 #include "libc/dns/resolvconf.h"
-#include "libc/sock/sock.h"
+#include "libc/sock/struct/sockaddr.h"
 
 #define DNS_PORT      53
 #define DNS_NAME_MAX  253
@@ -37,6 +36,15 @@
 #define AI_ADDRCONFIG  0x0400
 #define AI_V4MAPPED    0x0800
 
+#define NI_NUMERICSCOPE 0
+#define NI_NUMERICHOST  1
+#define NI_NUMERICSERV  2
+#define NI_NOFQDN       4
+#define NI_NAMEREQD     8
+#define NI_DGRAM        16
+#define NI_MAXSERV      32
+#define NI_MAXHOST      1025
+
 #if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 
@@ -55,10 +63,10 @@ struct addrinfo {
 };
 
 int getaddrinfo(const char *, const char *, const struct addrinfo *,
-                struct addrinfo **) paramsnonnull((4));
-int freeaddrinfo(struct addrinfo *);
-int getnameinfo(const struct sockaddr *, socklen_t, char *, socklen_t, char *,
-                socklen_t, int);
+                struct addrinfo **);
+void freeaddrinfo(struct addrinfo *);
+int getnameinfo(const struct sockaddr *, uint32_t, char *, uint32_t, char *,
+                uint32_t, int);
 const char *gai_strerror(int);
 int CompareDnsNames(const char *, const char *) paramsnonnull();
 int PascalifyDnsName(uint8_t *, size_t, const char *) paramsnonnull();

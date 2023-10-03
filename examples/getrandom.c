@@ -7,27 +7,29 @@
 │   • http://creativecommons.org/publicdomain/zero/1.0/            │
 ╚─────────────────────────────────────────────────────────────────*/
 #endif
-#include "libc/bits/bits.h"
+#include "ape/sections.internal.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/sigaction.h"
 #include "libc/errno.h"
 #include "libc/fmt/conv.h"
+#include "libc/intrin/bits.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
 #include "libc/macros.internal.h"
 #include "libc/mem/mem.h"
 #include "libc/nexgen32e/x86feature.h"
 #include "libc/nt/runtime.h"
-#include "libc/rand/rand.h"
-#include "libc/rand/xorshift.h"
+#include "libc/runtime/runtime.h"
+#include "libc/stdio/rand.h"
 #include "libc/stdio/stdio.h"
+#include "libc/stdio/xorshift.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/ex.h"
 #include "libc/sysv/consts/exit.h"
 #include "libc/sysv/consts/grnd.h"
 #include "libc/sysv/consts/sig.h"
 #include "libc/testlib/hyperion.h"
-#include "third_party/getopt/getopt.h"
+#include "third_party/getopt/getopt.internal.h"
 
 #define B 4096
 
@@ -75,8 +77,8 @@ uint64_t unixv7(void) {
 
 uint64_t ape(void) {
   static int i;
-  if ((i += 8) > _end - _base) i = 8;
-  return READ64LE(_base + i);
+  if ((i += 8) > _end - __executable_start) i = 8;
+  return READ64LE(__executable_start + i);
 }
 
 uint64_t moby(void) {
@@ -101,7 +103,7 @@ uint64_t rngset64(void) {
   static unsigned i;
   static uint64_t s;
   if (!i) {
-    s = rand64();
+    s = _rand64();
     i = (s + 1) & (511);
   }
   return MarsagliaXorshift64(&s);
@@ -214,7 +216,7 @@ const struct Function {
     {"moby", moby},              //
     {"mt19937", _mt19937},       //
     {"python", pythonx2},        //
-    {"rand64", rand64},          //
+    {"rand64", _rand64},         //
     {"rdrand", rdrand},          //
     {"rdrnd", rdrand},           //
     {"rdseed", rdseed},          //

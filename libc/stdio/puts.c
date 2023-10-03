@@ -17,20 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/stdio/stdio.h"
-
-static inline int PutsImpl(const char *s, FILE *f) {
-  size_t n, r;
-  if ((n = strlen(s))) {
-    r = fwrite_unlocked(s, 1, n, f);
-    if (!r) return -1;
-    if (r < n) return r;
-  }
-  if (fputc_unlocked('\n', f) == -1) {
-    if (feof_unlocked(f)) return n;
-    return -1;
-  }
-  return n + 1;
-}
+#include "libc/str/str.h"
 
 /**
  * Writes string w/ trailing newline to stdout.
@@ -39,11 +26,9 @@ static inline int PutsImpl(const char *s, FILE *f) {
  *     `errno` set and the `ferror(stdout)` state is updated
  */
 int puts(const char *s) {
-  FILE *f;
   int bytes;
-  f = stdout;
-  flockfile(f);
-  bytes = PutsImpl(s, f);
-  funlockfile(f);
+  flockfile(stdout);
+  bytes = puts_unlocked(s);
+  funlockfile(stdout);
   return bytes;
 }

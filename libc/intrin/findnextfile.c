@@ -16,9 +16,9 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/strace.internal.h"
 #include "libc/calls/syscall_support-nt.internal.h"
 #include "libc/intrin/describeflags.internal.h"
+#include "libc/intrin/strace.internal.h"
 #include "libc/nt/errors.h"
 #include "libc/nt/files.h"
 #include "libc/nt/memory.h"
@@ -37,15 +37,14 @@ textwindows bool32 FindNextFile(int64_t hFindFile,
   bool32 ok;
   ok = __imp_FindNextFileW(hFindFile, out_lpFindFileData);
   if (ok) {
-    NTTRACE(
-        "FindNextFile(%ld, [{"
-        ".cFileName=%#hs, "
-        ".dwFileAttributes=%s, "
-        ".dwFileType=%s"
-        "}]) → %hhhd% m",
-        hFindFile, out_lpFindFileData->cFileName,
-        DescribeNtFileFlagsAndAttributes(out_lpFindFileData->dwFileAttributes),
-        DescribeNtFiletypeFlags(out_lpFindFileData->dwFileType), ok);
+    NTTRACE("FindNextFile(%ld, [{"
+            ".cFileName=%#hs, "
+            ".dwFileAttributes=%s, "
+            ".dwFileType=%s"
+            "}]) → %hhhd% m",
+            hFindFile, out_lpFindFileData->cFileName,
+            DescribeNtFileFlagAttr(out_lpFindFileData->dwFileAttributes),
+            DescribeNtFiletypeFlags(out_lpFindFileData->dwFileType), ok);
   } else {
     if (GetLastError() != kNtErrorNoMoreFiles) __winerr();
     NTTRACE("FindNextFile(%ld) → %hhhd% m", hFindFile, ok);

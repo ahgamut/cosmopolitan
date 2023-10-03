@@ -16,34 +16,36 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/internal.h"
-#include "libc/dce.h"
-#include "libc/intrin/asan.internal.h"
+#include "libc/calls/struct/timespec.h"
+#include "libc/calls/struct/timespec.internal.h"
+#include "libc/calls/struct/timeval.h"
+#include "libc/calls/struct/timeval.internal.h"
+#include "libc/intrin/strace.internal.h"
 #include "libc/sysv/consts/at.h"
 #include "libc/sysv/errfuns.h"
-#include "libc/time/time.h"
 
 /**
- * Changes last accessed/modified times on file.
+ * Changes last accessed/modified timestamps on file.
  *
- * @param times is access/modified and NULL means now
- * @return 0 on success or -1 w/ errno
+ * @param tv is access/modified timestamps, or NULL which means now
+ * @return 0 on success, or -1 w/ errno
+ * @note truncates to second precision on rhel5
+ * @see utimensat() for modern version
  * @asyncsignalsafe
- * @see stat()
  */
 int utimes(const char *path, const struct timeval tv[2]) {
-  if (IsAsan()) {
-    if (tv && !__asan_is_valid(tv, sizeof(*tv) * 2)) {
-      return efault();
-    }
-  }
-  if (!IsWindows()) {
-    /*
-     * we don't modernize utimes() into utimensat() because the
-     * latter is poorly supported and utimes() works everywhere
-     */
-    return sys_utimes(path, tv);
+  int rc;
+  struct timespec ts[2];
+  if (!path) {
+    rc = efault();
+  } else if (tv) {
+    ts[0] = timeval_totimespec(tv[0]);
+    ts[1] = timeval_totimespec(tv[1]);
+    rc = __utimens(AT_FDCWD, path, ts, 0);
   } else {
-    return sys_utimes_nt(path, tv);
+    rc = __utimens(AT_FDCWD, path, 0, 0);
   }
+  STRACE("utimes(%#s, {%s, %s}) → %d% m", path, DescribeTimeval(0, tv),
+         DescribeTimeval(0, tv ? tv + 1 : 0), rc);
+  return rc;
 }

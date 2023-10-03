@@ -3,27 +3,27 @@
 /* ---------------------------- setting mparams -------------------------- */
 
 #if LOCK_AT_FORK
-static void pre_fork(void)         { ACQUIRE_LOCK(&(gm)->mutex); }
-static void post_fork_parent(void) { RELEASE_LOCK(&(gm)->mutex); }
-static void post_fork_child(void)  { INITIAL_LOCK(&(gm)->mutex); }
+static void dlmalloc_pre_fork(void)         { ACQUIRE_LOCK(&(gm)->mutex); }
+static void dlmalloc_post_fork_parent(void) { RELEASE_LOCK(&(gm)->mutex); }
+static void dlmalloc_post_fork_child(void)  { (void)INITIAL_LOCK(&(gm)->mutex); }
 #endif /* LOCK_AT_FORK */
 
 /* Initialize mparams */
-static int init_mparams(void) {
+__attribute__((__constructor__)) int init_mparams(void) {
 #ifdef NEED_GLOBAL_LOCK_INIT
   if (malloc_global_mutex_status <= 0)
     init_malloc_global_mutex();
 #endif
 
-  ACQUIRE_MALLOC_GLOBAL_LOCK();
+  // ACQUIRE_MALLOC_GLOBAL_LOCK();
   if (mparams.magic == 0) {
     size_t magic;
     size_t psize;
     size_t gsize;
 
 #if defined(__COSMOPOLITAN__)
-    psize = 4096;
-    gsize = 65536;
+    psize = FRAMESIZE;
+    gsize = FRAMESIZE;
 #elif !defined(WIN32)
     psize = malloc_getpagesize;
     gsize = ((DEFAULT_GRANULARITY != 0)? DEFAULT_GRANULARITY : psize);
@@ -67,8 +67,11 @@ static int init_mparams(void) {
     gm->mflags = mparams.default_mflags;
     (void)INITIAL_LOCK(&gm->mutex);
 #endif
+
 #if LOCK_AT_FORK
-    pthread_atfork(&pre_fork, &post_fork_parent, &post_fork_child);
+    pthread_atfork(&dlmalloc_pre_fork,
+                   &dlmalloc_post_fork_parent,
+                   &dlmalloc_post_fork_child);
 #endif
 
     {
@@ -83,7 +86,7 @@ static int init_mparams(void) {
       }
       else
 #endif /* USE_DEV_RANDOM */
-      magic = (size_t)(rand64() ^ (size_t)0x55555555U);
+      magic = (size_t)(_rand64() ^ (size_t)0x55555555U);
       magic |= (size_t)8U;    /* ensure nonzero */
       magic &= ~(size_t)7U;   /* improve chances of fault for bad values */
       /* Until memory modes commonly available, use volatile-write */
@@ -91,7 +94,9 @@ static int init_mparams(void) {
     }
   }
 
-  RELEASE_MALLOC_GLOBAL_LOCK();
+  // RELEASE_MALLOC_GLOBAL_LOCK();
+
+  __runlevel = RUNLEVEL_MALLOC;
   return 1;
 }
 

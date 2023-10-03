@@ -1,5 +1,6 @@
 #ifndef COSMOPOLITAN_LIBC_NEXGEN32E_X86FEATURE_H_
 #define COSMOPOLITAN_LIBC_NEXGEN32E_X86FEATURE_H_
+#ifdef __x86_64__
 #include "libc/nexgen32e/kcpuids.h"
 #include "libc/nexgen32e/x86compiler.h"
 
@@ -140,6 +141,7 @@
 #define X86_XSAVE                1H,        ECX, 26, _X86_CC_XSAVE,       _     /* sandybridge c. 2012 */
 #define X86_XTPR                 1H,        ECX, 14, 0,                   _
 #define X86_ZERO_FCS_FDS         7H,        EBX, 13, 0,                   _
+#define X86_JIT                  80000001H, ECX, 31, 0,                   _     /* IsGenuineBlink() */
 /* clang-format on */
 
 /* AMD specific features */
@@ -247,4 +249,8 @@
 
 #define _X86_HOOK__(X) X
 
+#else
+#define X86_HAVE(FEATURE) 0
+#define X86_NEED(FEATURE) 0
+#endif /* __x86_64__ */
 #endif /* COSMOPOLITAN_LIBC_NEXGEN32E_X86FEATURE_H_ */

@@ -23,7 +23,6 @@
  *
  * @param c is byte to buffer or write, which is masked
  * @return c as unsigned char if written or -1 w/ errno
- * @threadsafe
  */
 int fputc(int c, FILE *f) {
   int rc;
@@ -32,3 +31,5 @@ int fputc(int c, FILE *f) {
   funlockfile(f);
   return rc;
 }
+
+__strong_reference(fputc, putc);

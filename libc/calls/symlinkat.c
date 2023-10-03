@@ -17,12 +17,12 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
-#include "libc/calls/strace.internal.h"
 #include "libc/calls/syscall-nt.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/intrin/asan.internal.h"
 #include "libc/intrin/describeflags.internal.h"
+#include "libc/intrin/strace.internal.h"
 #include "libc/sysv/consts/at.h"
 #include "libc/sysv/errfuns.h"
 
@@ -41,9 +41,8 @@
  */
 int symlinkat(const char *target, int newdirfd, const char *linkpath) {
   int rc;
-  char buf[12];
   if (IsAsan() &&
-      (!__asan_is_valid(target, 1) || !__asan_is_valid(linkpath, 1))) {
+      (!__asan_is_valid_str(target) || !__asan_is_valid_str(linkpath))) {
     rc = efault();
   }
   if (!IsWindows()) {
@@ -51,7 +50,7 @@ int symlinkat(const char *target, int newdirfd, const char *linkpath) {
   } else {
     rc = sys_symlinkat_nt(target, newdirfd, linkpath);
   }
-  STRACE("symlinkat(%#s, %s, %#s) → %d% m", target,
-         DescribeDirfd(buf, newdirfd), linkpath);
+  STRACE("symlinkat(%#s, %s, %#s) → %d% m", target, DescribeDirfd(newdirfd),
+         linkpath, rc);
   return rc;
 }

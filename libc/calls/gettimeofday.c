@@ -16,54 +16,44 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/assert.h"
-#include "libc/calls/internal.h"
+#include "libc/calls/struct/timespec.h"
 #include "libc/calls/struct/timeval.h"
-#include "libc/calls/syscall_support-sysv.internal.h"
-#include "libc/dce.h"
-#include "libc/intrin/asan.internal.h"
-#include "libc/sysv/errfuns.h"
+#include "libc/sysv/consts/clock.h"
 #include "libc/time/struct/timezone.h"
-#include "libc/time/time.h"
-
-static typeof(sys_gettimeofday) *__gettimeofday = sys_gettimeofday;
 
 /**
- * Returns system wall time in microseconds.
+ * Returns system wall time in microseconds, e.g.
  *
- * @param tv points to timeval that receives result if non-NULL
- * @param tz receives UTC timezone if non-NULL
+ *     int64_t t;
+ *     char p[20];
+ *     struct tm tm;
+ *     struct timeval tv;
+ *     gettimeofday(&tv, 0);
+ *     t = tv.tv_sec;
+ *     gmtime_r(&t, &tm);
+ *     iso8601(p, &tm);
+ *     printf("%s\n", p);
+ *
+ * @param tv points to timeval that receives result if non-null
+ * @param tz is completely ignored
+ * @return 0 on success, or -1 w/ errno
+ * @raise EFAULT if `tv` points to invalid memory
  * @see	clock_gettime() for nanosecond precision
  * @see	strftime() for string formatting
+ * @asyncsignalsafe
+ * @vforksafe
  */
 int gettimeofday(struct timeval *tv, struct timezone *tz) {
-  axdx_t ad;
-  if (IsAsan() && ((tv && !__asan_is_valid(tv, sizeof(*tv))) ||
-                   (tz && !__asan_is_valid(tz, sizeof(*tz))))) {
-    return efault();
-  }
-  if (!IsWindows() && !IsMetal()) {
-    ad = __gettimeofday(tv, tz, NULL);
-    assert(ad.ax != -1);
-    if (SupportsXnu() && ad.ax && tv) {
-      tv->tv_sec = ad.ax;
-      tv->tv_usec = ad.dx;
+  if (tv) {
+    struct timespec ts;
+    if (clock_gettime(CLOCK_REALTIME, &ts) != -1) {
+      tv->tv_sec = ts.tv_sec;
+      tv->tv_usec = (ts.tv_nsec + 999) / 1000;
+      return 0;
+    } else {
+      return -1;
     }
-    return 0;
-  } else if (IsMetal()) {
-    return enosys();
   } else {
-    return sys_gettimeofday_nt(tv, tz);
+    return 0;
   }
 }
-
-static textstartup void __gettimeofday_init(void) {
-  void *vdso;
-  if ((vdso = __vdsosym("LINUX_2.6", "__vdso_gettimeofday"))) {
-    __gettimeofday = vdso;
-  }
-}
-
-const void *const __gettimeofday_ctor[] initarray = {
-    __gettimeofday_init,
-};

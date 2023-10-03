@@ -18,6 +18,8 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
 #include "libc/errno.h"
+#include "libc/fmt/magnumstrs.internal.h"
+#include "libc/limits.h"
 #include "libc/mem/mem.h"
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
@@ -25,7 +27,7 @@
 #include "libc/sysv/consts/ex.h"
 #include "libc/sysv/consts/exit.h"
 #include "libc/sysv/consts/ok.h"
-#include "third_party/getopt/getopt.h"
+#include "third_party/getopt/getopt.internal.h"
 #include "third_party/zlib/zlib.h"
 
 #define USAGE \
@@ -134,22 +136,23 @@ void GetOpts(int argc, char *argv[]) {
 void Compress(const char *inpath) {
   FILE *input;
   gzFile output;
-  int rc, n, errnum;
+  int rc, errnum;
   const char *outpath;
   char *p, openflags[5];
-  outpath = 0;
-  if (inpath) {
-    input = fopen(inpath, "rb");
-  } else if (opt_usestdout && (opt_force || !isatty(1))) {
+  if ((!inpath || opt_usestdout) && (!isatty(1) || opt_force)) {
     opt_usestdout = true;
-    inpath = "/dev/stdin";
-    input = stdin;
   } else {
     fputs(prog, stderr);
     fputs(": compressed data not written to a terminal."
           " Use -f to force compression.\n",
           stderr);
     exit(1);
+  }
+  if (inpath) {
+    input = fopen(inpath, "rb");
+  } else {
+    inpath = "/dev/stdin";
+    input = stdin;
   }
   p = openflags;
   *p++ = opt_append ? 'a' : 'w';
@@ -160,7 +163,7 @@ void Compress(const char *inpath) {
   *p = 0;
   if (opt_usestdout) {
     outpath = "/dev/stdout";
-    output = gzdopen(0, openflags);
+    output = gzdopen(1, openflags);
   } else {
     if (strlen(inpath) + 3 + 1 > PATH_MAX) _Exit(2);
     stpcpy(stpcpy(pathbuf, inpath), ".gz");
@@ -170,7 +173,7 @@ void Compress(const char *inpath) {
   if (!output) {
     fputs(outpath, stderr);
     fputs(": gzopen() failed\n", stderr);
-    fputs(strerdoc(errno), stderr);
+    fputs(_strerdoc(errno), stderr);
     fputs("\n", stderr);
     exit(1);
   }
@@ -180,7 +183,7 @@ void Compress(const char *inpath) {
       errnum = 0;
       fputs(inpath, stderr);
       fputs(": read failed: ", stderr);
-      fputs(strerdoc(ferror(input)), stderr);
+      fputs(_strerdoc(ferror(input)), stderr);
       fputs("\n", stderr);
       _Exit(1);
     }
@@ -225,7 +228,7 @@ void Decompress(const char *inpath) {
   if (!input) {
     fputs(inpath, stderr);
     fputs(": gzopen() failed\n", stderr);
-    fputs(strerdoc(errno), stderr);
+    fputs(_strerdoc(errno), stderr);
     fputs("\n", stderr);
     exit(1);
   }
@@ -241,7 +244,7 @@ void Decompress(const char *inpath) {
     if (!(output = fopen(outpath, opt_append ? "wa" : "wb"))) {
       fputs(outpath, stderr);
       fputs(": open failed: ", stderr);
-      fputs(strerdoc(errno), stderr);
+      fputs(_strerdoc(errno), stderr);
       fputs("\n", stderr);
       _Exit(1);
     }
@@ -263,7 +266,7 @@ void Decompress(const char *inpath) {
     if (fwrite(databuf, rc, 1, output) != 1) {
       fputs(outpath, stderr);
       fputs(": write failed: ", stderr);
-      fputs(strerdoc(ferror(output)), stderr);
+      fputs(_strerdoc(ferror(output)), stderr);
       fputs("\n", stderr);
       _Exit(1);
     }
@@ -287,7 +290,8 @@ void Decompress(const char *inpath) {
 
 int main(int argc, char *argv[]) {
   int i;
-  prog = argc > 0 ? argv[0] : "cp.com";
+  prog = argv[0];
+  if (!prog) prog = "gzip";
   GetOpts(argc, argv);
   if (opt_decompress) {
     if (optind == argc) {

@@ -2,9 +2,10 @@
 #define luaconf_h
 #include "libc/assert.h"
 #include "libc/dce.h"
-#include "libc/fmt/fmt.h"
+#include "libc/fmt/conv.h"
 #include "libc/limits.h"
-#include "third_party/gdtoa/gdtoa.h"
+#include "libc/stdio/stdio.h"
+#include "libc/str/unicode.h"
 
 #define LUA_USE_POSIX
 #define LUA_USE_LINENOISE

@@ -23,6 +23,7 @@
  * THE SOFTWARE.
  */
 #include "libc/assert.h"
+#include "libc/runtime/runtime.h"
 #include "third_party/quickjs/internal.h"
 
 asm(".ident\t\"\\n\\n\
@@ -57,6 +58,7 @@ static JSValue JS_CompactBigInt1(JSContext *ctx, JSValue val,
         return JS_NewInt64(ctx, v);
     } else if (a->expn == BF_EXP_ZERO && a->sign) {
         JSBigFloat *p = JS_VALUE_GET_PTR(val);
+        (void)p;
         assert(p->header.ref_count == 1);
         a->sign = 0;
     }

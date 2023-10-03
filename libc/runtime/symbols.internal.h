@@ -1,10 +1,9 @@
 #ifndef COSMOPOLITAN_LIBC_SYMBOLS_H_
 #define COSMOPOLITAN_LIBC_SYMBOLS_H_
-#include "libc/bits/bits.h"
 #if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 
-#define SYMBOLS_MAGIC READ32LE("SYMT")
+#define SYMBOLS_MAGIC 0x544d5953 /* SYMT */
 #define SYMBOLS_ABI   1
 
 struct Symbol {
@@ -27,6 +26,12 @@ struct SymbolTable {
   struct Symbol symbols[];   /* sorted and non-overlapping intervals */
 };
 
+struct SymbolTableLoader {
+  _Atomic(unsigned) once;
+  struct SymbolTable *st;
+};
+
+extern struct SymbolTableLoader __symtab;
 struct SymbolTable *GetSymbolTable(void);
 const char *FindComBinary(void);
 const char *FindDebugBinary(void);

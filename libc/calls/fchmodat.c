@@ -16,16 +16,18 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/weaken.h"
 #include "libc/calls/calls.h"
-#include "libc/calls/strace.internal.h"
 #include "libc/calls/syscall-nt.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/intrin/asan.internal.h"
 #include "libc/intrin/describeflags.internal.h"
+#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/weaken.h"
+#include "libc/runtime/zipos.internal.h"
 #include "libc/sysv/errfuns.h"
-#include "libc/zipos/zipos.internal.h"
+
+int sys_fchmodat_linux(int, const char *, unsigned, int);
 
 /**
  * Changes permissions on file, e.g.:
@@ -37,23 +39,28 @@
  * @param path must exist
  * @param mode contains octal flags (base 8)
  * @param flags can have `AT_SYMLINK_NOFOLLOW`
+ * @raise EROFS if `dirfd` or `path` use zip file system
  * @errors ENOENT, ENOTDIR, ENOSYS
  * @asyncsignalsafe
  * @see fchmod()
  */
 int fchmodat(int dirfd, const char *path, uint32_t mode, int flags) {
   int rc;
-  char buf[12];
-  if (IsAsan() && !__asan_is_valid(path, 1)) {
+  if (IsAsan() && !__asan_is_valid_str(path)) {
     rc = efault();
-  } else if (weaken(__zipos_notat) && (rc = __zipos_notat(dirfd, path)) == -1) {
-    rc = eopnotsupp();
+  } else if (_weaken(__zipos_notat) &&
+             (rc = __zipos_notat(dirfd, path)) == -1) {
+    rc = erofs();
   } else if (!IsWindows()) {
-    rc = sys_fchmodat(dirfd, path, mode, flags);
+    if (IsLinux() && flags) {
+      rc = sys_fchmodat_linux(dirfd, path, mode, flags);
+    } else {
+      rc = sys_fchmodat(dirfd, path, mode, flags);
+    }
   } else {
     rc = sys_fchmodat_nt(dirfd, path, mode, flags);
   }
-  STRACE("fchmodat(%s, %#s, %#o, %d) → %d% m", DescribeDirfd(buf, dirfd), path,
-         mode, flags, rc);
+  STRACE("fchmodat(%s, %#s, %#o, %d) → %d% m", DescribeDirfd(dirfd), path, mode,
+         flags, rc);
   return rc;
 }

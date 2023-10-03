@@ -16,50 +16,59 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/assert.h"
-#include "libc/bits/weaken.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
 #include "libc/calls/state.internal.h"
-#include "libc/calls/strace.internal.h"
+#include "libc/calls/struct/fd.internal.h"
 #include "libc/calls/syscall-nt.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
-#include "libc/intrin/spinlock.h"
+#include "libc/dce.h"
+#include "libc/intrin/kprintf.h"
+#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/weaken.h"
+#include "libc/runtime/zipos.internal.h"
 #include "libc/sock/syscall_fd.internal.h"
 #include "libc/sysv/errfuns.h"
-#include "libc/zipos/zipos.internal.h"
 
 /**
  * Closes file descriptor.
  *
- * This function may be used for file descriptors returned by socket,
- * accept, epoll_create, and zipos file descriptors too.
+ * This function releases resources returned by functions such as:
  *
- * This function should never be called twice for the same file
- * descriptor, regardless of whether or not an error happened. However
- * that doesn't mean the error should be ignored.
+ * - openat()
+ * - socket()
+ * - accept()
+ * - epoll_create()
+ * - landlock_create_ruleset()
+ *
+ * This function should never be reattempted if an error is returned;
+ * however, that doesn't mean the error should be ignored. This goes
+ * against the conventional wisdom of looping on `EINTR`.
  *
  * @return 0 on success, or -1 w/ errno
- * @error EINTR means a signal was received while closing in which case
- *     close() does not need to be called again, since the fd will close
- *     in the background
+ * @raise EINTR if signal was delivered; do *not* retry
+ * @raise EBADF if `fd` is negative or not open; however, an exception
+ *     is made by Cosmopolitan Libc for `close(-1)` which returns zero
+ *     and does nothing, in order to assist with code that may wish to
+ *     close the same resource multiple times without dirtying `errno`
+ * @raise EIO if a low-level i/o error occurred
  * @asyncsignalsafe
  * @vforksafe
  */
 int close(int fd) {
   int rc;
-  if (fd == -1) {
-    rc = 0;
-  } else if (fd < 0) {
-    rc = einval();
+  if (fd < 0) {
+    rc = ebadf();
   } else {
+    // helps guarantee stderr log gets duplicated before user closes
+    if (_weaken(kloghandle)) _weaken(kloghandle)();
     // for performance reasons we want to avoid holding __fds_lock()
     // while sys_close() is happening. this leaves the kernel / libc
     // having a temporarily inconsistent state. routines that obtain
     // file descriptors the way __zipos_open() does need to retry if
     // there's indication this race condition happened.
     if (__isfdkind(fd, kFdZip)) {
-      rc = weaken(__zipos_close)(fd);
+      rc = _weaken(__zipos_close)(fd);
     } else {
       if (!IsWindows() && !IsMetal()) {
         rc = sys_close(fd);
@@ -67,13 +76,13 @@ int close(int fd) {
         rc = 0;
       } else {
         if (__isfdkind(fd, kFdEpoll)) {
-          rc = weaken(sys_close_epoll_nt)(fd);
+          rc = _weaken(sys_close_epoll_nt)(fd);
         } else if (__isfdkind(fd, kFdSocket)) {
-          rc = weaken(sys_closesocket_nt)(g_fds.p + fd);
+          rc = _weaken(sys_closesocket_nt)(g_fds.p + fd);
         } else if (__isfdkind(fd, kFdFile) ||     //
                    __isfdkind(fd, kFdConsole) ||  //
                    __isfdkind(fd, kFdProcess)) {  //
-          rc = sys_close_nt(g_fds.p + fd);
+          rc = sys_close_nt(g_fds.p + fd, fd);
         } else {
           rc = eio();
         }
@@ -83,6 +92,6 @@ int close(int fd) {
       __releasefd(fd);
     }
   }
-  STRACE("%s(%d) → %d% m", "close", fd, rc);
+  STRACE("close(%d) → %d% m", fd, rc);
   return rc;
 }

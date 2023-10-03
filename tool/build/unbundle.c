@@ -21,12 +21,14 @@
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/fmt/itoa.h"
+#include "libc/fmt/magnumstrs.internal.h"
+#include "libc/limits.h"
 #include "libc/runtime/runtime.h"
+#include "libc/stdio/ftw.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/s.h"
 #include "libc/x/x.h"
-#include "third_party/musl/ftw.h"
 
 const char *prog;
 char tmpdir[PATH_MAX];
@@ -59,7 +61,7 @@ void Execute(char *argv[]) {
 int Visit(const char *fpath, const struct stat *sb, int tflag,
           struct FTW *ftwbuf) {
   if (tflag == FTW_F && endswith(fpath, ".gz")) {
-    Execute((char *[]){"build/bootstrap/gzip.com", "-d", fpath, 0});
+    Execute((char *[]){"build/bootstrap/gzip.com", "-d", (char *)fpath, 0});
     strcpy(binpath, fpath);
     binpath[strlen(binpath) - 3] = 0;
     chmod(binpath, 0755);
@@ -73,7 +75,8 @@ int Visit(const char *fpath, const struct stat *sb, int tflag,
 
 int main(int argc, char *argv[]) {
   if (!IsLinux()) return 0;
-  prog = argc > 0 ? argv[0] : "unbundle.com";
+  prog = argv[0];
+  if (!prog) prog = "unbundle";
   if (IsDirectory("o/third_party/gcc")) return 0;
   makedirs("o/third_party", 0755);
   FormatInt32(stpcpy(tmpdir, "o/third_party/gcc."), getpid());
@@ -82,7 +85,7 @@ int main(int argc, char *argv[]) {
   if (nftw(tmpdir, Visit, 20, 0) == -1) {
     fputs(prog, stderr);
     fputs(": nftw failed: ", stderr);
-    fputs(strerdoc(errno), stderr);
+    fputs(_strerdoc(errno), stderr);
     fputs("\n", stderr);
     exit(1);
   }

@@ -18,19 +18,22 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "dsp/scale/scale.h"
 #include "libc/calls/calls.h"
-#include "libc/calls/ioctl.h"
 #include "libc/calls/struct/stat.h"
+#include "libc/calls/struct/winsize.h"
+#include "libc/calls/termios.h"
 #include "libc/fmt/fmt.h"
 #include "libc/log/log.h"
 #include "libc/macros.internal.h"
+#include "libc/mem/mem.h"
 #include "libc/runtime/runtime.h"
+#include "libc/str/locale.h"
+#include "libc/str/str.h"
 #include "libc/sysv/consts/exit.h"
 #include "libc/sysv/consts/fileno.h"
 #include "libc/sysv/consts/map.h"
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/prot.h"
 #include "libc/sysv/consts/termios.h"
-#include "libc/unicode/locale.h"
 #include "third_party/stb/stb_image.h"
 
 #define SQR(X)    ((X) * (X))
@@ -94,8 +97,8 @@ void GetTermSize(int *out_rows, int *out_cols) {
   struct winsize ws;
   ws.ws_row = 20;
   ws.ws_col = 80;
-  ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws);
-  ioctl(STDIN_FILENO, TIOCGWINSZ, &ws);
+  tcgetwinsize(STDOUT_FILENO, &ws);
+  tcgetwinsize(STDIN_FILENO, &ws);
   *out_rows = ws.ws_row;
   *out_cols = ws.ws_col;
 }

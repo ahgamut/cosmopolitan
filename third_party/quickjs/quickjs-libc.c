@@ -22,34 +22,36 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
+#include "third_party/quickjs/quickjs-libc.h"
 #include "libc/assert.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
-#include "libc/calls/ioctl.h"
 #include "libc/calls/struct/dirent.h"
 #include "libc/calls/struct/sigaction.h"
+#include "libc/calls/struct/stat.h"
 #include "libc/calls/struct/winsize.h"
 #include "libc/calls/termios.h"
-#include "libc/calls/typedef/sighandler_t.h"
 #include "libc/errno.h"
 #include "libc/fmt/conv.h"
 #include "libc/fmt/fmt.h"
 #include "libc/limits.h"
+#include "libc/mem/mem.h"
 #include "libc/nt/synchronization.h"
 #include "libc/runtime/dlfcn.h"
+#include "libc/runtime/runtime.h"
 #include "libc/runtime/sysconf.h"
 #include "libc/sock/select.h"
-#include "libc/stdio/temp.h"
+#include "libc/temp.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/clock.h"
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/s.h"
+#include "libc/sysv/consts/sig.h"
 #include "libc/sysv/consts/termios.h"
 #include "libc/sysv/consts/w.h"
 #include "libc/time/time.h"
 #include "third_party/quickjs/cutils.h"
 #include "third_party/quickjs/list.h"
-#include "third_party/quickjs/quickjs-libc.h"
 
 asm(".ident\t\"\\n\\n\
 QuickJS (MIT License)\\n\
@@ -613,24 +615,6 @@ static JSValue js_std_getenv(JSContext *ctx, JSValueConst this_val,
         return JS_NewString(ctx, str);
 }
 
-#if defined(_WIN32)
-static void setenv(const char *name, const char *value, int overwrite)
-{
-    char *str;
-    size_t name_len, value_len;
-    name_len = strlen(name);
-    value_len = strlen(value);
-    str = malloc(name_len + 1 + value_len + 1);
-    memcpy(str, name, name_len);
-    str[name_len] = '=';
-    memcpy(str + name_len + 1, value, value_len);
-    str[name_len + 1 + value_len] = '\0';
-    _putenv(str);
-    free(str);
-}
-
-#endif /* _WIN32 */
-
 static JSValue js_std_setenv(JSContext *ctx, JSValueConst this_val,
                            int argc, JSValueConst *argv)
 {
@@ -1061,7 +1045,7 @@ static JSValue js_std_file_tell(JSContext *ctx, JSValueConst this_val,
     int64_t pos;
     if (!f)
         return JS_EXCEPTION;
-#if defined(__linux__)
+#if defined(__linux__) || defined(__COSMOPOLITAN__)
     pos = ftello(f);
 #else
     pos = ftell(f);
@@ -1084,7 +1068,7 @@ static JSValue js_std_file_seek(JSContext *ctx, JSValueConst this_val,
         return JS_EXCEPTION;
     if (JS_ToInt32(ctx, &whence, argv[1]))
         return JS_EXCEPTION;
-#if defined(__linux__)
+#if defined(__linux__) || defined(__COSMOPOLITAN__)
     ret = fseeko(f, pos, whence);
 #else
     ret = fseek(f, pos, whence);
@@ -1712,7 +1696,7 @@ static JSValue js_os_ttyGetWinSize(JSContext *ctx, JSValueConst this_val,
     
     if (JS_ToInt32(ctx, &fd, argv[0]))
         return JS_EXCEPTION;
-    if (ioctl(fd, TIOCGWINSZ, &ws) == 0 &&
+    if (tcgetwinsize(fd, &ws) == 0 &&
         ws.ws_col >= 4 && ws.ws_row >= 4) {
         obj = JS_NewArray(ctx);
         if (JS_IsException(obj))
@@ -1954,7 +1938,7 @@ static JSValue js_os_signal(JSContext *ctx, JSValueConst this_val,
     return JS_UNDEFINED;
 }
 
-#if defined(__linux__) || defined(__APPLE__)
+#if defined(__linux__) || defined(__APPLE__) || defined(__COSMOPOLITAN__)
 static int64_t get_time_ms(void)
 {
     struct timespec ts;
@@ -2066,7 +2050,7 @@ static void call_handler(JSContext *ctx, JSValueConst func)
     JS_FreeValue(ctx, ret);
 }
 
-#if defined(COSMO)
+#if defined(_COSMO_SOURCE)
 #define DWORD	uint32_t
 #define HANDLE	int64_t
 #define _get_osfhandle(fd)	g_fds.p[fd].handle

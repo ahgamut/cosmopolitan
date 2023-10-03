@@ -16,13 +16,14 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/intrin/pthread.h"
+#include "libc/str/str.h"
+#include "libc/thread/thread.h"
 
 /**
  * Destroys mutex attr.
  * @return 0 on success, or error number on failure
  */
-int(pthread_mutexattr_destroy)(pthread_mutexattr_t *attr) {
-  attr->attr = 0;
+errno_t pthread_mutexattr_destroy(pthread_mutexattr_t *attr) {
+  memset(attr, -1, sizeof(*attr));
   return 0;
 }

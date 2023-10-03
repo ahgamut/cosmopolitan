@@ -28,17 +28,17 @@ TEST_LIBC_TINYMATH_DIRECTDEPS =					\
 	LIBC_INTRIN						\
 	LIBC_MEM						\
 	LIBC_NEXGEN32E						\
-	LIBC_RAND						\
 	LIBC_STDIO						\
 	LIBC_RUNTIME						\
 	LIBC_STR						\
-	LIBC_STUBS						\
 	LIBC_SYSV						\
 	LIBC_TESTLIB						\
 	LIBC_TINYMATH						\
-	LIBC_UNICODE						\
 	LIBC_X							\
-	THIRD_PARTY_GDTOA
+	THIRD_PARTY_COMPILER_RT					\
+	THIRD_PARTY_GDTOA					\
+	THIRD_PARTY_COMPILER_RT					\
+	THIRD_PARTY_DOUBLECONVERSION
 
 TEST_LIBC_TINYMATH_DEPS :=					\
 	$(call uniq,$(foreach x,$(TEST_LIBC_TINYMATH_DIRECTDEPS),$($(x))))
@@ -56,8 +56,8 @@ o/$(MODE)/test/libc/tinymath/%.com.dbg:				\
 		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
 
-$(TEST_LIBC_TINYMATH_OBJS):					\
-		OVERRIDE_CFLAGS +=				\
+$(TEST_LIBC_TINYMATH_OBJS): private				\
+		CFLAGS +=					\
 			-fno-builtin
 
 .PHONY: o/$(MODE)/test/libc/tinymath

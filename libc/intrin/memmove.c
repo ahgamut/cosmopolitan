@@ -22,6 +22,7 @@
 #include "libc/nexgen32e/nexgen32e.h"
 #include "libc/nexgen32e/x86feature.h"
 #include "libc/str/str.h"
+#ifndef __aarch64__
 
 typedef long long xmm_t __attribute__((__vector_size__(16), __aligned__(1)));
 typedef long long xmm_a __attribute__((__vector_size__(16), __aligned__(16)));
@@ -90,9 +91,11 @@ void *memmove(void *dst, const void *src, size_t n) {
   size_t i;
   const char *s;
   uint64_t a, b;
-  xmm_t v, w, x, y, V, W, X, Y, wut;
+  xmm_t v, w, x, y, V, W, X, Y;
   d = dst;
   s = src;
+
+#if defined(__x86_64__) && !defined(__chibicc__)
   if (IsTiny()) {
     uint16_t w1, w2;
     uint32_t l1, l2;
@@ -133,6 +136,8 @@ void *memmove(void *dst, const void *src, size_t n) {
     }
     return dst;
   }
+#endif
+
   switch (n) {
     case 0:
       return d;
@@ -208,6 +213,8 @@ void *memmove(void *dst, const void *src, size_t n) {
       return d;
     default:
       if (d == s) return d;
+
+#if defined(__x86_64__) && !defined(__chibicc__)
       if (n < kHalfCache3 || !kHalfCache3) {
         if (d > s) {
           if (IsAsan() || n < 900 || !X86_HAVE(ERMS)) {
@@ -280,6 +287,31 @@ void *memmove(void *dst, const void *src, size_t n) {
         }
         asm("sfence");
       }
+#else
+
+      if (d > s) {
+        do {
+          n -= 32;
+          v = *(const xmm_t *)(s + n);
+          w = *(const xmm_t *)(s + n + 16);
+          *(xmm_t *)(d + n) = v;
+          *(xmm_t *)(d + n + 16) = w;
+        } while (n >= 32);
+      } else {
+        i = 0;
+        do {
+          v = *(const xmm_t *)(s + i);
+          w = *(const xmm_t *)(s + i + 16);
+          *(xmm_t *)(d + i) = v;
+          *(xmm_t *)(d + i + 16) = w;
+        } while ((i += 32) + 32 <= n);
+        d += i;
+        s += i;
+        n -= i;
+      }
+
+#endif
+
       if (n) {
         if (n >= 16) {
           v = *(const xmm_t *)s;
@@ -305,9 +337,11 @@ void *memmove(void *dst, const void *src, size_t n) {
           *d = *s;
         }
       }
+
       return dst;
   }
 }
 
-asm("memcpy = memmove\n\t"
-    ".globl\tmemcpy");
+__weak_reference(memmove, memcpy);
+
+#endif /* __aarch64__ */

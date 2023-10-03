@@ -4,7 +4,8 @@
 │ Python 3                                                                     │
 │ https://docs.python.org/3/license.html                                       │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/likely.h"
+#include "third_party/python/Include/object.h"
+#include "libc/intrin/likely.h"
 #include "libc/log/countbranch.h"
 #include "third_party/python/Include/abstract.h"
 #include "third_party/python/Include/boolobject.h"
@@ -28,7 +29,6 @@
 #include "third_party/python/Include/memoryobject.h"
 #include "third_party/python/Include/modsupport.h"
 #include "third_party/python/Include/namespaceobject.h"
-#include "third_party/python/Include/object.h"
 #include "third_party/python/Include/objimpl.h"
 #include "third_party/python/Include/odictobject.h"
 #include "third_party/python/Include/pycapsule.h"
@@ -464,6 +464,7 @@ int
 _PyObject_IsFreed(PyObject *op)
 {
     uintptr_t ptr = (uintptr_t)op;
+    (void)ptr;
     if (_PyMem_IsFreed(&ptr, sizeof(ptr))) {
         return 1;
     }
@@ -1897,7 +1898,7 @@ _Py_NewReference(PyObject *op)
     _Py_INC_TPALLOCS(op);
 }
 
-noasan void
+dontasan void
 _Py_ForgetReference(PyObject *op)
 {
 #ifdef SLOW_UNREF_CHECK

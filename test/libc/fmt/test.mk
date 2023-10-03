@@ -18,21 +18,17 @@ TEST_LIBC_FMT_CHECKS =					\
 	$(TEST_LIBC_FMT_SRCS_TEST:%.c=o/$(MODE)/%.com.runs)
 
 TEST_LIBC_FMT_DIRECTDEPS =				\
-	LIBC_ALG					\
 	LIBC_FMT					\
 	LIBC_INTRIN					\
 	LIBC_LOG					\
 	LIBC_MEM					\
 	LIBC_NEXGEN32E					\
-	LIBC_RAND					\
 	LIBC_RUNTIME					\
 	LIBC_STDIO					\
 	LIBC_STR					\
-	LIBC_STUBS					\
 	LIBC_SYSV					\
 	LIBC_TESTLIB					\
 	LIBC_TINYMATH					\
-	LIBC_UNICODE					\
 	LIBC_X						\
 	THIRD_PARTY_GDTOA
 
@@ -54,9 +50,12 @@ o/$(MODE)/test/libc/fmt/%.com.dbg:			\
 
 $(TEST_LIBC_FMT_OBJS): test/libc/fmt/test.mk
 
-$(TEST_LIBC_FMT_OBJS):					\
+$(TEST_LIBC_FMT_OBJS): private				\
 	DEFAULT_CCFLAGS +=				\
 		-fno-builtin
+
+o/$(MODE)/test/libc/fmt/fprintf_test.com.runs:		\
+	private .UNVEIL += w:/dev/full
 
 .PHONY: o/$(MODE)/test/libc/fmt
 o/$(MODE)/test/libc/fmt:				\

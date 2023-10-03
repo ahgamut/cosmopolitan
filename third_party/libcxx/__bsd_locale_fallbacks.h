@@ -14,8 +14,11 @@
 #define _LIBCPP_BSD_LOCALE_FALLBACKS_DEFAULTS_H
 
 #include "third_party/libcxx/stdlib.h"
-#include "libc/mem/fmt.h"
+#include "libc/str/unicode.h"
+#include "libc/fmt/fmt.h"
+#include "libc/str/locale.h"
 #include "third_party/libcxx/memory"
+#include "third_party/libcxx/__locale"
 
 #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
 #pragma GCC system_header

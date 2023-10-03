@@ -32,27 +32,24 @@ TOOL_BUILD_LIB_A_OBJS =					\
 	o/$(MODE)/tool/build/lib/apetest2.com.zip.o
 
 TOOL_BUILD_LIB_A_DIRECTDEPS =				\
-	LIBC_ALG					\
-	LIBC_BITS					\
 	LIBC_CALLS					\
-	LIBC_ELF					\
 	LIBC_FMT					\
 	LIBC_INTRIN					\
 	LIBC_LOG					\
 	LIBC_MEM					\
 	LIBC_NEXGEN32E					\
-	LIBC_RAND					\
 	LIBC_RUNTIME					\
 	LIBC_SOCK					\
 	LIBC_STDIO					\
 	LIBC_STR					\
-	LIBC_STUBS					\
 	LIBC_SYSV					\
 	LIBC_SYSV_CALLS					\
+	LIBC_PROC					\
+	LIBC_THREAD					\
 	LIBC_TIME					\
 	LIBC_TINYMATH					\
-	LIBC_UNICODE					\
 	LIBC_X						\
+	NET_HTTP					\
 	NET_HTTPS					\
 	THIRD_PARTY_COMPILER_RT				\
 	THIRD_PARTY_MBEDTLS				\
@@ -71,9 +68,11 @@ $(TOOL_BUILD_LIB_A).pkg:				\
 		$(TOOL_BUILD_LIB_A_OBJS)		\
 		$(foreach x,$(TOOL_BUILD_LIB_A_DIRECTDEPS),$($(x)_A).pkg)
 
-o/$(MODE)/tool/build/lib/ssefloat.o:			\
+ifeq ($(ARCH), x86_64)
+o/$(MODE)/tool/build/lib/ssefloat.o: private		\
 		TARGET_ARCH +=				\
 			-msse3
+endif
 
 o/$(MODE)/tool/build/lib/apetest.com.dbg:		\
 		$(TOOL_BUILD_LIB_A_DEPS)		\
@@ -90,9 +89,17 @@ o/$(MODE)/tool/build/lib/apetest2.com.dbg:		\
 	@$(APELINK)
 
 o/$(MODE)/tool/build/lib/apetest.com.zip.o		\
-o/$(MODE)/tool/build/lib/apetest2.com.zip.o:		\
+o/$(MODE)/tool/build/lib/apetest2.com.zip.o: private	\
 		ZIPOBJ_FLAGS +=				\
 			-B
+
+o/$(MODE)/tool/build/lib/apetest.o:			\
+		tool/build/lib/apetest.c		\
+		libc/calls/calls.h
+
+# these assembly files are safe to build on aarch64
+o/$(MODE)/tool/build/lib/errnos.o: tool/build/lib/errnos.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
 
 TOOL_BUILD_LIB_LIBS = $(foreach x,$(TOOL_BUILD_LIB_ARTIFACTS),$($(x)))
 TOOL_BUILD_LIB_SRCS = $(foreach x,$(TOOL_BUILD_LIB_ARTIFACTS),$($(x)_SRCS))
@@ -102,7 +109,10 @@ TOOL_BUILD_LIB_CHECKS = $(foreach x,$(TOOL_BUILD_LIB_ARTIFACTS),$($(x)_CHECKS))
 TOOL_BUILD_LIB_OBJS = $(foreach x,$(TOOL_BUILD_LIB_ARTIFACTS),$($(x)_OBJS))
 TOOL_BUILD_LIB_TESTS = $(foreach x,$(TOOL_BUILD_LIB_ARTIFACTS),$($(x)_TESTS))
 
+$(TOOL_BUILD_LIB_OBJS): tool/build/lib/buildlib.mk
+
 .PHONY: o/$(MODE)/tool/build/lib
 o/$(MODE)/tool/build/lib:				\
 		$(TOOL_BUILD_LIB_COMS)			\
-		$(TOOL_BUILD_LIB_CHECKS)
+		$(TOOL_BUILD_LIB_CHECKS)		\
+		$(TOOL_BUILD_LIB_A)

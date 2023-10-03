@@ -20,9 +20,9 @@
 .text.unlikely
 
 __errfun:
-	.errno
+	call	__errno_location
 	mov	%ecx,(%rax)
 	push	$-1
 	pop	%rax
-	.leafepilogue
+	.leafepilogue			// .leafprologue is in errfuns/...
 	.endfn	__errfun,globl,hidden

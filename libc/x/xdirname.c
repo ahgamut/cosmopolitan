@@ -16,13 +16,18 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/fmt/conv.h"
-#include "libc/runtime/gc.internal.h"
+#include "libc/fmt/libgen.h"
+#include "libc/mem/mem.h"
 #include "libc/x/x.h"
 
 /**
  * Returns directory portion of path.
  */
 char *xdirname(const char *path) {
-  return xstrdup(dirname(gc(xstrdup(path))));
+  char *dirp;
+  char *path2;
+  path2 = xstrdup(path);
+  dirp = xstrdup(dirname(path2));
+  free(path2);
+  return dirp;
 }

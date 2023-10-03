@@ -22,15 +22,18 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-#include "libc/alg/alg.h"
+#include "libc/calls/calls.h"
 #include "libc/calls/struct/stat.h"
 #include "libc/calls/weirdtypes.h"
 #include "libc/fmt/conv.h"
 #include "libc/fmt/fmt.h"
 #include "libc/log/log.h"
+#include "libc/mem/alg.h"
+#include "libc/mem/mem.h"
+#include "libc/runtime/runtime.h"
+#include "libc/str/str.h"
 #include "libc/sysv/consts/clock.h"
-#include "libc/time/time.h"
-#include "third_party/musl/ftw.h"
+#include "libc/stdio/ftw.h"
 #include "third_party/quickjs/cutils.h"
 #include "third_party/quickjs/list.h"
 #include "third_party/quickjs/quickjs-libc.h"

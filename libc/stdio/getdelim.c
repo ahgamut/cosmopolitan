@@ -24,7 +24,7 @@
  *     char *line = NULL;
  *     size_t linesize = 0;
  *     while (getdelim(&line, &linesize, '\n', stdin) > 0) {
- *       _chomp(line);
+ *       chomp(line);
  *       printf("%s\n", line);
  *     }
  *     free(line);
@@ -37,7 +37,7 @@
  *     or -1 w/ errno on EOF or error; see ferror() and feof()
  * @note this function will ignore EINTR if it occurs mid-line
  * @raises EBADF if stream isn't open for reading
- * @see fgetln(), getline(), _chomp(), gettok_r()
+ * @see fgetln(), getline(), chomp(), gettok_r()
  */
 ssize_t getdelim(char **s, size_t *n, int delim, FILE *f) {
   ssize_t rc;

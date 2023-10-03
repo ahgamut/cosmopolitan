@@ -16,9 +16,9 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/safemacros.internal.h"
 #include "libc/calls/calls.h"
 #include "libc/fmt/fmt.h"
+#include "libc/intrin/safemacros.internal.h"
 #include "libc/log/gdb.h"
 #include "libc/log/log.h"
 #include "libc/nexgen32e/stackframe.h"
@@ -26,12 +26,11 @@
 #include "libc/runtime/symbols.internal.h"
 
 /**
- * Attachs GDB temporarilly, to do something like print a variable.
+ * Attaches GDB temporarily, to do something like print a variable.
  */
-privileged int(gdbexec)(const char *cmd) {
+relegated int(gdbexec)(const char *cmd) {
+  int pid;
   struct StackFrame *bp;
-  int pid, ttyin, ttyout;
-  intptr_t continuetoaddr;
   const char *se, *elf, *gdb;
   char pidstr[11], breakcmd[40];
   if (!(gdb = GetGdbPath())) return -1;
@@ -43,7 +42,6 @@ privileged int(gdbexec)(const char *cmd) {
     elf = "-q";
   }
   bp = __builtin_frame_address(0);
-  continuetoaddr = bp->addr;
   sprintf(breakcmd, "%s *%#p", "break", bp->addr);
   if (!(pid = vfork())) {
     execv(gdb, (char *const[]){
@@ -52,8 +50,8 @@ privileged int(gdbexec)(const char *cmd) {
                    "--nh",
                    "-p",
                    pidstr,
-                   se,
-                   elf,
+                   (char *)se,
+                   (char *)elf,
                    "-ex",
                    "set osabi GNU/Linux",
                    "-ex",
@@ -66,7 +64,7 @@ privileged int(gdbexec)(const char *cmd) {
                    "-ex",
                    breakcmd,
                    "-ex",
-                   cmd,
+                   (char *)cmd,
                    "-ex",
                    "quit",
                    NULL,

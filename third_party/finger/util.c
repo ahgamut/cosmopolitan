@@ -37,8 +37,10 @@
 #include "libc/calls/struct/stat.h"
 #include "libc/calls/struct/stat.macros.h"
 #include "libc/errno.h"
-#include "libc/fmt/fmt.h"
+#include "libc/mem/mem.h"
 #include "libc/paths.h"
+#include "libc/runtime/runtime.h"
+#include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/o.h"
 #include "third_party/finger/finger.h"
@@ -91,7 +93,7 @@ static void userinfo(PERSON *pn, struct passwd *pw) {
 	pn->shell = strdup(pw->pw_shell);
 
 	/* make a private copy of gecos to munge */
-	strncpy(tbuf, pw->pw_gecos, TBUFLEN);
+	strlcpy(tbuf, pw->pw_gecos, TBUFLEN);
 	tbuf[TBUFLEN-1] = 0;  /* ensure null termination */
 	bp = tbuf;
 
@@ -174,7 +176,7 @@ match(struct passwd *pw, const char *user)
 	int i, j, ct, rv=0;
 	char *rname;
 
-	strncpy(tbuf, pw->pw_gecos, TBUFLEN);
+	strlcpy(tbuf, pw->pw_gecos, TBUFLEN);
 	tbuf[TBUFLEN-1] = 0;  /* guarantee null termination */
 	p = tbuf;
 

@@ -1,6 +1,7 @@
 #ifndef COSMOPOLITAN_LIBC_CALLS_STRUCT_SYSINFO_H_
 #define COSMOPOLITAN_LIBC_CALLS_STRUCT_SYSINFO_H_
 #if !(__ASSEMBLER__ + __LINKER__ + 0)
+COSMOPOLITAN_C_START_
 
 struct sysinfo {
   int64_t uptime;     /* seconds since boot */
@@ -12,7 +13,8 @@ struct sysinfo {
   uint64_t totalswap; /* size of emergency memory */
   uint64_t freeswap;  /* hopefully equal to totalswap */
   int16_t procs;      /* number of processes */
-  int16_t __ignore;   /* padding */
+  int16_t __ignore1;  /* padding */
+  int32_t __ignore2;  /* padding */
   uint64_t totalhigh; /* wut */
   uint64_t freehigh;  /* wut */
   uint32_t mem_unit;  /* ram stuff above is multiples of this */
@@ -20,5 +22,6 @@ struct sysinfo {
 
 int sysinfo(struct sysinfo *);
 
+COSMOPOLITAN_C_END_
 #endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
 #endif /* COSMOPOLITAN_LIBC_CALLS_STRUCT_SYSINFO_H_ */

@@ -22,9 +22,11 @@
 // standard's wording:
 // https://github.com/rui314/chibicc/wiki/cpp.algo.pdf
 
+#include "libc/fmt/libgen.h"
 #include "libc/log/libfatal.internal.h"
-#include "libc/mem/arena.h"
+#include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
+#include "libc/x/xasprintf.h"
 #include "third_party/chibicc/chibicc.h"
 #include "third_party/chibicc/kw.h"
 
@@ -264,7 +266,6 @@ static Token *read_const_expr(Token **rest, Token *tok) {
 
 // Read and evaluate a constant expression.
 static long eval_const_expr(Token **rest, Token *tok) {
-  __arena_push();
   Token *start = tok;
   Token *expr = read_const_expr(rest, tok->next);
   expr = preprocess2(expr);
@@ -287,7 +288,6 @@ static long eval_const_expr(Token **rest, Token *tok) {
   if (rest2->kind != TK_EOF && rest2->kind != TK_JAVADOWN) {
     error_tok(rest2, "extra token");
   }
-  __arena_pop();
   return val;
 }
 
@@ -639,7 +639,7 @@ char *search_include_paths(char *filename) {
   if (cached) return cached;
   // Search a file from the include paths.
   for (int i = 0; i < include_paths.len; i++) {
-    char *path = xasprintf("%s/%s", include_paths.data[i], filename);
+    char *path = xjoinpaths(include_paths.data[i], filename);
     if (!fileexists(path)) continue;
     hashmap_put(&cache, filename, path);
     include_next_idx = i + 1;
@@ -1019,10 +1019,6 @@ volatile\000\
 __unix\000\
 1\000\
 __unix__\000\
-1\000\
-__linux\000\
-1\000\
-__linux__\000\
 1\000\
 __gnu_linux__\000\
 1\000\

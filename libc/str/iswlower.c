@@ -22,7 +22,6 @@
  * Returns nonzero if c is lowercase letter.
  */
 int iswlower(wint_t c) {
-  int r;
   if (c < 0200) {
     return 'a' <= c && c <= 'z';
   } else {
@@ -516,3 +515,5 @@ int iswlower(wint_t c) {
     }
   }
 }
+
+__weak_reference(iswlower, iswlower_l);

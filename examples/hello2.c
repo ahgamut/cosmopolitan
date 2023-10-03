@@ -8,7 +8,6 @@
 ╚─────────────────────────────────────────────────────────────────*/
 #endif
 #include "libc/calls/calls.h"
-#include "libc/str/str.h"
 
 int main() {
   write(1, "hello world\n", 12);

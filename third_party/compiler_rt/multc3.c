@@ -13,12 +13,15 @@
  * ===----------------------------------------------------------------------===
  */
 
-STATIC_YOINK("huge_compiler_rt_license");
+__static_yoink("huge_compiler_rt_license");
 
 #include "third_party/compiler_rt/int_lib.h"
 #include "third_party/compiler_rt/int_math.h"
 
 /* Returns: the product of a + ib and c + id */
+
+// todo: what m=opt
+#pragma GCC diagnostic ignored "-Wbuiltin-declaration-mismatch"
 
 COMPILER_RT_ABI long double _Complex __multc3(long double a, long double b,
                                               long double c, long double d) {

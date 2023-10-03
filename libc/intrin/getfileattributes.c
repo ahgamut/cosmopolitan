@@ -16,9 +16,9 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/strace.internal.h"
 #include "libc/calls/syscall_support-nt.internal.h"
 #include "libc/intrin/describeflags.internal.h"
+#include "libc/intrin/strace.internal.h"
 #include "libc/nt/enum/fileflagandattributes.h"
 #include "libc/nt/files.h"
 #include "libc/nt/thunk/msabi.h"
@@ -36,6 +36,6 @@ textwindows uint32_t GetFileAttributes(const char16_t *lpPathName) {
   flags = __imp_GetFileAttributesW(lpPathName);
   if (flags == -1u) __winerr();
   NTTRACE("GetFileAttributes(%#hs) → %s% m", lpPathName,
-          DescribeNtFileFlagsAndAttributes(flags));
+          DescribeNtFileFlagAttr(flags));
   return flags;
 }

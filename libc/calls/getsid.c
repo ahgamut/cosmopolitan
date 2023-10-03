@@ -17,15 +17,14 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
-#include "libc/calls/strace.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
+#include "libc/intrin/strace.internal.h"
 
 /**
  * Creates session and sets the process group id.
  */
 int getsid(int pid) {
-  int rc;
-  rc = sys_getsid(pid);
+  int rc = sys_getsid(pid);
   STRACE("%s(%d) → %d% m", "getsid", pid, rc);
   return rc;
 }

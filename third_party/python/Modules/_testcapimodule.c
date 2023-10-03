@@ -12,6 +12,7 @@
 #include "libc/fmt/fmt.h"
 #include "libc/limits.h"
 #include "libc/math.h"
+#include "libc/mem/mem.h"
 #include "libc/sysv/consts/sig.h"
 #include "libc/time/time.h"
 #include "third_party/python/Include/abstract.h"
@@ -4304,6 +4305,7 @@ tracemalloc_track(PyObject *self, PyObject *args)
     Py_ssize_t size;
     int release_gil = 0;
     int res;
+    (void)ptr;
 
     if (!PyArg_ParseTuple(args, "IOn|i", &domain, &ptr_obj, &size, &release_gil))
         return NULL;
@@ -4335,6 +4337,7 @@ tracemalloc_untrack(PyObject *self, PyObject *args)
     PyObject *ptr_obj;
     void *ptr;
     int res;
+    (void)ptr;
 
     if (!PyArg_ParseTuple(args, "IO", &domain, &ptr_obj))
         return NULL;
@@ -4357,6 +4360,7 @@ tracemalloc_get_traceback(PyObject *self, PyObject *args)
     unsigned int domain;
     PyObject *ptr_obj;
     void *ptr;
+    (void)ptr;
 
     if (!PyArg_ParseTuple(args, "IO", &domain, &ptr_obj))
         return NULL;
@@ -5217,7 +5221,12 @@ PyInit__testcapi(void)
     return m;
 }
 
-_Section(".rodata.pytab.1") const struct _inittab _PyImport_Inittab__testcapi = {
+#ifdef __aarch64__
+_Section(".rodata.pytab.1 //")
+#else
+_Section(".rodata.pytab.1")
+#endif
+ const struct _inittab _PyImport_Inittab__testcapi = {
     "_testcapi",
     PyInit__testcapi,
 };

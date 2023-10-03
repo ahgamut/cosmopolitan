@@ -10,6 +10,7 @@
 #include "libc/calls/weirdtypes.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
+#include "libc/runtime/runtime.h"
 #include "libc/runtime/sysconf.h"
 #include "libc/sysv/consts/o.h"
 #include "third_party/python/Include/abstract.h"
@@ -205,6 +206,8 @@ _close_fds_by_brute_force(long start_fd, PyObject *py_fds_to_keep)
     }
 }
 
+int sys_getdents(unsigned, void *, unsigned, long *);
+
 /* Close all open file descriptors in the range from start_fd and higher
  * Do not close any in the sorted py_fds_to_keep list.
  *
@@ -227,7 +230,7 @@ _close_open_fds_safe(int start_fd, PyObject* py_fds_to_keep)
     struct dirent *entry;
     int fd, dir, bytes, offset;
     if ((dir = _Py_open_noraise(FD_DIR, O_RDONLY|O_DIRECTORY)) != -1) {
-        while ((bytes = getdents(dir, buffer, sizeof(buffer), 0)) > 0) {
+        while ((bytes = sys_getdents(dir, buffer, sizeof(buffer), 0)) > 0) {
             for (offset = 0; offset < bytes; offset += entry->d_reclen) {
                 entry = (struct dirent *)(buffer + offset);
                 if ((fd = _pos_int_from_ascii(entry->d_name)) < 0)
@@ -726,7 +729,12 @@ PyInit__posixsubprocess(void)
     return PyModule_Create(&_posixsubprocessmodule);
 }
 
-_Section(".rodata.pytab.1") const struct _inittab _PyImport_Inittab__posixsubprocess = {
+#ifdef __aarch64__
+_Section(".rodata.pytab.1 //")
+#else
+_Section(".rodata.pytab.1")
+#endif
+ const struct _inittab _PyImport_Inittab__posixsubprocess = {
     "_posixsubprocess",
     PyInit__posixsubprocess,
 };

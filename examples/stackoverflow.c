@@ -8,9 +8,10 @@
 ╚─────────────────────────────────────────────────────────────────*/
 #endif
 #include "libc/calls/calls.h"
+#include "libc/dce.h"
 #include "libc/limits.h"
 #include "libc/log/check.h"
-#include "libc/log/log.h"
+#include "libc/runtime/runtime.h"
 #include "libc/runtime/stack.h"
 #include "libc/stdio/stdio.h"
 #include "libc/sysv/consts/prot.h"
@@ -20,8 +21,6 @@
  */
 
 #define N INT_MAX
-
-STATIC_STACK_SIZE(FRAMESIZE);
 
 int A(int f(), int n) {
   if (n < N) {
@@ -34,6 +33,10 @@ int A(int f(), int n) {
 int (*Ap)(int (*)(), int) = A;
 
 int main(int argc, char *argv[]) {
+  if (IsWindows()) {
+    fprintf(stderr, "stack overflow not possible to catch on windows yet\n");
+    exit(1);
+  }
   ShowCrashReports();
   return !!Ap(Ap, 0);
 }

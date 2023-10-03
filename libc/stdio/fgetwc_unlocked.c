@@ -16,6 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/stdio/internal.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/thompike.h"
 #include "libc/str/tpdecodecb.internal.h"
@@ -49,3 +50,5 @@ wint_t fgetwc_unlocked(FILE *f) {
   }
   return x;
 }
+
+__strong_reference(fgetwc_unlocked, getwc_unlocked);

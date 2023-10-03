@@ -1,0 +1,16 @@
+#!/bin/sh
+
+PROG=${0##*/}
+MODE=${MODE:-$m}
+COSMO=${COSMO:-/opt/cosmo}
+
+fatal_error() {
+  echo "$PROG: $1" >&2
+  exit 1
+}
+
+if [ ! -x "$COSMO/o/third_party/gcc/bin/x86_64-linux-musl-ar" ]; then
+  fatal_error "you need to run: x86_64-unknown-cosmo-cc --update"
+fi
+
+exec "$COSMO/o/third_party/gcc/bin/x86_64-linux-musl-ar" "$@"

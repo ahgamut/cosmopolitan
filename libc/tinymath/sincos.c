@@ -37,8 +37,8 @@ asm(".ident\t\"\\n\\n\
 Musl libc (MIT License)\\n\
 Copyright 2005-2014 Rich Felker, et. al.\"");
 asm(".include \"libc/disclaimer.inc\"");
+// clang-format off
 
-/* clang-format off */
 /* origin: FreeBSD /usr/src/lib/msun/src/s_sin.c */
 /*
  * ====================================================
@@ -54,6 +54,10 @@ asm(".include \"libc/disclaimer.inc\"");
 #define asuint64(f) ((union{double _f; uint64_t _i;}){f})._i
 #define gethighw(hi,d) (hi) = asuint64(d) >> 32
 
+/**
+ * Returns sine and cosine of 𝑥.
+ * @note should take ~10ns
+ */
 void sincos(double x, double *sin, double *cos)
 {
 	double y[2], s, c;
@@ -108,3 +112,7 @@ void sincos(double x, double *sin, double *cos)
 		break;
 	}
 }
+
+#if LDBL_MANT_DIG == 53 && LDBL_MAX_EXP == 1024
+__weak_reference(sincos, sincosl);
+#endif

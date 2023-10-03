@@ -31,7 +31,7 @@ asm(".ident\t\"\\n\\n\
 Musl libc (MIT License)\\n\
 Copyright 2005-2014 Rich Felker, et. al.\"");
 asm(".include \"libc/disclaimer.inc\"");
-/* clang-format off */
+// clang-format off
 
 /* origin: FreeBSD /usr/src/lib/msun/src/e_acos.c */
 /*
@@ -110,7 +110,7 @@ double acos(double x)
 	/* |x| >= 1 or nan */
 	if (ix >= 0x3ff00000) {
 		lx = u.i;
-		if ((ix-0x3ff00000 | lx) == 0) {
+		if (((ix-0x3ff00000) | lx) == 0) {
 			/* acos(1)=0, acos(-1)=pi */
 			if (hx >> 31)
 				return 2*pio2_hi + 0x1p-120f;
@@ -141,3 +141,7 @@ double acos(double x)
 	w = R(z)*s+c;
 	return 2*(df+w);
 }
+
+#if LDBL_MANT_DIG == 53 && LDBL_MAX_EXP == 1024
+__weak_reference(acos, acosl);
+#endif

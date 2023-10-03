@@ -20,7 +20,7 @@
 #include "libc/calls/calls.h"
 #include "libc/errno.h"
 #include "libc/macros.internal.h"
-#include "libc/runtime/gc.internal.h"
+#include "libc/mem/gc.internal.h"
 #include "libc/str/str.h"
 #include "net/https/https.h"
 #include "third_party/mbedtls/ctr_drbg.h"
@@ -285,7 +285,6 @@ tls_recv_into(struct Tls *self, PyObject *args)
 {
     LOG("TLS.recv_into\n");
     int rc;
-    Py_ssize_t n;
     PyObject *res;
     Py_buffer buf;
     if (!PyArg_ParseTuple(args, "w*:recv_into", &buf)) return 0;
@@ -458,7 +457,7 @@ Creates TLS client.");
 static PyObject *
 newclient(PyObject *self, PyObject *args)
 {
-    int rc, fd;
+    int fd;
     PyObject *todo;
     struct Tls *tls;
     const char *host;
@@ -483,7 +482,7 @@ static struct PyModuleDef mbedtls_module = {
 PyMODINIT_FUNC
 PyInit_tls(void)
 {
-    PyObject *m, *mbedtls_md_meth_names;
+    PyObject *m;
     Py_TYPE(&tls_type) = &PyType_Type;
     if (PyType_Ready(&tls_type) < 0) return 0;
     if (!(m = PyModule_Create(&mbedtls_module))) return 0;
@@ -495,7 +494,12 @@ PyInit_tls(void)
     return m;
 }
 
-_Section(".rodata.pytab.1") const struct _inittab _PyImport_Inittab_tls = {
+#ifdef __aarch64__
+_Section(".rodata.pytab.1 //")
+#else
+_Section(".rodata.pytab.1")
+#endif
+ const struct _inittab _PyImport_Inittab_tls = {
     "tls",
     PyInit_tls,
 };

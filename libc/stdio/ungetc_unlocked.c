@@ -16,6 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/stdio/internal.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
 
@@ -25,7 +26,9 @@
 int ungetc_unlocked(int c, FILE *f) {
   if (c == -1) return -1;
   if (f->beg) {
-    f->buf[--f->beg] = c;
+    if (c != f->buf[--f->beg]) {
+      f->buf[f->beg] = c;
+    }
   } else if (f->end < f->size) {
     memmove(f->buf + 1, f->buf, f->end++);
     f->buf[0] = c;

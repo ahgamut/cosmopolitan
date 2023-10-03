@@ -1,4 +1,4 @@
-/* clang-format off */
+// clang-format off
 /*
   zip.h - Zip 3
 
@@ -87,6 +87,10 @@ typedef unsigned long ulg;      /* unsigned 32-bit value */
 
 /* Set up portability */
 #include "third_party/zip/tailor.h"
+
+#ifdef USE_ZLIB
+#include "third_party/zlib/zlib.h"
+#endif
 
 /* In the utilities, the crc32() function is only used for UNICODE_SUPPORT. */
 #if defined(UTIL) && !defined(UNICODE_SUPPORT)

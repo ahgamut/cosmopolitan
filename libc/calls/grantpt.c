@@ -16,6 +16,34 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/calls.h"
+#include "libc/calls/internal.h"
+#include "libc/calls/struct/fd.internal.h"
+#include "libc/calls/syscall-sysv.internal.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
+#include "libc/calls/termios.h"
+#include "libc/dce.h"
+#include "libc/intrin/strace.internal.h"
+#include "libc/sysv/errfuns.h"
 
-int grantpt(int fd) { return 0; }
+#define TIOCPTYGRANT 0x20007454
+
+/**
+ * Grants access to subordinate pseudoteletypewriter.
+ *
+ * @return 0 on success, or -1 w/ errno
+ * @raise EBADF if fd isn't open
+ * @raise EINVAL if fd is valid but not associated with pty
+ * @raise EACCES if pseudoterminal couldn't be accessed
+ */
+int grantpt(int fd) {
+  int rc;
+  if (fd < g_fds.n && g_fds.p[fd].kind == kFdZip) {
+    rc = enotty();
+  } else if (IsXnu()) {
+    rc = sys_ioctl(fd, TIOCPTYGRANT);
+  } else {
+    rc = _isptmaster(fd);
+  }
+  STRACE("grantpt(%d) → %d% m", fd, rc);
+  return rc;
+}

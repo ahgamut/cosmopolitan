@@ -16,32 +16,41 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/struct/iovec.h"
+#include "libc/assert.h"
+#include "libc/calls/internal.h"
+#include "libc/calls/struct/fd.internal.h"
+#include "libc/errno.h"
+#include "libc/intrin/strace.internal.h"
+#include "libc/nt/struct/iovec.h"
 #include "libc/nt/struct/overlapped.h"
 #include "libc/nt/winsock.h"
 #include "libc/sock/internal.h"
 #include "libc/sock/syscall_fd.internal.h"
 #include "libc/sysv/errfuns.h"
 
-/**
- * Performs stream socket receive on New Technology.
- *
- * @param fd must be a socket
- * @return number of bytes received, or -1 w/ errno
- */
-textwindows ssize_t sys_recv_nt(struct Fd *fd, const struct iovec *iov,
-                                size_t iovlen, uint32_t flags) {
+textwindows ssize_t sys_recv_nt(int fd, const struct iovec *iov, size_t iovlen,
+                                uint32_t flags) {
+  int err;
   ssize_t rc;
-  uint32_t got = 0;
+  uint32_t got;
+  struct SockFd *sockfd;
   struct NtIovec iovnt[16];
   struct NtOverlapped overlapped = {.hEvent = WSACreateEvent()};
-  if (_check_interrupts(true, g_fds.p)) return eintr();
-  if (!WSARecv(fd->handle, iovnt, __iovec2nt(iovnt, iov, iovlen), &got, &flags,
-               &overlapped, NULL)) {
-    rc = got;
+  err = errno;
+  if (!WSARecv(g_fds.p[fd].handle, iovnt, __iovec2nt(iovnt, iov, iovlen), 0,
+               &flags, &overlapped, 0)) {
+    if (WSAGetOverlappedResult(g_fds.p[fd].handle, &overlapped, &got, false,
+                               &flags)) {
+      rc = got;
+    } else {
+      rc = -1;
+    }
   } else {
-    rc = __wsablock(fd->handle, &overlapped, &flags, true);
+    errno = err;
+    sockfd = (struct SockFd *)g_fds.p[fd].extra;
+    rc = __wsablock(g_fds.p + fd, &overlapped, &flags, kSigOpRestartable,
+                    sockfd->rcvtimeo);
   }
-  WSACloseEvent(overlapped.hEvent);
+  unassert(WSACloseEvent(overlapped.hEvent));
   return rc;
 }

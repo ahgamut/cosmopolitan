@@ -17,6 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
+#include "libc/stdio/internal.h"
 #include "libc/stdio/stdio.h"
 
 /**
@@ -27,8 +28,7 @@
  */
 void rewind(FILE *f) {
   flockfile(f);
-  if (!fseeko_unlocked(f, 0, SEEK_SET)) {
-    f->state = 0;
-  }
+  fseek_unlocked(f, 0, SEEK_SET);
+  f->state = 0;
   funlockfile(f);
 }

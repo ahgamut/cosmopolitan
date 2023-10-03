@@ -30,6 +30,7 @@
 │                                                                              │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/errno.h"
+#include "libc/fmt/conv.h"
 #include "libc/runtime/fenv.h"
 #include "third_party/gdtoa/gdtoa.internal.h"
 /* clang-format off */
@@ -236,8 +237,8 @@ dig_done:
 							word1(&rv) = bits[0];
 						}
 						else {
-							word0(&rv) = NAN_WORD0;
-							word1(&rv) = NAN_WORD1;
+							word0(&rv) = 0x7ff80000;
+							word1(&rv) = 0x0;
 						}
 						goto ret;
 					}
@@ -685,3 +686,5 @@ ret:
 		*se = (char *)s;
 	return sign ? -dval(&rv) : dval(&rv);
 }
+
+__weak_reference(strtod, strtod_l);

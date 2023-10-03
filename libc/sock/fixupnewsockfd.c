@@ -21,11 +21,6 @@
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/sock.h"
 
-/**
- * Applies non-atomic file descriptor fixups on XNU or ancient Linux.
- *
- * @param fd of -1 means no-op
- */
 int __fixupnewsockfd(int fd, int flags) {
   return __fixupnewfd(fd, (((flags & SOCK_CLOEXEC) ? O_CLOEXEC : 0) |
                            ((flags & SOCK_NONBLOCK) ? O_NONBLOCK : 0)));

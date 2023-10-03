@@ -46,8 +46,6 @@ FLAGS
   -b        log message bodies
   -a        log resource usage
   -g        log handler latency
-  -e        eval Lua code in arg
-  -F        eval Lua code in file
   -E        show crash reports to public ips
   -j        enable ssl client verify
   -k        disable ssl fetch verify
@@ -55,12 +53,15 @@ FLAGS
   -f        log worker function calls
   -B        only use stronger cryptography
   -X        disable ssl server and client support
+  -*        permit self-modification of executable
   -J        disable non-ssl server and client support
   -%        hasten startup by not generating an rsa key
   -s        increase silence                  [repeatable]
   -v        increase verbosity                [repeatable]
   -V        increase ssl verbosity            [repeatable]
-  -S        increase bpf seccomp sandboxing   [repeatable]
+  -S        increase pledge sandboxing        [repeatable]
+  -e CODE   eval Lua code in arg              [repeatable]
+  -F PATH   eval Lua code in file             [repeatable]
   -H K:V    sets http header globally         [repeatable]
   -D DIR    overlay assets in local directory [repeatable]
   -r /X=/Y  redirect X to Y                   [repeatable]
@@ -78,6 +79,7 @@ FLAGS
   -P PATH   pid file location
   -U INT    daemon set user id
   -G INT    daemon set group id
+  -w PATH   launch browser on startup
   --strace  enables system call tracing (see also -Z)
   --ftrace  enables function call tracing (see also -f)
 
@@ -100,6 +102,8 @@ KEYBOARD
   ALT->          END OF HISTORY
   ALT-F          FORWARD WORD
   ALT-B          BACKWARD WORD
+  CTRL-RIGHT     FORWARD WORD
+  CTRL-LEFT      BACKWARD WORD
   CTRL-K         KILL LINE FORWARDS
   CTRL-U         KILL LINE BACKWARDS
   ALT-H          KILL WORD BACKWARDS
@@ -130,7 +134,6 @@ KEYBOARD
   PROTIP         REMAP CAPS LOCK TO CTRL
 
 ────────────────────────────────────────────────────────────────────────────────
-
 USAGE
 
   This executable is also a ZIP file that contains static assets.
@@ -239,7 +242,6 @@ USAGE
       redbean.com: ELF 64-bit LSB executable
 
 ────────────────────────────────────────────────────────────────────────────────
-
 SECURITY
 
   redbean uses a protocol polyglot for serving HTTP and HTTPS on
@@ -255,10 +257,80 @@ SECURITY
     -VVV     log ssl informational messages too
     -VVVV    log ssl verbose details too
 
+  redbean provides hardened ASAN (Address Sanitizer) builds that
+  proactively guard against any potential memory weaknesses that may be
+  discovered, such as buffer overruns, use after free, etc. MDOE=asan is
+  recomended when serving on the public Internet.
+
+  redbean also supports robust sandboxing on Linux Kernel 5.13+ and
+  OpenBSD. The recommended way to harden your redbean is to call the
+  pledge() and unveil() functions. For example, if you have a SQLite app
+  then the key to using these features is to connect to the db first:
+
+      function OnWorkerStart()
+          db = sqlite3.open("db.sqlite3")
+          db:busy_timeout(1000)
+          db:exec[[PRAGMA journal_mode=WAL]]
+          db:exec[[PRAGMA synchronous=NORMAL]]
+          db:exec[[SELECT x FROM warmup WHERE x = 1]]
+          assert(unix.setrlimit(unix.RLIMIT_RSS, 100 * 1024 * 1024))
+          assert(unix.setrlimit(unix.RLIMIT_CPU, 4))
+          assert(unix.unveil("/var/tmp", "rwc"))
+          assert(unix.unveil("/tmp", "rwc"))
+          assert(unix.unveil(nil, nil))
+          assert(unix.pledge("stdio flock rpath wpath cpath", nil,
+                             unix.PLEDGE_PENALTY_RETURN_EPERM))
+      end
+
+  What makes this technique interesting is redbean doesn't have file
+  system access to the database file, and instead uses an inherited file
+  descriptor that was opened beforehand. With SQLite the tmp access is
+  only needed to support things like covering indexes. The -Z flag is
+  also helpful to see where things go wrong, so you know which promises
+  are needed to support your use case.
+
+  pledge() will work on all Linux kernels since RHEL6 since it uses
+  SECCOMP BPF filtering. On the other hand, unveil() requires Landlock
+  LSM which was only introduced in 2021. If you need unveil() then be
+  sure to test the restrictions work. Most environments don't support
+  unveil(), so it's designed to be a no-op in unsupported environments.
+
+  Alternatively, there's CLI flags which make it simple to get started:
+
+    -S (online policy)
+
+      This causes unix.pledge("stdio rpath inet dns id") to be called on
+      workers after fork() is called. This permits read-only operations
+      and APIs like Fetch() that let workers send and receive data with
+      private and public Internet hosts. Access to the unix module is
+      somewhat restricted, disallowing its more powerful APIs like exec.
+
+    -SS (offline policy)
+
+      This causes unix.pledge("stdio rpath id") to be called on workers
+      after after fork() is called. This prevents workers from talking
+      to the network (other than the client) and allows read-only file
+      system access (e.g. `-D DIR` flag). The `id` group helps you to
+      call other functions important to redbean security, such as the
+      unix.setrlimit() function.
+
+    -SSS (contained policy)
+
+      This causes unix.pledge("stdio") to be called on workers after
+      after fork() is called. This prevents workers from communicating
+      with the network (other than the client connection) and prevents
+      file system access (with some exceptions like logging). Redbean
+      should only be able to serve from its own zip file in this mode.
+      Lua script access to the unix module is highly restricted.
+
+  Unlike the unix.pledge() function, these sandboxing flags use a more
+  permissive policy on Linux. Rather than killing the process, they'll
+  cause system calls to fail with EPERM instead. Therefore these flags
+  should be gentler when you want security errors to be recoverable.
+
   See http://redbean.dev for further details.
 
 ────────────────────────────────────────────────────────────────────────────────
-
 LUA SERVER PAGES
 
   Any files with the extension .lua will be dynamically served by redbean.
@@ -299,7 +371,6 @@ LUA SERVER PAGES
   isolated processes are cloned from the blueprint you created.
 
 ────────────────────────────────────────────────────────────────────────────────
-
 REPL
 
   Your redbean displays a Read-Eval-Print-Loop that lets you modify the
@@ -333,7 +404,7 @@ REPL
       #!/usr/bin/redbean -i
       print('hello world')
 
-  However UNIX operating systems usually require that interperters be
+  However UNIX operating systems usually require that interpreters be
   encoded in its preferred executable format. You can assimilate your
   redbean into the local format using the following commands:
 
@@ -352,7 +423,6 @@ REPL
 
 
 ────────────────────────────────────────────────────────────────────────────────
-
 LUA ENHANCEMENTS
 
   We've made some enhancements to the Lua language that should make it
@@ -361,6 +431,9 @@ LUA ENHANCEMENTS
     - redbean supports a printf modulus operator, like Python. For
       example, you can say `"hello %s" % {"world"}` instead of
       `string.format("hello %s", "world")`.
+
+    - redbean supports a string multiply operator, like Python. For
+      example, you can say `"hi" * 2` instead of `string.rep("hi", 2)`.
 
     - redbean supports octal (base 8) integer literals. For example
       `0644 == 420` is the case in redbean, whereas in upstream Lua
@@ -375,7 +448,6 @@ LUA ENHANCEMENTS
 
 
 ────────────────────────────────────────────────────────────────────────────────
-
 GLOBALS
 
   arg: array[str]
@@ -409,7 +481,6 @@ GLOBALS
               arg[ 2] = 'arg2'
 
 ────────────────────────────────────────────────────────────────────────────────
-
 SPECIAL PATHS
 
   /
@@ -428,7 +499,7 @@ SPECIAL PATHS
           this path is a hidden file so that it can't be unintentionally run
           by the network client.
 
-  /.reload.lua
+  /.reload.lua (deprecated; use OnServerReload instead)
           This script is run from the main process when SIGHUP is received.
           This only applies to redbean when running in daemon mode. Any
           changes that are made to the Lua interpreter state will be
@@ -496,22 +567,27 @@ SPECIAL PATHS
           of your `.args` file.
 
 ────────────────────────────────────────────────────────────────────────────────
-
 HOOKS
 
   OnHttpRequest()
           If this function is defined in the global scope by your /.init.lua
-          then redbean will call it at the ealiest possible moment to
+          then redbean will call it at the earliest possible moment to
           hand over control for all messages (with the exception of OPTIONS
           *). See functions like Route which asks redbean to do its default
           thing from the handler.
 
-  OnClientConnection(ip:int,port:int,serverip:int,serverport:int) → bool
+  OnClientConnection(ip:int, port:int, serverip:int, serverport:int) → bool
           If this function is defined it'll be called from the main process
           each time redbean accepts a new client connection. If it returns
-          true then redbean will close the connection without calling fork.
+          `true`, redbean will close the connection without calling fork.
 
-  OnProcessCreate(pid:int,ip:int,port:int,serverip:int,serverport:int)
+  OnLogLatency(reqtimeus:int, contimeus:int)
+          If this function is defined it'll be called from the main process
+          each time redbean completes handling of a request, but before the
+          response is sent. The handler received the time (in µs) since the
+          request handling and connection handling started.
+
+  OnProcessCreate(pid:int, ip:int, port:int, serverip:int, serverport:int)
           If this function is defined it'll be called from the main process
           each time redbean forks a connection handler worker process. The
           ip/port of the remote client is provided, along with the ip/port
@@ -524,6 +600,23 @@ HOOKS
           If this function is defined it'll be called from the main process
           each time redbean reaps a child connection process using wait4().
           This won't be called in uniprocess mode.
+
+  OnServerHeartbeat()
+          If this function is defined it'll be called from the main process
+          on each server heartbeat. The heartbeat interval is configurable
+          with ProgramHeartbeatInterval.
+
+  OnServerListen(socketdescriptor:int,serverip:int,serverport:int) → bool
+          If this function is defined it'll be called from the main process
+          before redbean starts listening on a port. This hook can be used
+          to modify socket configuration to set `SO_REUSEPORT`, for example.
+          If it returns `true`, redbean will not listen to that ip/port.
+
+  OnServerReload(reindex:bool)
+          If this function is defined it'll be called from the main process
+          on each server reload triggered by SIGHUP (for daemonized) and
+          SIGUSR1 (for all) redbean instances. reindex indicates if redbean
+          assets have been re-indexed following the signal.
 
   OnServerStart()
           If this function is defined it'll be called from the main process
@@ -545,14 +638,13 @@ HOOKS
           in uniprocess mode.
 
 ────────────────────────────────────────────────────────────────────────────────
-
 FUNCTIONS
 
   Write(data:str)
           Appends data to HTTP response payload buffer. This is buffered
           independently of headers.
 
-  SetStatus(code:int[,reason:str])
+  SetStatus(code:int[, reason:str])
           Starts an HTTP response, specifying the parameters on its first
           line. reason is optional since redbean can fill in the appropriate
           text for well-known magic numbers, e.g. 200, 404, etc. This method
@@ -560,7 +652,7 @@ FUNCTIONS
           ServeAsset and other Serve* functions. If this function isn't
           called, then the default behavior is to send 200 OK.
 
-  SetHeader(name:str,value:str)
+  SetHeader(name:str, value:str)
           Appends HTTP header to response header buffer. name is
           case-insensitive and restricted to non-space ASCII. value is a
           UTF-8 string that must be encodable as ISO-8859-1. Leading and
@@ -576,7 +668,7 @@ FUNCTIONS
           Date, which are abstracted by the transport layer. In such cases,
           consider calling ServeAsset.
 
-  SetCookie(name:str,value:str[,options:table])
+  SetCookie(name:str, value:str[, options:table])
           Appends Set-Cookie HTTP header to the response header buffer.
           Several Set-Cookie headers can be added to the same response.
           __Host- and __Secure- prefixes are supported and may set or
@@ -626,47 +718,271 @@ FUNCTIONS
 
   LaunchBrowser([path:str])
           Launches web browser on local machine with URL to this redbean
-          server. This function may be called from your /.init.lua.
+          server. It is the responsibility of the caller to escape the path
+          with EscapePath if needed, as it's not escaped automatically.
+          This function may be called from /.init.lua.
 
   CategorizeIp(ip:uint32) → str
           Returns a string describing an IP address. This is currently Class
           A granular. It can tell you if traffic originated from private
           networks, ARIN, APNIC, DOD, etc.
 
+  DecodeLatin1(iso-8859-1:str) → utf-8:str
+          Turns ISO-8859-1 string into UTF-8.
+
+  EncodeHex(binary:str) → ascii:str
+          Turns binary into ASCII base-16 hexadecimal lowercase string.
+
+  DecodeHex(ascii:str) → binary:str
+          Turns ASCII base-16 hexadecimal byte string into binary string,
+          case-insensitively. Non-hex characters may not appear in string.
+
   DecodeBase64(ascii:str) → binary:str
           Turns ASCII into binary, in a permissive way that ignores
           characters outside the base64 alphabet, such as whitespace. See
           decodebase64.c.
-
-  DecodeLatin1(iso-8859-1:str) → utf-8:str
-          Turns ISO-8859-1 string into UTF-8.
 
   EncodeBase64(binary:str) → ascii:str
           Turns binary into ASCII. This can be used to create HTML data:
           URIs that do things like embed a PNG file in a web page. See
           encodebase64.c.
 
-  EncodeJson(value[,options:table]) → json:str
-          Turns passed Lua value into a JSON string. Tables with non-zero
-          length (as reported by `#`) are encoded as arrays with non-array
-          elements ignored. Empty tables are encoded as empty arrays. All
-          other tables are encoded as objects with numerical keys
-          converted to strings (so `{[3]=1}` is encoded as `{"3":1}`).
-          The following options can be used:
-            - useoutput: (bool=false) encodes the result directly to the
-              output buffer and returns `nil` value. This option is
-              ignored if used outside of request handling code.
-            - numformat: sets numeric format to be used, which can be 'g',
-              'f', or 'a' [experimental api]
+  DecodeJson(input:str)
+      ├─→ int64
+      ├─→ string
+      ├─→ double
+      ├─→ array
+      ├─→ object
+      ├─→ false
+      ├─→ true
+      ├─→ nil
+      └─→ nil, error:str
 
-  EncodeLua(value[,options:table]) → json:str
-          Turns passed Lua value into a Lua string. The following options
-          can be used:
+          Turns JSON string into a Lua data structure.
+
+          This is a generally permissive parser, in the sense that like
+          v8, it permits scalars as top-level values. Therefore we must
+          note that this API can be thought of as special, in the sense
+
+              val = assert(DecodeJson(str))
+
+          will usually do the right thing, except in cases where false
+          or null are the top-level value. In those cases, it's needed
+          to check the second value too in order to discern from error
+
+              val, err = DecodeJson(str)
+              if not val then
+                 if err then
+                    print('bad json', err)
+                 elseif val == nil then
+                    print('val is null')
+                 elseif val == false then
+                    print('val is false')
+                 end
+              end
+
+          This parser supports 64-bit signed integers. If an overflow
+          happens, then the integer is silently coerced to double, as
+          consistent with v8. If a double overflows into Infinity, we
+          coerce it to `null` since that's what v8 does, and the same
+          goes for underflows which, like v8, are coerced to 0.0.
+
+          When objects are parsed, your Lua object can't preserve the
+          the original ordering of fields. As such, they'll be sorted
+          by EncodeJson() and may not round-trip with original intent
+
+          This parser has perfect conformance with JSONTestSuite.
+
+          This parser validates utf-8 and utf-16.
+
+  EncodeJson(value[, options:table])
+      ├─→ json:str
+      ├─→ true [if useoutput]
+      └─→ nil, error:str
+
+          Turns Lua data structure into JSON string.
+
+          Since Lua tables are both hashmaps and arrays, we use a simple
+          fast algorithm for telling the two apart. Tables with non-zero
+          length (as reported by `#`) are encoded as arrays, and any
+          non-array elements are ignored. For example:
+
+              >: EncodeJson({2})
+              "[2]"
+              >: EncodeJson({[1]=2, ["hi"]=1})
+              "[2]"
+
+          If there are holes in your array, then the serialized array
+          will exclude everything after the first hole. If the beginning
+          of your array is a hole, then an error is returned.
+
+              >: EncodeJson({[1]=1, [3]=3})
+              "[1]"
+              >: EncodeJson({[2]=1, [3]=3})
+              "[]"
+              >: EncodeJson({[2]=1, [3]=3})
+              nil     "json objects must only use string keys"
+
+          If the raw length of a table is reported as zero, then we
+          check for the magic element `[0]=false`. If it's present, then
+          your table will be serialized as empty array `[]`. An entry is
+          inserted by DecodeJson() automatically, only when encountering
+          empty arrays, and it's necessary in order to make empty arrays
+          round-trip. If raw length is zero and `[0]=false` is absent,
+          then your table will be serialized as an iterated object.
+
+              >: EncodeJson({})
+              "{}"
+              >: EncodeJson({[0]=false})
+              "[]"
+              >: EncodeJson({["hi"]=1})
+              "{\"hi\":1}"
+              >: EncodeJson({["hi"]=1, [0]=false})
+              "[]"
+              >: EncodeJson({["hi"]=1, [7]=false})
+              nil     "json objects must only use string keys"
+
+          The following options may be used:
+
             - useoutput: (bool=false) encodes the result directly to the
-              output buffer and returns `nil` value. This option is
+              output buffer and returns `true` value. This option is
               ignored if used outside of request handling code.
 
-  EncodeLatin1(utf-8:str[,flags:int]) → iso-8859-1:str
+            - sorted: (bool=true) Lua uses hash tables so the order of
+              object keys is lost in a Lua table. So, by default, we use
+              `strcmp` to impose a deterministic output order. If you
+              don't care about ordering then setting `sorted=false`
+              should yield a performance boost in serialization.
+
+            - pretty: (bool=false) Setting this option to `true` will
+              cause tables with more than one entry to be formatted
+              across multiple lines for readability.
+
+            - indent: (str=" ") This option controls the indentation of
+              pretty formatting. This field is ignored if `pretty` isn't
+              `true`.
+
+            - maxdepth: (int=64) This option controls the maximum amount
+              of recursion the serializer is allowed to perform. The max
+              is 32767. You might not be able to set it that high if
+              there isn't enough C stack memory. Your serializer checks
+              for this and will return an error rather than crashing.
+
+          This function will return an error if:
+
+            - `value` is cyclic
+            - `value` has depth greater than 64
+            - `value` contains functions, user data, or threads
+            - `value` is table that blends string / non-string keys
+            - Your serializer runs out of C heap memory (setrlimit)
+
+          We assume strings in `value` contain UTF-8. This serializer
+          currently does not produce UTF-8 output. The output format is
+          right now ASCII. Your UTF-8 data will be safely transcoded to
+          \uXXXX sequences which are UTF-16. Overlong encodings in your
+          input strings will be canonicalized rather than validated.
+
+          NaNs are serialized as `null` and Infinities are `null` which
+          is consistent with the v8 behavior.
+
+  EncodeLua(value[, options:table])
+      ├─→ luacode:str
+      ├─→ true [if useoutput]
+      └─→ nil, error:str
+
+          Turns Lua data structure into Lua code string.
+
+          Since Lua uses tables as both hashmaps and arrays, tables will
+          only be serialized as an array with determinate order, if it's
+          an array in the strictest possible sense.
+
+          1. for all 𝑘=𝑣 in table, 𝑘 is an integer ≥1
+          2. no holes exist between MIN(𝑘) and MAX(𝑘)
+          3. if non-empty, MIN(𝑘) is 1
+
+          In all other cases, your table will be serialized as an object
+          which is iterated and displayed as a list of (possibly) sorted
+          entries that have equal signs.
+
+              >: EncodeLua({3, 2})
+              "{3, 2}"
+              >: EncodeLua({[1]=3, [2]=3})
+              "{3, 2}"
+              >: EncodeLua({[1]=3, [3]=3})
+              "{[1]=3, [3]=3}"
+              >: EncodeLua({["hi"]=1, [1]=2})
+              "{[1]=2, hi=1}"
+
+          The following options may be used:
+
+            - useoutput: (bool=false) encodes the result directly to the
+              output buffer and returns `true` value. This option is
+              ignored if used outside of request handling code.
+
+            - sorted: (bool=true) Lua uses hash tables so the order of
+              object keys is lost in a Lua table. So, by default, we use
+              `strcmp` to impose a deterministic output order. If you
+              don't care about ordering then setting `sorted=false`
+              should yield a performance boost in serialization.
+
+            - pretty: (bool=false) Setting this option to `true` will
+              cause tables with more than one entry to be formatted
+              across multiple lines for readability.
+
+            - indent: (str=" ") This option controls the indentation of
+              pretty formatting. This field is ignored if `pretty` isn't
+              `true`.
+
+            - maxdepth: (int=64) This option controls the maximum amount
+              of recursion the serializer is allowed to perform. The max
+              is 32767. You might not be able to set it that high if
+              there isn't enough C stack memory. Your serializer checks
+              for this and will return an error rather than crashing.
+
+          If a user data object has a `__repr` or `__tostring` meta
+          method, then that'll be used to encode the Lua code.
+
+          This serializer is designed primarily to describe data. For
+          example, it's used by the REPL where we need to be able to
+          ignore errors when displaying data structures, since showing
+          most things imperfectly is better than crashing. Therefore
+          this isn't the kind of serializer you'd want to use to persist
+          data in prod. Try using the JSON serializer for that purpose.
+
+          Non-encodable value types (e.g. threads, functions) will be
+          represented as a string literal with the type name and pointer
+          address. The string description is of an unspecified format
+          that could most likely change. This encoder detects cyclic
+          tables; however instead of failing, it embeds a string of
+          unspecified layout describing the cycle.
+
+          Integer literals are encoded as decimal. However if the int64
+          number is ≥256 and has a population count of 1 then we switch
+          to representing the number in hexadecimal, for readability.
+          Hex numbers have leading zeroes added in order to visualize
+          whether the number fits in a uint16, uint32, or int64. Also
+          some numbers can only be encoded expressionally. For example,
+          NaNs are serialized as `0/0`, and Infinity is `math.huge`.
+
+              >: 7000
+              7000
+              >: 0x100
+              0x0100
+              >: 0x10000
+              0x00010000
+              >: 0x100000000
+              0x0000000100000000
+              >: 0/0
+              0/0
+              >: 1.5e+9999
+              math.huge
+              >: -9223372036854775807 - 1
+              -9223372036854775807 - 1
+
+          The only failure return condition currently implemented is
+          when C runs out of heap memory.
+
+  EncodeLatin1(utf-8:str[, flags:int]) → iso-8859-1:str
           Turns UTF-8 into ISO-8859-1 string.
 
   EscapeFragment(str) → str
@@ -675,10 +991,10 @@ FUNCTIONS
           Please note that '& can still break HTML and that '() can still
           break CSS URLs. This function is charset agnostic and will not
           canonicalize overlong encodings. It is assumed that a UTF-8 string
-          will be supplied. See kescapefragment.c.
+          will be supplied. See kescapefragment.S.
 
   EscapeHost(str) → str
-          Escapes URL host. See kescapeauthority.c
+          Escapes URL host. See kescapeauthority.S
 
   EscapeLiteral(str) → str
           Escapes JavaScript or JSON string literal content. The caller is
@@ -698,10 +1014,10 @@ FUNCTIONS
           -.*_0-9A-Za-z and everything else gets %XX encoded. This function
           is charset agnostic and will not canonicalize overlong encodings.
           It is assumed that a UTF-8 string will be supplied. See
-          kescapeparam.c.
+          kescapeparam.S.
 
   EscapePass(str) → str
-          Escapes URL password. See kescapeauthority.c.
+          Escapes URL password. See kescapeauthority.S.
 
   EscapePath(str) → str
           Escapes URL path. This is the same as EscapeSegment except slash
@@ -710,7 +1026,7 @@ FUNCTIONS
           still break HTML, so the output may need EscapeHtml too. Also note
           that '() can still break CSS URLs. This function is charset
           agnostic and will not canonicalize overlong encodings. It is
-          assumed that a UTF-8 string will be supplied. See kescapepath.c.
+          assumed that a UTF-8 string will be supplied. See kescapepath.S.
 
   EscapeSegment(str) → str
           Escapes URL path segment. This is the same as EscapePath except
@@ -720,10 +1036,10 @@ FUNCTIONS
           EscapeHtml too. Also note that '() can still break CSS URLs. This
           function is charset agnostic and will not canonicalize overlong
           encodings. It is assumed that a UTF-8 string will be supplied. See
-          kescapesegment.c.
+          kescapesegment.S.
 
   EscapeUser(str) → str
-          Escapes URL username. See kescapeauthority.c.
+          Escapes URL username. See kescapeauthority.S.
 
   EvadeDragnetSurveillance(bool)
           If this option is programmed then redbean will not transmit a
@@ -731,7 +1047,8 @@ FUNCTIONS
           This function is not available in unsecure mode.
 
   Fetch(url:str[,body:str|{method=value:str,body=value:str,headers=table,...}])
-      → status:int,{header:str=value:str,...},body:str
+      ├─→ status:int, {header:str=value:str,...}, body:str
+      └─→ nil, error:str
           Sends an HTTP/HTTPS request to the specified URL. If only the URL is
           provided, then a GET request is sent. If both URL and body parameters
           are specified, then a POST request is sent. If any other method needs
@@ -750,6 +1067,16 @@ FUNCTIONS
             - maxredirects (default = 5): sets the number of allowed redirects
               to minimize looping due to misconfigured servers. When the number
               is exceeded, the last response is returned.
+            - keepalive (default = false): configures each request to keep the
+              connection open (unless closed by the server) and reuse for the
+              next request to the same host. This option is disabled when SSL
+              connection is used.
+              The mapping of hosts and their sockets is stored in a table
+              assigned to the `keepalive` field itself, so it can be passed to
+              the next call.
+              If the table includes the `close` field set to a true value,
+              then the connection is closed after the request is made and the
+              host is removed from the mapping table.
           When the redirect is being followed, the same method and body values
           are being sent in all cases except when 303 status is returned. In
           that case the method is set to GET and the body is removed before the
@@ -804,6 +1131,14 @@ FUNCTIONS
           it will use the ip:port from the X-Forwarded-For header, only if
           IsPrivateIp or IsLoopbackIp return true. When multiple addresses
           are present in the header, the last/right-most address is used.
+
+  GetResponseBody()
+      ├─→ body:str
+      └─→ nil, error:str
+          Returns the (uncompressed) response message body if present or an
+          empty string. May also return a partial or empty string during
+          streaming, as the full content may not be known at the call time.
+          Returns an error when decompression fails.
 
   GetClientAddr() → ip:uint32,port:uint16
           Returns client socket ip4 address and port, e.g. 0x01020304,31337
@@ -880,6 +1215,15 @@ FUNCTIONS
           - `"FREEBSD"`
           - `"OPENBSD"`
 
+  GetHostIsa() → str
+          Returns string describing host instruction set architecture.
+
+          This can return:
+
+          - `"X86_64"` for Intel and AMD systems
+          - `"AARCH64"` for ARM64, M1, and Raspberry Pi systems
+          - `"POWERPC64"` for OpenPOWER Raptor Computing Systems
+
   GetMonospaceWidth(str|char) → int
           Returns monospace display width of string. This is useful for
           fixed-width formatting. For example, CJK characters typically take
@@ -944,6 +1288,10 @@ FUNCTIONS
           HTTP/0.9, 10 for HTTP/1.0, or 11 for HTTP/1.1.
           Also available as GetVersion (deprecated).
 
+  GetHttpReason(code:int) → str
+          Returns a string describing the HTTP reason phrase.
+          See gethttpreason.c
+
   GetRandomBytes([length:int]) → str
           Returns string with the specified number of random bytes (1..256).
           If no length is specified, then a string of length 16 is returned.
@@ -966,6 +1314,9 @@ FUNCTIONS
           Programs redbean / listing page to not display any paths beginning
           with prefix. This function should only be called from /.init.lua.
 
+  IsHiddenPath(path:str) → bool
+          Returns true if the prefix of the given path is set with HidePath.
+
   IsPublicIp(uint32) → bool
           Returns true if IP address is not a private network (10.0.0.0/8,
           172.16.0.0/12, 192.168.0.0/16) and is not localhost (127.0.0.0/8).
@@ -984,7 +1335,7 @@ FUNCTIONS
           DEFLATE compression.
           Also available as IsCompressed (deprecated).
 
-  IndentLines(str[,int]) → str
+  IndentLines(str[, int]) → str
           Adds spaces to beginnings of multiline string. If the int
           parameter is not supplied then 1 space will be added.
 
@@ -994,13 +1345,14 @@ FUNCTIONS
           flag was used. If slurping large file into memory is a concern,
           then consider using ServeAsset which can serve directly off disk.
 
-  StoreAsset(path:str,data:str[,mode:int])
-          Stores asset to executable's ZIP central directory. This currently
-          happens in an append-only fashion and is still largely in the
-          proof-of-concept stages. Currently only supported on Linux, XNU,
-          and FreeBSD.
+  StoreAsset(path:str, data:str[, mode:int])
+          Stores asset to executable's ZIP central directory. This
+          currently happens in an append-only fashion and is still
+          largely in the proof-of-concept stages. Currently only
+          supported on Linux, XNU, and FreeBSD. In order to use this
+          feature, the -* flag must be passed.
 
-  Log(level:int,message:str)
+  Log(level:int, message:str)
           Emits message string to log, if level is less than or equal to
           GetLogLevel. If redbean is running in interactive mode, then this
           will log to the console. If redbean is running as a daemon or the
@@ -1017,28 +1369,57 @@ FUNCTIONS
           Converts RFC1123 string that looks like this: Mon, 29 Mar 2021
           15:37:13 GMT to a UNIX timestamp. See parsehttpdatetime.c.
 
-  ParseUrl(str) → URL
-          Parses URL, returning object having the following fields: scheme,
-          user, pass, host, port, path, params, fragment. This parser is
-          charset agnostic. Percent encoded bytes are decoded for all
-          fields. Returned values might contain things like NUL characters,
-          spaces, control codes, and non-canonical encodings. Absent can be
-          discerned from empty by checking if the pointer is set. There's no
-          failure condition for this routine. This is a permissive parser.
-          This doesn't normalize path segments like `.` or `..` so use
-          IsAcceptablePath() to check for those. No restrictions are imposed
-          beyond that which is strictly necessary for parsing. All the data
-          that is provided will be consumed to the one of the fields. Strict
-          conformance is enforced on some fields more than others, like
-          scheme, since it's the most non-deterministically defined field of
-          them all. Please note this is a URL parser, not a URI parser.
-          Which means we support everything everything the URI spec says we
-          should do except for the things we won't do, like tokenizing path
-          segments into an array and then nesting another array beneath each
-          of those for storing semicolon parameters. So this parser won't
-          make SIP easy. What it can do is parse HTTP URLs and most URIs
-          like data:opaque, better in fact than most things which claim to
-          be URI parsers.
+  ParseUrl(url:str[, flags:int]) → URL
+
+          Parses URL.
+
+          An object containing the following fields is returned:
+
+          - `scheme` is a string, e.g. `"http"`
+          - `user` is the username string, or nil if absent
+          - `pass` is the password string, or nil if absent
+          - `host` is the hostname string, or nil if `url` was a path
+          - `port` is the port string, or nil if absent
+          - `path` is the path string, or nil if absent
+          - `params` is the URL paramaters, e.g. `/?a=b&c` would be
+            represented as the data structure `{{"a", "b"}, {"c"}, ...}`
+          - `fragment` is the stuff after the `#` character
+
+          `flags` may have:
+
+          - `kUrlPlus` to turn `+` into space
+          - `kUrlLatin1` to transcode ISO-8859-1 input into UTF-8
+
+          This parser is charset agnostic. Percent encoded bytes are
+          decoded for all fields. Returned values might contain things
+          like NUL characters, spaces, control codes, and non-canonical
+          encodings. Absent can be discerned from empty by checking if
+          the pointer is set.
+
+          There's no failure condition for this routine. This is a
+          permissive parser. This doesn't normalize path segments like
+          `.` or `..` so use IsAcceptablePath() to check for those. No
+          restrictions are imposed beyond that which is strictly
+          necessary for parsing. All the data that is provided will be
+          consumed to the one of the fields. Strict conformance is
+          enforced on some fields more than others, like scheme, since
+          it's the most non-deterministically defined field of them all.
+
+          Please note this is a URL parser, not a URI parser. Which
+          means we support everything the URI spec says we should do except
+          for the things we won't do, like tokenizing path segments into
+          an array and then nesting another array beneath each of those for
+          storing semicolon parameters. So this parser won't make SIP easy.
+          What it can do is parse HTTP URLs and most URIs like data:opaque,
+          better in fact than most things which claim to be URI parsers.
+
+  IsAcceptablePath(str) → bool
+          Returns true if path doesn't contain ".", ".." or "//" segments
+          See isacceptablepath.c
+
+  IsReasonablePath(str) → bool
+          Returns true if path doesn't contain "." or ".." segments.
+          See isreasonablepath.c
 
   EncodeUrl(URL) → str
           This function is the inverse of ParseUrl. The output will always
@@ -1070,15 +1451,18 @@ FUNCTIONS
           listing page. The brand string needs to be a UTF-8 value that's
           encodable as ISO-8859-1. If the brand is changed to something
           other than redbean, then the promotional links will be removed
-          from the listing page too. This function should only be called
-          from /.init.lua.
+          from the listing page too.
+          This function should only be called from /.init.lua.
 
-  ProgramCache(seconds:int)
+  ProgramCache(seconds:int[, directive:string])
           Configures Cache-Control and Expires header generation for static
           asset serving. A negative value will disable the headers. Zero
           means don't cache. Greater than zero asks public proxies and
-          browsers to cache for a given number of seconds. This should only
-          be called from /.init.lua.
+          browsers to cache for a given number of seconds. The directive
+          value is added to the Cache-Control header when specified (with
+          "must-revalidate" provided by default) and can be set to an empty
+          string to remove the default value.
+          This function should only be called from /.init.lua.
 
   ProgramCertificate(pem:str)
           Same as the -C flag if called from .init.lua, e.g.
@@ -1086,7 +1470,10 @@ FUNCTIONS
           ProgramCertificate(Slurp("/etc/letsencrypt.lol/fullchain.pem")) for
           local file system only.
 
-  ProgramHeader(name:str,value:str)
+  ProgramContentType(ext:str[, contenttype:str]) → str
+          Sets or returns content type associated with a file extension.
+
+  ProgramHeader(name:str, value:str)
           Appends HTTP header to the header buffer for all responses (whereas
           SetHeader only appends a header to the current response buffer).
           name is case-insensitive and restricted to non-space ASCII. value
@@ -1098,18 +1485,28 @@ FUNCTIONS
           as Content-Range and Date, which are abstracted by the transport
           layer.
 
+  ProgramHeartbeatInterval([milliseconds:int])
+          Sets the heartbeat interval (in milliseconds). 5000ms is the
+          default and 100ms is the minimum. If `milliseconds` is not
+          specified, then the current interval is returned.
+
+  ProgramTimeout(milliseconds:int|seconds:int)
+          Default timeout is 60000ms. Minimal value of timeout is 10(ms).
+          Negative values (<0) sets the keepalive in seconds.
+          This function should only be called from /.init.lua.
+
   ProgramPort(uint16)
           Hard-codes the port number on which to listen, which can be any
           number in the range 1..65535, or alternatively 0 to ask the
           operating system to choose a port, which may be revealed later on
           by GetServerAddr or the -z flag to stdout.
 
-  ProgramMaxPayloadSize(int64)
+  ProgramMaxPayloadSize(int)
           Sets the maximum HTTP message payload size in bytes. The
           default is very conservatively set to 65536 so this is
           something many people will want to increase. This limit is
           enforced at the transport layer, before any Lua code is
-          called, because right now redbean stores and forewards
+          called, because right now redbean stores and forwards
           messages. (Use the UNIX API for raw socket streaming.) Setting
           this to a very high value can be useful if you're less
           concerned about rogue clients and would rather have your Lua
@@ -1118,18 +1515,24 @@ FUNCTIONS
           increased to 1450, since that's the size of ethernet frames.
           This function can only be called from .init.lua.
 
+  ProgramMaxWorkers(int)
+          Limits the number of workers forked by redbean. If that number
+          is reached, the server continues polling until the number of
+          workers is reduced or the value is updated. Setting it to 0
+          removes the limit (this is the default).
+
   ProgramPrivateKey(pem:str)
           Same as the -K flag if called from .init.lua, e.g.
           ProgramPrivateKey(LoadAsset("/.sign.key")) for zip loading or
           ProgramPrivateKey(Slurp("/etc/letsencrypt/privkey.pem")) for
           local file system only.
 
-  ProgramRedirect(code:int,src:str,location:str)
+  ProgramRedirect(code:int, src:str, location:str)
           Configures fallback routing for paths which would otherwise return
           404 Not Found. If code is 0 then the path is rewritten internally
           as an accelerated redirect. If code is 301, 302, 307, or 308 then
-          a redirect response will be sent to the client. This should only
-          be called from /.init.lua.
+          a redirect response will be sent to the client.
+          This function should only be called from /.init.lua.
 
   ProgramSslTicketLifetime(seconds:int)
           Defaults to 86400 (24 hours). This may be set to ≤0 to disable
@@ -1137,7 +1540,7 @@ FUNCTIONS
           handshake performance 10x and eliminates a network round trip.
           This function is not available in unsecure mode.
 
-  ProgramSslPresharedKey(key:str,identity:str)
+  ProgramSslPresharedKey(key:str, identity:str)
           This function can be used to enable the PSK ciphersuites which
           simplify SSL and enhance its performance in controlled
           environments. `key` may contain 1..32 bytes of random binary
@@ -1155,12 +1558,12 @@ FUNCTIONS
           only PSK ciphersuites. This function is not available in
           unsecure mode.
 
-  ProgramSslFetchVerify(enabled:str)
-          May be used to disable the the verification of certificates
-          for remote hosts when using the Fetch() API. This function is
-          not available in unsecure mode.
+  ProgramSslFetchVerify(enabled:bool)
+          May be used to disable the verification of certificates for
+          remote hosts when using the Fetch() API. This function is not
+          available in unsecure mode.
 
-  ProgramSslClientVerify(enabled:str)
+  ProgramSslClientVerify(enabled:bool)
           Enables the verification of certificates supplied by the HTTP
           clients that connect to your redbean. This has the same effect
           as the `-j` flag. Tuning this option alone does not preclude
@@ -1205,7 +1608,7 @@ FUNCTIONS
   ProgramLogPath(str)
           Same as the -L flag if called from .init.lua for setting the log
           file path on the local file system. It's created if it doesn't
-          exist. This is called before de-escalating the uesr / group id.
+          exist. This is called before de-escalating the user / group id.
           The file is opened in append only mode. If the disk runs out of
           space then redbean will truncate the log file if has access to
           change the log file after daemonizing.
@@ -1224,14 +1627,52 @@ FUNCTIONS
           Same as the -u flag if called from .init.lua. Can be used to
           configure the uniprocess mode. The current value is returned.
 
-  Slurp(filename:str) → str
-          Reads file data from local file system.
+  Slurp(filename:str[, i:int[, j:int]])
+      ├─→ data:str
+      └─→ nil, unix.Errno
+
+          Reads all data from file the easy way.
+
+          This function reads file data from local file system. Zip file
+          assets can be accessed using the `/zip/...` prefix.
+
+          `i` and `j` may be used to slice a substring in `filename`.
+          These parameters are 1-indexed and behave consistently with
+          Lua's string.sub() API. For example:
+
+              assert(Barf('x.txt', 'abc123'))
+              assert(assert(Slurp('x.txt', 2, 3)) == 'bc')
+
+          This function is uninterruptible so `unix.EINTR` errors will
+          be ignored. This should only be a concern if you've installed
+          signal handlers. Use the UNIX API if you need to react to it.
+
+  Barf(filename:str, data:str[, mode:int[, flags:int[, offset:int]]])
+      ├─→ true
+      └─→ nil, unix.Errno
+
+          Writes all data to file the easy way.
+
+          This function writes to the local file system.
+
+          `mode` defaults to `0644`. This parameter is ignored when
+          `flags` doesn't have `unix.O_CREAT`.
+
+          `flags` defaults to `unix.O_TRUNC | unix.O_CREAT`.
+
+          `offset` is 1-indexed and may be used to overwrite arbitrary
+          slices within a file when used in conjunction with `flags=0`.
+          For example:
+
+              assert(Barf('x.txt', 'abc123'))
+              assert(Barf('x.txt', 'XX', 0, 0, 3))
+              assert(assert(Slurp('x.txt', 1, 6)) == 'abXX23')
 
   Sleep(seconds:number)
           Sleeps the specified number of seconds (can be fractional). The
           smallest interval is a microsecond.
 
-  Route([host:str,[path:str]])
+  Route([host:str[, path:str]])
           Instructs redbean to follow the normal HTTP serving path. This
           function is useful when writing an OnHttpRequest handler, since
           that overrides the serving path entirely. So if the handler
@@ -1242,7 +1683,7 @@ FUNCTIONS
           generate a 404 Not Found response if redbean couldn't find an
           appropriate endpoint.
 
-  RouteHost([host:str,[path:str]]) → bool
+  RouteHost([host:str[, path:str]]) → bool
           This is the same as Route, except it only implements the subset of
           request routing needed for serving virtual-hosted assets, where
           redbean tries to prefix the path with the hostname when looking up
@@ -1267,13 +1708,13 @@ FUNCTIONS
           filesystem if -D is used. This function is mutually exclusive with
           SetStatus and other Serve* functions.
 
-  ServeError(code:int[,reason:str])
+  ServeError(code:int[, reason:str])
           Instructs redbean to serve a boilerplate error page. This takes
           care of logging the error, setting the reason phrase, and adding a
           payload. This function is mutually exclusive with SetStatus and
           other Serve* functions.
 
-  ServeRedirect(code:int,location:str)
+  ServeRedirect(code:int, location:str)
           Instructs redbean to return the specified redirect code along with
           the Location header set. This function is mutually exclusive with
           SetStatus and other Serve* functions.
@@ -1285,18 +1726,18 @@ FUNCTIONS
           access log and message logging.
 
   VisualizeControlCodes(str) → str
-          Replaces C0 control codes with their UNICODE pictures
-          representation. This function also canonicalizes overlong
-          encodings. C1 control codes are replaced with a JavaScript-like
-          escape sequence.
+          Replaces C0 control codes and trojan source characters with
+          descriptive UNICODE pictorial representation. This function
+          also canonicalizes overlong encodings. C1 control codes are
+          replaced with a JavaScript-like escape sequence.
 
   Underlong(str) → str
           Canonicalizes overlong encodings.
 
-  Crc32(initial:int,data:str) → int
+  Crc32(initial:int, data:str) → int
           Computes 32-bit CRC-32 used by zip/zlib/gzip/etc.
 
-  Crc32c(initial:int,data:str) → int
+  Crc32c(initial:int, data:str) → int
           Computes 32-bit Castagnoli Cyclic Redundancy Check.
 
   Md5(str) → str
@@ -1357,12 +1798,12 @@ FUNCTIONS
   GetCpuNode() → int
           Returns 0-indexed NUMA node on which process is currently scheduled.
 
-  Decimate(data) → int
+  Decimate(str) → str
           Shrinks byte buffer in half using John Costella's magic kernel.
           This downscales data 2x using an eight-tap convolution, e.g.
 
-              >: Decimate(b'\\xff\\xff\\x00\\x00\\xff\\xff\\x00\\x00\\xff\\xff\\x00\\x00')
-              b'\\xff\\x00\\xff\\x00\\xff\\x00'
+              >: Decimate('\xff\xff\x00\x00\xff\xff\x00\x00\xff\xff\x00\x00')
+              "\xff\x00\xff\x00\xff\x00"
 
           This is very fast if SSSE3 is available (Intel 2004+ / AMD 2011+).
 
@@ -1371,56 +1812,40 @@ FUNCTIONS
           the density of information. Cryptographic random should be in
           the ballpark of 7.9 whereas plaintext will be more like 4.5.
 
-  Compress(uncompdata:str[, level:int[, raw:bool]]) → compdata:str
+  Deflate(uncompressed:str[, level:int])
+      ├─→ compressed:str
+      └─→ nil, error:str
 
-          Compresses data using DEFLATE algorithm. The compression
-          format here is defined to be quick and handy for things like
-          database fields. For example:
+          Compresses data.
 
-              >: Compress('hello')
-              "\x05\x86\xa6\x106x\x9c\xcbH\xcd\xc9\xc9\x07\x00\x06,\x02\x15"
-              >: Uncompress(Compress('hello'))
+              >: Deflate("hello")
+              "\xcbH\xcd\xc9\xc9\x07\x00"
+              >: Inflate("\xcbH\xcd\xc9\xc9\x07\x00", 5)
               "hello"
 
-          The binary wire format is defined as follows:
-
-              1. uleb64 uncompressed byte size (1 to 10 bytes)
-              2. uint32_t crc32 (4 bytes; zlib polynomial)
-              3. data (created by zlib compress function)
+          The output format is raw DEFLATE that's suitable for embedding
+          into formats like a ZIP file. It's recommended that, like ZIP,
+          you also store separately a Crc32() checksum in addition to
+          the original uncompressed size.
 
           `level` is the compression level, which defaults to 7. The max
-          is 10. Lower numbers go faster. Higher numbers go slower, but
-          have better compression ratios.
+          is 9. Lower numbers go faster (4 for instance is a sweet spot)
+          and higher numbers go slower but have better compression.
 
-          `raw` may be set to true if you only want `data` (3) to be
-          returned. In this case, it's assumed the caller will take
-          responsibility for storing the length (and optionall crc)
-          separately. See the redbean Crc32() API.
+  Inflate(compressed:str, maxoutsize:int)
+      ├─→ uncompressed:str
+      └─→ nil, error:str
 
-              >: a = 'hello'
-              >: b = Compress(a, 9, true)
-              >: Uncompress(b, #a)
-              "hello"
+          Decompresses data.
 
-  Uncompress(compdata:str[, uncomplen:int]) → uncompdata:str
+          This function performs the inverse of Deflate(). It's
+          recommended that you perform a Crc32() check on the output
+          string after this function succeeds.
 
-          Uncompresses data using DEFLATE algorithm. This applies the
-          inverse transform of the Compress() function. See its docs for
-          further details on usage and encoding.
-
-          This function throws exceptions in the event that the value
-          couldn't be decoded. There's a crc32 check to make our check
-          of validity iron-clad. It's implemented using Intel CLMUL so
-          it has ludicrous speed performance as well.
-
-          If you used the `raw` parameter when calling Compress() i.e.
-          `compdata` doesn't have the redbean header described above,
-          then the `uncomplen` parameter may be supplied. IN that case
-          your data is handed over directly to zlib `uncompress()`. In
-          this case an exception will be raised if the value couldn't be
-          decoded, or if the resulting length differed from the supplied
-          length. It's recommended that Crc32() check still be performed
-          manually after using this method.
+          `maxoutsize` is the uncompressed size, which should be known.
+          However, it is permissable (although not advised) to specify
+          some large number in which case (on success) the byte length
+          of the output string may be less than `maxoutsize`.
 
   Benchmark(func[, count[, maxattempts]])
       └─→ nanos:real, ticks:int, overhead-ticks:int, tries:int
@@ -1479,7 +1904,7 @@ FUNCTIONS
     associated with hostname. If no such entry is found, a DNS lookup is
     performed using the system configured (e.g. /etc/resolv.conf) DNS
     resolution service. If the service returns multiple IN A records
-    then only the first one is reutrned.
+    then only the first one is returned.
 
     The returned address is word-encoded in host endian order. For
     example, 1.2.3.4 is encoded as 0x01020304. The `FormatIp` function
@@ -1489,9 +1914,188 @@ FUNCTIONS
     string of unspecified format describing the error. Calls to this
     function may be wrapped in assert() if an exception is desired.
 
+  IsTrustedIp(ip:int)
+      └─→ bool
+
+    Returns true if IP address is trustworthy.
+
+    If the ProgramTrustedIp() function has NOT been called then redbean
+    will consider the networks 127.0.0.0/8, 10.0.0.0/8, 172.16.0.0/12,
+    and 192.168.0.0/16 to be trustworthy too. If ProgramTrustedIp() HAS
+    been called at some point earlier in your redbean's lifecycle, then
+    it'll trust the IPs and network subnets you specify instead.
+
+    The network interface addresses used by the host machine are always
+    considered trustworthy, e.g. 127.0.0.1. This may change soon, if we
+    decide to export a GetHostIps() API which queries your NIC devices.
+
+  ProgramTrustedIp(ip:int[, cidr:int])
+
+    Trusts an IP address or network.
+
+    This function may be used to configure the IsTrustedIp() function
+    which is how redbean determines if a client is allowed to send us
+    headers like X-Forwarded-For (cf GetRemoteAddr vs. GetClientAddr)
+    without them being ignored. Trusted IPs is also how redbean turns
+    off token bucket rate limiting selectively, so be careful. Here's
+    an example of how you could trust all of Cloudflare's IPs:
+
+        ProgramTrustedIp(ParseIp("103.21.244.0"), 22);
+        ProgramTrustedIp(ParseIp("103.22.200.0"), 22);
+        ProgramTrustedIp(ParseIp("103.31.4.0"), 22);
+        ProgramTrustedIp(ParseIp("104.16.0.0"), 13);
+        ProgramTrustedIp(ParseIp("104.24.0.0"), 14);
+        ProgramTrustedIp(ParseIp("108.162.192.0"), 18);
+        ProgramTrustedIp(ParseIp("131.0.72.0"), 22);
+        ProgramTrustedIp(ParseIp("141.101.64.0"), 18);
+        ProgramTrustedIp(ParseIp("162.158.0.0"), 15);
+        ProgramTrustedIp(ParseIp("172.64.0.0"), 13);
+        ProgramTrustedIp(ParseIp("173.245.48.0"), 20);
+        ProgramTrustedIp(ParseIp("188.114.96.0"), 20);
+        ProgramTrustedIp(ParseIp("190.93.240.0"), 20);
+        ProgramTrustedIp(ParseIp("197.234.240.0"), 22);
+        ProgramTrustedIp(ParseIp("198.41.128.0"), 17);
+
+    Although you might want consider trusting redbean's open source
+    freedom embracing solution to DDOS protection instead!
+
+  ProgramTokenBucket(
+      [replenish:num[, cidr:int[, reject:int[, ignore:int[, ban:int]]]]])
+
+    Enables DDOS protection.
+
+    Imagine you have 2**32 buckets, one for each IP address. Each bucket
+    can hold about 127 tokens. Every second a background worker puts one
+    token in each bucket. When a TCP client socket is opened, it takes a
+    token from its bucket, and then proceeds. If the bucket holds only a
+    third of its original tokens, then redbean sends them a 429 warning.
+    If the client ignores this warning and keeps sending requests, until
+    there's no tokens left, then the banhammer finally comes down.
+
+        function OnServerStart()
+            ProgramTokenBucket()
+            ProgramTrustedIp(ParseIp('x.x.x.x'), 32)
+            assert(unix.setrlimit(unix.RLIMIT_NPROC, 1000, 1000))
+        end
+
+    This model of network rate limiting generously lets people "burst" a
+    tiny bit. For example someone might get a strong craving for content
+    and smash the reload button in Chrome 64 times in a few seconds. But
+    since the client only get 1 new token per second, they'd better cool
+    their heels for a few minutes after doing that. This amount of burst
+    can be altered by choosing the `reject` / `ignore` / `ban` threshold
+    arguments. For example, if the `reject` parameter is set to 126 then
+    no bursting is allowed, which probably isn't a good idea.
+
+    redbean is programmed to acquire a token immediately after accept()
+    is called from the main server process, which is well before fork()
+    or read() or any Lua code happens. redbean then takes action, based
+    on the token count, which can be accept / reject / ignore / ban. If
+    redbean determines a ban is warrented, then 4-byte datagram is sent
+    to the unix domain socket `/var/run/blackhole.sock` which should be
+    operated using the blackholed program we distribute separately.
+
+    The trick redbean uses on Linux for example is insert rules in your
+    raw prerouting table. redbean is very fast at the application layer
+    so the biggest issue we've encountered in production is are kernels
+    themselves, and programming the raw prerouting table dynamically is
+    how we solved that.
+
+    `replenish` is the number of times per second a token should be
+    added to each bucket. The default value is 1 which means one token
+    is granted per second to all buckets. The minimum value is 1/3600
+    which means once per hour. The maximum value for this setting is
+    1e6, which means once every microsecond.
+
+    `cidr` is the specificity of judgement.  Since creating 2^32 buckets
+    would need 4GB of RAM, redbean defaults this value to 24 which means
+    filtering applies to class c network blocks (i.e. x.x.x.*), and your
+    token buckets only take up 2^24 bytes of RAM (16MB). This can be set
+    to any number on the inclusive interval [8,32], where having a lower
+    number means you use less ram/cpu, but splash damage applies more to
+    your clients; whereas higher numbers means more ram/cpu usage, while
+    ensuring rate limiting only applies to specific compromised actors.
+
+    `reject` is the token count or treshold at which redbean should send
+    429 Too Many Request warnings to the client. Permitted values can be
+    anywhere between -1 and 126 inclusively. The default value is 30 and
+    -1 means to disable (assuming AcquireToken() will be used).
+
+    `ignore` is the token count or treshold, at which redbean should try
+    simply ignoring clients and close the connection without logging any
+    kind of warning, and without sending any response. The default value
+    for this setting is `MIN(reject / 2, 15)`. This must be less than or
+    equal to the `reject` setting. Allowed values are [-1,126] where you
+    can use -1 as a means of disabling `ignore`.
+
+    `ban` is the token count at which redbean should report IP addresses
+    to the blackhole daemon via a unix-domain socket datagram so they'll
+    get banned in the kernel routing tables. redbean's default value for
+    this setting is `MIN(ignore / 10, 1)`. Permitted values are [-1,126]
+    where -1 may be used as a means of disabling the `ban` feature.
+
+    This function throws an exception if the constraints described above
+    are not the case. Warnings are logged should redbean fail to connect
+    to the blackhole daemon, assuming it hasn't been disabled. It's safe
+    to use load balancing tools when banning is enabled, since you can't
+    accidentally ban your own network interface addresses, loopback ips,
+    or ProgramTrustedIp() addresses where these rate limits don't apply.
+
+    It's assumed will be called from the .init.lua global scope although
+    it could be used in interpreter mode, or from a forked child process
+    in which case the only processes that'll have ability to use it will
+    be that same process, and any descendent processes. This function is
+    only able to be called once.
+
+    This feature is not available in unsecure mode.
+
+  AcquireToken([ip:uint32])
+      └─→ int8
+
+    Atomically acquires token.
+
+    This routine atomically acquires a single token for an `ip` address.
+    The return value is the token count before the subtraction happened.
+    No action is taken based on the count, since the caller will decide.
+
+    `ip` should be an IPv4 address and this defaults to GetClientAddr(),
+    although other interpretations of its meaning are possible.
+
+    Your token buckets are stored in shared memory so this can be called
+    from multiple forked processes. which operate on the same values.
+
+  CountTokens([ip:uint32])
+      └─→ int8
+
+    Counts number of tokens in bucket.
+
+    This function is the same as AcquireToken() except no subtraction is
+    performed, i.e. no token is taken.
+
+    `ip` should be an IPv4 address and this defaults to GetClientAddr(),
+    although other interpretations of its meaning are possible.
+
+  Blackhole(ip:uint32)
+      └─→ bool
+
+    Sends IP address to blackholed service.
+
+    ProgramTokenBucket() needs to be called beforehand. The default
+    settings will blackhole automatically, during the accept() loop
+    based on the banned threshold. However if your Lua code calls
+    AcquireToken() manually, then you'll need this function to take
+    action on the returned values.
+
+    This function returns true if a datagram could be sent sucessfully.
+    Otherwise false is returned, which can happen if blackholed isn't
+    running, or if a lot of processes are sending messages to it and the
+    operation would have blocked.
+
+    It's assumed that the blackholed service is running locally in the
+    background.
+
 
 ────────────────────────────────────────────────────────────────────────────────
-
 CONSTANTS
 
   kLogDebug
@@ -1514,8 +2118,8 @@ CONSTANTS
           Logging anything at this level will result in a backtrace and
           process exit.
 
+
 ────────────────────────────────────────────────────────────────────────────────
-
 LSQLITE3 MODULE
 
   Please refer to the LuaSQLite3 Documentation.
@@ -1546,13 +2150,8 @@ LSQLITE3 MODULE
   project. Most of the unsupported APIs relate to pointers and database
   notification hooks.
 
-  redbean also currently disables SQLite features which don't make sense for
-  production serving, such as ALTER, VACUUM, ANALYZE, etc. For that reason
-  we provide an APE build of the SQLite shell which you can use to
-  administrate your redbean database. See the sqlite3.com download above.
 
 ────────────────────────────────────────────────────────────────────────────────
-
 RE MODULE
 
   This module exposes an API for POSIX regular expressions which enable you
@@ -1561,29 +2160,144 @@ RE MODULE
 
     # Example IPv4 Address Regular Expression (see also ParseIP)
     p = re.compile([[^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})$]])
-    m,a,b,c,d = p:search(𝑠)
+    m,a,b,c,d = assert(p:search(𝑠))
     if m then
       print("ok", tonumber(a), tonumber(b), tonumber(c), tonumber(d))
     else
       print("not ok")
     end
 
-  re.search(regex:str,text:str[,flags:int]) → [match[,group_1,...]]
-          Shortcut for re.compile plus regex_t*:search.
+  re.search(regex:str, text:str[, flags:int])
+      ├─→ match:str[, group1:str, ...]
+      └─→ nil, re.Errno
 
-  re.compile(regex:str[,flags:int]) → regex_t*
-          Compiles regular expression, using the POSIX extended syntax. This
-          has an O(2^𝑛) cost, so it's a good idea to do this from your
-          /.init.lua file. Flags may contain re.BASIC, re.ICASE, re.NOSUB,
-          and/or re.NEWLINE. See also regcomp() from libc.
+          Searches for regular expression match in text.
 
-  regex_t*:search(text:str[,flags:int]) → [match[,group_1,...]]
-          Executes regular expression. This has an O(𝑛) cost. This returns
-          nothing (nil) if the pattern doesn't match anything. Otherwise it
-          pushes the matched substring and any parenthesis-captured values
-          too. Flags may contain re.NOTBOL or re.NOTEOL to indicate whether
-          or not text should be considered at the start and/or end of a
-          line.
+          This is a shorthand notation roughly equivalent to:
+
+              preg = re.compile(regex)
+              patt = preg:search(re, text)
+
+          `flags` defaults to zero and may have any of:
+
+          - `re.BASIC`
+          - `re.ICASE`
+          - `re.NEWLINE`
+          - `re.NOSUB`
+          - `re.NOTBOL`
+          - `re.NOTEOL`
+
+          This has exponential complexity. Please use re.compile() to
+          compile your regular expressions once from `/.init.lua`. This
+          API exists for convenience. This isn't recommended for prod.
+
+          This uses POSIX extended syntax by default.
+
+  re.compile(regex:str[, flags:int]) → re.Regex
+      ├─→ preg:re.Regex
+      └─→ nil, re.Errno
+
+          Compiles regular expression.
+
+          `flags` defaults to zero and may have any of:
+
+          - `re.BASIC`
+          - `re.ICASE`
+          - `re.NEWLINE`
+          - `re.NOSUB`
+
+          This has an O(2^𝑛) cost. Consider compiling regular
+          expressions once from your `/.init.lua` file.
+
+          If `regex` is an untrusted user value, then `unix.setrlimit`
+          should be used to impose cpu and memory quotas for security.
+
+          This uses POSIX extended syntax by default.
+
+────────────────────────────────────────────────────────────────────────────────
+ RE REGEX OBJECT
+
+  re.Regex:search(text:str[, flags:int])
+      ├─→ match:str[, group1:str, ...]
+      └─→ nil, re.Errno
+
+          Executes precompiled regular expression.
+
+          Returns nothing (nil) if the pattern doesn't match anything.
+          Otherwise it pushes the matched substring and any
+          parenthesis-captured values too. Flags may contain re.NOTBOL
+          or re.NOTEOL to indicate whether or not text should be
+          considered at the start and/or end of a line.
+
+          `flags` defaults to zero and may have any of:
+
+          - `re.NOTBOL`
+          - `re.NOTEOL`
+
+          This has an O(𝑛) cost.
+
+────────────────────────────────────────────────────────────────────────────────
+ RE ERRNO OBJECT
+
+  re.Errno:errno()
+      └─→ errno:int
+
+    Returns regex error number.
+
+  re.Errno:doc()
+      └─→ description:str
+
+    Returns English string describing error code.
+
+  re.Errno:__tostring()
+      └─→ str
+
+    Delegates to re.Errno:doc()
+
+────────────────────────────────────────────────────────────────────────────────
+ RE ERRORS
+
+  re.NOMATCH
+    No match
+
+  re.BADPAT
+    Invalid regex
+
+  re.ECOLLATE
+    Unknown collating element
+
+  re.ECTYPE
+    Unknown character class name
+
+  re.EESCAPE
+    Trailing backslash
+
+  re.ESUBREG
+    Invalid back reference
+
+  re.EBRACK
+    Missing `]`
+
+  re.EPAREN
+    Missing `)`
+
+  re.EBRACE
+    Missing `}`
+
+  re.BADBR
+    Invalid contents of `{}`
+
+  re.ERANGE
+    Invalid character range.
+
+  re.ESPACE
+    Out of memory
+
+  re.BADRPT
+    Repetition not preceded by valid expression
+
+────────────────────────────────────────────────────────────────────────────────
+ RE FLAGS
 
   re.BASIC
           Use this flag if you prefer the default POSIX regex syntax. We use
@@ -1599,30 +2313,121 @@ RE MODULE
           may only be used with re.compile and re.search.
 
   re.NEWLINE
-          Use this flag to change the handling of NEWLINE (\x0a) characters.
-          When this flag is set, (1) a NEWLINE shall not be matched by a "."
-          or any form of a non-matching list, (2) a "^" shall match the
-          zero-length string immediately after a NEWLINE (regardless of
-          re.NOTBOL), and (3) a "$" shall match the zero-length string
-          immediately before a NEWLINE (regardless of re.NOTEOL).
+          Use this flag to change the handling of NEWLINE (\x0a)
+          characters. When this flag is set, (1) a NEWLINE shall not be
+          matched by a "." or any form of a non-matching list, (2) a "^"
+          shall match the zero-length string immediately after a NEWLINE
+          (regardless of re.NOTBOL), and (3) a "$" shall match the
+          zero-length string immediately before a NEWLINE (regardless of
+          re.NOTEOL).
 
   re.NOSUB
           Causes re.search to only report success and failure. This is
-          reported via the API by returning empty string for success. This
-          flag may only be used with re.compile and re.search.
+          reported via the API by returning empty string for success.
+          This flag may only be used with re.compile and re.search.
 
   re.NOTBOL
-          The first character of the string pointed to by string is not the
-          beginning of the line. This flag may only be used with re.search
-          and regex_t*:search.
+          The first character of the string pointed to by string is not
+          the beginning of the line. This flag may only be used with
+          re.search and re.Regex:search.
 
   re.NOTEOL
-          The last character of the string pointed to by string is not the
-          end of the line. This flag may only be used with re.search and
-          regex_t*:search.
+          The last character of the string pointed to by string is not
+          the end of the line. This flag may only be used with re.search
+          and re.Regex:search.
+
 
 ────────────────────────────────────────────────────────────────────────────────
-
+PATH MODULE
+
+  The path module may be used to manipulate unix paths.
+
+  Note that we use unix paths on Windows. For example, if you have a
+  path like C:\foo\bar then it should be /c/foo/bar with redbean. It
+  should also be noted the unix module is more permissive when using
+  Windows paths, where translation to win32 is very light.
+
+  path.dirname(str)
+      └─→ str
+
+    Strips final component of path, e.g.
+
+        path      │ dirname
+        ───────────────────
+        .         │ .
+        ..        │ .
+        /         │ /
+        usr       │ .
+        /usr/     │ /
+        /usr/lib  │ /usr
+        /usr/lib/ │ /usr
+
+  path.basename(path:str)
+      └─→ str
+
+    Returns final component of path, e.g.
+
+        path      │ basename
+        ─────────────────────
+        .         │ .
+        ..        │ ..
+        /         │ /
+        usr       │ usr
+        /usr/     │ usr
+        /usr/lib  │ lib
+        /usr/lib/ │ lib
+
+  path.join(str, ...)
+      └─→ str
+
+    Concatenates path components, e.g.
+
+        x         │ y        │ joined
+        ─────────────────────────────────
+        /         │ /        │ /
+        /usr      │ lib      │ /usr/lib
+        /usr/     │ lib      │ /usr/lib
+        /usr/lib  │ /lib     │ /lib
+
+    You may specify 1+ arguments.
+
+    Specifying no arguments will raise an error. If nil arguments are
+    specified, then they're skipped over. If exclusively nil arguments
+    are passed, then nil is returned. Empty strings behave similarly to
+    nil, but unlike nil may coerce a trailing slash.
+
+  path.exists(path:str)
+      └─→ bool
+
+    Returns true if path exists.
+
+    This function is inclusive of regular files, directories, and
+    special files. Symbolic links are followed are resolved. On error,
+    false is returned.
+
+  path.isfile(path:str)
+      └─→ bool
+
+    Returns true if path exists and is regular file.
+
+    Symbolic links are not followed. On error, false is returned.
+
+  path.isdir(path:str)
+      └─→ bool
+
+    Returns true if path exists and is directory.
+
+    Symbolic links are not followed. On error, false is returned.
+
+  path.islink(path:str)
+      └─→ bool
+
+    Returns true if path exists and is symbolic link.
+
+    Symbolic links are not followed. On error, false is returned.
+
+
+────────────────────────────────────────────────────────────────────────────────
 MAXMIND MODULE
 
   This module may be used to get city/country/asn/etc from IPs, e.g.
@@ -1643,11 +2448,105 @@ MAXMIND MODULE
 
   For further details, please see maxmind.lua in redbean-demo.com.
 
+
 ────────────────────────────────────────────────────────────────────────────────
-
+FINGER MODULE
+
+  This is an experimental module that, like the maxmind module, gives
+  you insight into what kind of device is connecting to your redbean.
+  This module can help you protect your redbean because it provides
+  tools for identifying clients that misrepresent themselves. For
+  example the User-Agent header might report itself as a Windows
+  computer when the SYN packet says it's a Linux computer.
+
+      function OnServerListen(fd, ip, port)
+         unix.setsockopt(fd, unix.SOL_TCP, unix.TCP_SAVE_SYN, true)
+         return false
+      end
+
+      function OnClientConnection(ip, port, serverip, serverport)
+         fd = GetClientFd()
+         syn = unix.getsockopt(fd, unix.SOL_TCP, unix.TCP_SAVED_SYN)
+      end
+
+      function OnHttpRequest()
+         Log(kLogInfo, "client is running %s and reports %s" % {
+                finger.GetSynFingerOs(finger.FingerSyn(syn)),
+                GetHeader('User-Agent')})
+         Route()
+      end
+
+  The following functions are provided.
+
+  finger.FingerSyn(syn_packet_bytes:str)
+      ├─→ synfinger:uint32
+      └─→ nil, error:str
+
+    Fingerprints IP+TCP SYN packet.
+
+    This returns a hash-like magic number that reflects the SYN packet
+    structure, e.g. ordering of options, maximum segment size, etc. We
+    make no guarantees this hashing algorithm won't change as we learn
+    more about the optimal way to fingerprint, so be sure to save your
+    syn packets too if you're using this feature, in case they need to
+    be rehashed in the future.
+
+    This function is nil/error propagating.
+
+  finger.GetSynFingerOs(synfinger:uint32)
+      ├─→ osname:str
+      └─→ nil, error:str
+
+    Fingerprints IP+TCP SYN packet.
+
+    If `synfinger` is a known hard-coded magic number, then one of the
+    following strings may be returned:
+
+      - `"LINUX"`
+      - `"WINDOWS"`
+      - `"XNU"`
+      - `"NETBSD"`
+      - `"FREEBSD"`
+      - `"OPENBSD"`
+
+    If this function returns nil, then one thing you can do to help is
+    file an issue and share with us your SYN packet specimens. The way
+    we prefer to receive them is in EncodeLua(syn_packet_bytes) format
+    along with details on the operating system which you must know.
+
+  finger.DescribeSyn(syn_packet_bytes:str)
+      ├─→ description:str
+      └─→ nil, error:str
+
+    Describes IP+TCP SYN packet.
+
+    The layout looks as follows:
+
+        TTL:OPTIONS:WSIZE:MSS
+
+    The `TTL`, `WSIZE`, and `MSS` fields are unsigned decimal fields.
+
+    The `OPTIONS` field communicates the ordering of the commonly used
+    subset of tcp options. The following character mappings are defined.
+    TCP options not on this list will be ignored.
+
+      - E: End of Option list
+      - N: No-Operation
+      - M: Maxmimum Segment Size
+      - K: Window Scale
+      - O: SACK Permitted
+      - A: SACK
+      - e: Echo (obsolete)
+      - r: Echo reply (obsolete)
+      - T: Timestamps
+
+    This function is nil/error propagating.
+
+
+────────────────────────────────────────────────────────────────────────────────
 ARGON2 MODULE
 
-  This module implemeents a password hashing algorithm based on blake2b
+  This module implements a password hashing algorithm based on blake2b
   that won the Password Hashing Competition.
 
   It can be used to securely store user passwords in your SQLite
@@ -1662,7 +2561,7 @@ ARGON2 MODULE
   uses Argon2 can just as easily become a denial of service vector. For
   example, you may want to consider throttling your login endpoint.
 
-  argon2.hash_encoded(pass:str, salt:int[, config:table])
+  argon2.hash_encoded(pass:str, salt:str[, config:table])
       ├─→ ascii:str
       └─→ nil, error:str
 
@@ -1711,8 +2610,8 @@ ARGON2 MODULE
             "password")
         true
 
+
 ────────────────────────────────────────────────────────────────────────────────
-
 UNIX MODULE
 
   This module exposes the low-level System Five system call interface.
@@ -1746,7 +2645,6 @@ UNIX MODULE
      - `O_NONBLOCK`   asks read/write to fail with EAGAIN rather than block
      - `O_DIRECT`     it's complicated (not supported on Apple and OpenBSD)
      - `O_DIRECTORY`  useful for stat'ing (hint on UNIX but required on NT)
-     - `O_TMPFILE`    try to make temp more secure (Linux and Windows only)
      - `O_NOFOLLOW`   fail if it's a symlink (zero on Windows)
      - `O_DSYNC`      it's complicated (zero on non-Linux/Apple)
      - `O_RSYNC`      it's complicated (zero on non-Linux/Apple)
@@ -1789,11 +2687,35 @@ UNIX MODULE
 
     Closes file descriptor.
 
+    This function should never be called twice for the same file
+    descriptor, regardless of whether or not an error happened. The file
+    descriptor is always gone after close is called. So it technically
+    always succeeds, but that doesn't mean an error should be ignored.
+    For example, on NFS a close failure could indicate data loss.
+
+    Closing does not mean that scheduled i/o operations have been
+    completed. You'd need to use fsync() or fdatasync() beforehand to
+    ensure that. You shouldn't need to do that normally, because our
+    close implementation guarantees a consistent view, since on systems
+    where it isn't guaranteed (like Windows) close will implicitly sync.
+
+    File descriptors are automatically closed on exit().
+
+    Returns `EBADF` if `fd` wasn't valid.
+
+    Returns `EINTR` possibly maybe.
+
+    Returns `EIO` if an i/o error occurred.
+
   unix.read(fd:int[, bufsiz:str[, offset:int]])
       ├─→ data:str
       └─→ nil, unix.Errno
 
     Reads from file descriptor.
+
+    This function returns empty string on end of file. The exception is
+    if `bufsiz` is zero, in which case an empty returned string means
+    the file descriptor works.
 
   unix.write(fd:int, data:str[, offset:int])
       ├─→ wrotebytes:int
@@ -1839,6 +2761,48 @@ UNIX MODULE
 
     This system call returns twice. The parent process gets the nonzero
     pid. The child gets zero.
+
+    Here's a simple usage example of creating subprocesses, where we
+    fork off a child worker from a main process hook callback to do some
+    independent chores, such as sending an HTTP request back to redbean.
+
+        -- as soon as server starts, make a fetch to the server
+        -- then signal redbean to shutdown when fetch is complete
+        local onServerStart = function()
+           if assert(unix.fork()) == 0 then
+              local ok, headers, body = Fetch('http://127.0.0.1:8080/test')
+              unix.kill(unix.getppid(), unix.SIGTERM)
+              unix.exit(0)
+           end
+        end
+        OnServerStart = onServerStart
+
+    We didn't need to use wait() here, because (a) we want redbean to go
+    back to what it was doing before as the Fetch() completes, and (b)
+    redbean's main process already has a zombie collector. However it's
+    a moot point, since once the fetch is done, the child process then
+    asks redbean to gracefully shutdown by sending SIGTERM its parent.
+
+    This is actually a situation where we *must* use fork, because the
+    purpose of the main redbean process is to call accept() and create
+    workers. So if we programmed redbean to use the main process to send
+    a blocking request to itself instead, then redbean would deadlock
+    and never be able to accept() the client.
+
+    While deadlocking is an extreme example, the truth is that latency
+    issues can crop up for the same reason that just cause jitter
+    instead, and as such, can easily go unnoticed. For example, if you
+    do something that takes longer than a few milliseconds from inside
+    your redbean heartbeat, then that's a few milliseconds in which
+    redbean is no longer concurrent, and tail latency is being added to
+    its ability to accept new connections. fork() does a great job at
+    solving this.
+
+    If you're not sure how long something will take, then when in doubt,
+    fork off a process. You can then report its completion to something
+    like SQLite. Redbean makes having lots of processes cheap. On Linux
+    they're about as lightweight as what heavyweight environments call
+    greenlets. You can easily have 10,000 Redbean workers on one PC.
 
     Here's some benchmarks for fork() performance across platforms:
 
@@ -1896,8 +2860,8 @@ UNIX MODULE
 
     `env` is a string list table. Values are coerced to strings. No
     ordering requirement is imposed. By convention, each string has its
-    key and value divided by an equals sign without spaces. If this
-    paremeter is not specified, it'll default to the C/C++ `environ`
+    key and value separated by an equals sign without spaces. If this
+    parameter is not specified, it'll default to the C/C++ `environ`
     variable which is inherited from the shell that launched redbean.
     It's the responsibility of the user to supply a sanitized environ
     when spawning untrusted processes.
@@ -1910,18 +2874,29 @@ UNIX MODULE
     `EAGAIN` is returned if you've enforced a max number of
     processes using `setrlimit(RLIMIT_NPROC)`.
 
-  unix.dup(oldfd:int[, newfd:int[, flags:int]])
+  unix.dup(oldfd:int[, newfd:int[, flags:int[, lowest:int]]])
       ├─→ newfd:int
       └─→ nil, unix.Errno
 
     Duplicates file descriptor.
 
-    `newfd` defaults to the lowest number available file descriptor.
-    If the new number is specified and it's already open, then it'll
-    be silently closed before the duplication happens.
+    `newfd` may be specified to choose a specific number for the new
+    file descriptor. If it's already open, then the preexisting one will
+    be silently closed. `EINVAL` is returned if `newfd` equals `oldfd`.
 
     `flags` can have `O_CLOEXEC` which means the returned file
     descriptors will be automatically closed upon execve().
+
+    `lowest` defaults to zero and defines the lowest numbered file
+    descriptor that's acceptable to use. If `newfd` is specified then
+    `lowest` is ignored. For example, if you wanted to duplicate
+    standard input, then:
+
+        stdin2 = assert(unix.dup(0, nil, unix.O_CLOEXEC, 3))
+
+    Will ensure that, in the rare event standard output or standard
+    error are closed, you won't accidentally duplicate standard input to
+    those numbers.
 
   unix.pipe([flags:int])
       ├─→ reader:int, writer:int
@@ -2300,18 +3275,159 @@ UNIX MODULE
     thereby assisting with simple absolute filename checks in addition
     to enabling one to exceed the traditional 260 character limit.
 
-  unix.fcntl(fd:int, cmd:int, ...)
-      ├─→ ...
+  unix.rmrf(path:str)
+      ├─→ true
       └─→ nil, unix.Errno
 
-    Manipulates file descriptor.
+    Recursively removes filesystem path.
 
-    Setting `cmd` to `F_GETFD`, `F_SETFD`, `F_GETFL` or `F_SETFL`
-    lets you query and/or change the status of file descriptors. For
-    example, it's possible using this to change `FD_CLOEXEC`.
+    Like unix.makedirs() this function isn't actually a system call but
+    rather is a Libc convenience wrapper. It's intended to be equivalent
+    to using the UNIX shell's `rm -rf path` command.
 
-    [work in progress] POSIX advisory locks can be controlled by setting
-    `cmd` to `F_UNLCK`, `F_RDLCK`, `F_WRLCK`, `F_SETLK`, or `F_SETLKW`.
+    `path` is the file or directory path you wish to destroy.
+
+  unix.fcntl(fd:int, unix.F_GETFD)
+      ├─→ flags:int
+      └─→ nil, unix.Errno
+
+    Returns file descriptor flags.
+
+    The returned `flags` may include any of:
+
+    - `unix.FD_CLOEXEC` if `fd` was opened with `unix.O_CLOEXEC`.
+
+    Returns `EBADF` if `fd` isn't open.
+
+  unix.fcntl(fd:int, unix.F_SETFD, flags:int)
+      ├─→ true
+      └─→ nil, unix.Errno
+
+    Sets file descriptor flags.
+
+    `flags` may include any of:
+
+    - `unix.FD_CLOEXEC` to re-open `fd` with `unix.O_CLOEXEC`.
+
+    Returns `EBADF` if `fd` isn't open.
+
+  unix.fcntl(fd:int, unix.F_GETFL)
+      ├─→ flags:int
+      └─→ nil, unix.Errno
+
+    Returns file descriptor status flags.
+
+    `flags & unix.O_ACCMODE` includes one of:
+
+    - `O_RDONLY`
+    - `O_WRONLY`
+    - `O_RDWR`
+
+    Examples of values `flags & ~unix.O_ACCMODE` may include:
+
+    - `O_NONBLOCK`
+    - `O_APPEND`
+    - `O_SYNC`
+    - `O_ASYNC`
+    - `O_NOATIME` on Linux
+    - `O_RANDOM` on Windows
+    - `O_SEQUENTIAL` on Windows
+    - `O_DIRECT` on Linux/FreeBSD/NetBSD/Windows
+
+    Examples of values `flags & ~unix.O_ACCMODE` won't include:
+
+    - `O_CREAT`
+    - `O_TRUNC`
+    - `O_EXCL`
+    - `O_NOCTTY`
+
+    Returns `EBADF` if `fd` isn't open.
+
+  unix.fcntl(fd:int, unix.F_SETFL, flags:int)
+      ├─→ true
+      └─→ nil, unix.Errno
+
+    Changes file descriptor status flags.
+
+    Examples of values `flags` may include:
+
+    - `O_NONBLOCK`
+    - `O_APPEND`
+    - `O_SYNC`
+    - `O_ASYNC`
+    - `O_NOATIME` on Linux
+    - `O_RANDOM` on Windows
+    - `O_SEQUENTIAL` on Windows
+    - `O_DIRECT` on Linux/FreeBSD/NetBSD/Windows
+
+    These values should be ignored:
+
+    - `O_RDONLY`, `O_WRONLY`, `O_RDWR`
+    - `O_CREAT`, `O_TRUNC`, `O_EXCL`
+    - `O_NOCTTY`
+
+    Returns `EBADF` if `fd` isn't open.
+
+  unix.fcntl(fd:int, unix.F_SETLK[, type[, start[, len[, whence]]]])
+  unix.fcntl(fd:int, unix.F_SETLKW[, type[, start[, len[, whence]]]])
+      ├─→ true
+      └─→ nil, unix.Errno
+
+    Acquires lock on file interval.
+
+    POSIX Advisory Locks allow multiple processes to leave voluntary
+    hints to each other about which portions of a file they're using.
+
+    The command may be:
+
+    - `F_SETLK` to acquire lock if possible
+    - `F_SETLKW` to wait for lock if necessary
+
+    `fd` is file descriptor of open() file.
+
+    `type` may be one of:
+
+    - `F_RDLCK` for read lock (default)
+    - `F_WRLCK` for read/write lock
+    - `F_UNLCK` to unlock
+
+    `start` is 0-indexed byte offset into file. The default is zero.
+
+    `len` is byte length of interval. Zero is the default and it means
+    until the end of the file.
+
+    `whence` may be one of:
+
+    - `SEEK_SET` start from beginning (default)
+    - `SEEK_CUR` start from current position
+    - `SEEK_END` start from end
+
+    Returns `EAGAIN` if lock couldn't be acquired. POSIX says this
+    theoretically could also be `EACCES` but we haven't seen this
+    behavior on any of our supported platforms.
+
+    Returns `EBADF` if `fd` wasn't open.
+
+  unix.fcntl(fd:int, unix.F_GETLK[, type[, start[, len[, whence]]]])
+      ├─→ unix.F_UNLCK
+      ├─→ type, start, len, whence, pid
+      └─→ nil, unix.Errno
+
+    Acquires information about POSIX advisory lock on file.
+
+    This function accepts the same parameters as fcntl(F_SETLK) and
+    tells you if the lock acquisition would be successful for a given
+    range of bytes. If locking would have succeeded, then F_UNLCK is
+    returned. If the lock would not have succeeded, then information
+    about a conflicting lock is returned.
+
+    Returned `type` may be `F_RDLCK` or `F_WRLCK`.
+
+    Returned `pid` is the process id of the current lock owner.
+
+    This function is currently not supported on Windows.
+
+    Returns `EBADF` if `fd` wasn't open.
 
   unix.getsid(pid:int)
       ├─→ sid:int
@@ -2432,6 +3548,12 @@ UNIX MODULE
 
     Returns `ENOSYS` on Windows NT if `uid` isn't `getuid()`.
 
+  unix.setfsuid(uid:int)
+      ├─→ true
+      └─→ nil, unix.Errno
+
+    Sets user id for file system ops.
+
   unix.setgid(gid:int)
       ├─→ true
       └─→ nil, unix.Errno
@@ -2510,13 +3632,16 @@ UNIX MODULE
 
     - `CLOCK_REALTIME`: universally supported
     - `CLOCK_REALTIME_FAST`: ditto but faster on freebsd
+    - `CLOCK_REALTIME_PRECISE`: ditto but better on freebsd
+    - `CLOCK_REALTIME_COARSE`: : like `CLOCK_REALTIME_FAST` but needs Linux 2.6.32+
     - `CLOCK_MONOTONIC`: universally supported
     - `CLOCK_MONOTONIC_FAST`: ditto but faster on freebsd
-    - `CLOCK_MONOTONIC_RAW`: nearly universally supported
+    - `CLOCK_MONOTONIC_PRECISE`: ditto but better on freebsd
+    - `CLOCK_MONOTONIC_COARSE`: : like `CLOCK_MONOTONIC_FAST` but needs Linux 2.6.32+
+    - `CLOCK_MONOTONIC_RAW`: is actually monotonic but needs Linux 2.6.28+
     - `CLOCK_PROCESS_CPUTIME_ID`: linux and bsd
     - `CLOCK_THREAD_CPUTIME_ID`: linux and bsd
-    - `CLOCK_REALTIME_COARSE`: : linux and openbsd
-    - `CLOCK_MONOTONIC_COARSE`: linux
+    - `CLOCK_MONOTONIC_COARSE`: linux, freebsd
     - `CLOCK_PROF`: linux and netbsd
     - `CLOCK_BOOTTIME`: linux and openbsd
     - `CLOCK_REALTIME_ALARM`: linux-only
@@ -2529,7 +3654,7 @@ UNIX MODULE
 
     This function goes fastest on Linux and Windows.
 
-  unix.nanosleep(seconds:int, nanos:int)
+  unix.nanosleep(seconds:int[, nanos:int])
       ├─→ remseconds:int, remnanos:int
       └─→ nil, unix.Errno
 
@@ -2556,7 +3681,7 @@ UNIX MODULE
 
     `whence` can be one of:
 
-    - `SEEK_SET`: Sets the file position to `offset`
+    - `SEEK_SET`: Sets the file position to `offset` [default]
     - `SEEK_CUR`: Sets the file position to `position + offset`
     - `SEEK_END`: Sets the file position to `filesize + offset`
 
@@ -2584,6 +3709,8 @@ UNIX MODULE
       ├─→ fd:int
       └─→ nil, unix.Errno
 
+    Creates socket endpoint for process communication.
+
     `family` defaults to `AF_INET` and can be:
 
     - `AF_INET`: Creates Internet Protocol Version 4 (IPv4) socket.
@@ -2604,14 +3731,14 @@ UNIX MODULE
     - `SOCK_CLOEXEC`
     - `SOCK_NONBLOCK`
 
-    `protocol` defaults to `IPPROTO_TCP` for AF_INET` and `0` for
-    `AF_UNIX`. It can also be:
+    `protocol` may be any of:
 
-    - `IPPROTO_IP`
-    - `IPPROTO_ICMP`
+    - `0` to let kernel choose [default]
     - `IPPROTO_TCP`
     - `IPPROTO_UDP`
     - `IPPROTO_RAW`
+    - `IPPROTO_IP`
+    - `IPPROTO_ICMP`
 
   unix.socketpair([family:int[, type:int[, protocol:int]]])
       ├─→ fd1:int, fd2:int
@@ -2679,6 +3806,17 @@ UNIX MODULE
 
     `level` and `optname` may be one of the following pairs. The ellipses
     type signature above changes depending on which options are used.
+
+    `optname` is the option feature magic number. The constants for
+    these will be set to `0` if the option isn't supported on the host
+    platform.
+
+    Raises `ENOPROTOOPT` if your `level` / `optname` combination isn't
+    valid, recognized, or supported on the host platform.
+
+    Raises `ENOTSOCK` if `fd` is valid but isn't a socket.
+
+    Raises `EBADF` if `fd` isn't valid.
 
     unix.getsockopt(fd:int, level:int, optname:int)
         ├─→ value:int
@@ -2754,11 +3892,21 @@ UNIX MODULE
     close(). Sometimes it's desirable to have extra assurance on errors
     happened, even if it comes at the cost of performance.
 
-    Returns `EINVAL` if settings other than the above are used.
+    unix.setsockopt(serverfd:int, unix.SOL_TCP, unix.TCP_SAVE_SYN, enabled:int)
+        ├─→ true
+        └─→ nil, unix.Errno
+    unix.getsockopt(clientfd:int, unix.SOL_TCP, unix.TCP_SAVED_SYN)
+        ├─→ syn_packet_bytes:str
+        └─→ nil, unix.Errno
 
-    Returns `ENOSYS` if setting isn't supported by the host OS.
+    This `TCP_SAVED_SYN` option may be used to retrieve the bytes of the
+    TCP SYN packet that the client sent when the connection for `fd` was
+    opened. In order for this to work, `TCP_SAVE_SYN` must have been set
+    earlier on the listening socket. This is Linux-only. You can use the
+    `OnServerListen` hook to enable SYN saving in your Redbean. When the
+    `TCP_SAVE_SYN` option isn't used, this may return empty string.
 
-  unix.poll({[fd:int]=events:int, ...}[, timeoutms:int])
+  unix.poll({[fd:int]=events:int, ...}[, timeoutms:int[, mask:unix.Sigset]])
       ├─→ {[fd:int]=revents:int, ...}
       └─→ nil, unix.Errno
 
@@ -2769,9 +3917,41 @@ UNIX MODULE
     keys are ignored by poll(). The returned table will be a subset of
     the supplied file descriptors.
 
-    `timeoutms` is the number of seconds to block. If this is set to -1
-    then that means block as long as it takes until there's an event or
-    an interrupt. If the timeout expires, an empty table is returned.
+    `events` and `revents` may be any combination (using bitwise OR) of:
+
+    - `POLLIN` (events, revents): There is data to read.
+    - `POLLOUT` (events, revents): Writing is now possible, although may
+      still block if available space in a socket or pipe is exceeded
+      (unless `O_NONBLOCK` is set).
+    - `POLLPRI` (events, revents): There is some exceptional condition
+      (for example, out-of-band data on a TCP socket).
+    - `POLLRDHUP` (events, revents): Stream socket peer closed
+       connection, or shut down writing half of connection.
+    - `POLLERR` (revents): Some error condition.
+    - `POLLHUP` (revents): Hang up. When reading from a channel such as
+       a pipe or a stream socket, this event merely indicates that the
+       peer closed its end of the channel.
+    - `POLLNVAL` (revents): Invalid request.
+
+    `timeoutms` is the number of milliseconds to block. The default is
+    -1 which means block indefinitely until there's an event or an
+    interrupt. If the timeout elapses without any such events, an empty
+    table is returned. A timeout of zero means non-blocking.
+
+    `mask` serves the purpose of enabling poll to listen for both file
+    descriptor events and signals. It's equivalent to saying:
+
+        oldmask = unix.sigprocmask(unix.SIG_SETMASK, mask);
+        unix.poll(fds, timeout);
+        unix.sigprocmask(unix.SIG_SETMASK, oldmask);
+
+    Except it'll happen atomically on supported platforms. The only
+    exceptions are MacOS and NetBSD where this behavior is simulated by
+    the polyfill. Atomicity is helpful for unit testing signal behavior.
+
+    `EINTR` is returned if the kernel decided to deliver a signal to a
+    signal handler instead during your call. This is a @norestart system
+    call that always returns `EINTR` even if `SA_RESTART` is in play.
 
   unix.gethostname()
       ├─→ host:str
@@ -2829,6 +4009,8 @@ UNIX MODULE
       ├─→ data:str
       └─→ nil, unix.Errno
 
+    Receives message from a socket.
+
     `flags` may have any combination (using bitwise OR) of:
 
     - `MSG_WAITALL`
@@ -2840,6 +4022,8 @@ UNIX MODULE
       ├─→ data:str, ip:uint32, port:uint16
       ├─→ data:str, unixpath:str
       └─→ nil, unix.Errno
+
+    Receives message from a socket.
 
     `flags` may have any combination (using bitwise OR) of:
 
@@ -2857,9 +4041,10 @@ UNIX MODULE
 
     `flags` may have any combination (using bitwise OR) of:
 
-    - `MSG_OOB`
-    - `MSG_DONTROUTE`
-    - `MSG_NOSIGNAL`
+    - `MSG_NOSIGNAL`: Don't SIGPIPE on EOF
+    - `MSG_OOB`: Send stream data through out of bound channel
+    - `MSG_DONTROUTE`: Don't go through gateway (for diagnostics)
+    - `MSG_MORE`: Manual corking to belay nodelay (0 on non-Linux)
 
   unix.sendto(fd:int, data:str, ip:uint32, port:uint16[, flags:int])
   unix.sendto(fd:int, data:str, unixpath:str[, flags:int])
@@ -2916,6 +4101,8 @@ UNIX MODULE
       ├─→ oldhandler:func|int, flags:int, mask:unix.Sigset
       └─→ nil, unix.Errno
 
+    Changes action taken upon receipt of a specific signal.
+
     `sig` can be one of:
 
     - `unix.SIGINT`
@@ -2971,22 +4158,29 @@ UNIX MODULE
 
     Example:
 
-        assert(unix.sigaction(unix.SIGUSR1, function(sig)
-           gotsigusr1 = true
-        end))
-        gotsigusr1 = false
-        assert(unix.raise(unix.SIGUSR1))
-        ok, err = unix.sigsuspend()
-        assert(err:errno == unix.EINTR)
-        if gotsigusr1
-           print('hooray the signal was delivered')
-        else
-           print('oh no some other signal was handled')
+        function OnSigUsr1(sig)
+          gotsigusr1 = true
         end
+        gotsigusr1 = false
+        oldmask = assert(unix.sigprocmask(unix.SIG_BLOCK, unix.Sigset(unix.SIGUSR1)))
+        assert(unix.sigaction(unix.SIGUSR1, OnSigUsr1))
+        assert(unix.raise(unix.SIGUSR1))
+        assert(not gotsigusr1)
+        ok, err = unix.sigsuspend(oldmask)
+        assert(not ok)
+        assert(err:errno() == unix.EINTR)
+        assert(gotsigusr1)
+        assert(unix.sigprocmask(unix.SIG_SETMASK, oldmask))
 
     It's a good idea to not do too much work in a signal handler.
 
-  unix.sigsuspend([mask:Sigmask])
+  unix.sigpending()
+      ├─→ mask:unix.Sigset
+      └─→ nil, unix.Errno
+
+    Returns the set of signals that are pending for delivery.
+
+  unix.sigsuspend([mask:unix.Sigset])
       └─→ nil, unix.Errno
 
     Waits for signal to be delivered.
@@ -3094,7 +4288,7 @@ UNIX MODULE
 
     See the unix.Rusage section below for details on returned fields.
 
-  unix.pledge([promises:str])
+  unix.pledge([promises:str[, execpromises:str[, mode:int]]])
       ├─→ true
       └─→ nil, unix.Errno
 
@@ -3103,84 +4297,271 @@ UNIX MODULE
     This can be used to sandbox your redbean workers. It allows finer
     customization compared to the `-S` flag.
 
+    Pledging causes most system calls to become unavailable. If a
+    forbidden system call is used, then the process will be killed. In
+    that case, on OpenBSD, your system log will explain which promise
+    you need. On Linux, we report the promise to stderr, with one
+    exception: reporting is currently not possible if you pledge exec.
+
+    Using pledge is irreversible. On Linux it causes PR_SET_NO_NEW_PRIVS
+    to be set on your process.
+
     By default exit and exit_group are always allowed. This is useful
     for processes that perform pure computation and interface with the
     parent via shared memory.
 
-    Currently only available on OpenBSD and Linux. On Linux, the default
-    action when your policy is violated is to return `EPERM`. On OpenBSD
-    the kernel will kill the process.
+    Once pledge is in effect, the chmod functions (if allowed) will not
+    permit the sticky/setuid/setgid bits to change. Linux will EPERM here
+    and OpenBSD should ignore those three bits rather than crashing.
+
+    User and group IDs also can't be changed once pledge is in effect.
+    OpenBSD should ignore the chown functions without crashing. Linux
+    will just EPERM.
+
+    Root access isn't required. Support is limited to OpenBSD and Linux
+    2.6.23+ (i.e. RHEL6 c. 2012) so long as Redbean is running directly
+    on the host system, i.e. not running in a userspace emulator like
+    Blink or Qemu. If your environment isn't supported, then pledge()
+    will return 0 and do nothing, rather than raising ENOSYS, so the
+    apps you share with others will err on the side of not breaking. If
+    a functionality check is needed, please use `unix.pledge(nil, nil)`
+    which is a no-op that will fail appropriately when the necessary
+    system support isn't available to impose security restrictions.
 
     `promises` is a string that may include any of the following groups
-    delimited by spaces.
+    delimited by spaces. This list has been curated to focus on the
+    system calls for which this module provides wrappers. See the
+    Cosmopolitan Libc pledge() documentation for a comprehensive and
+    authoritative list of raw system calls. Having the raw system call
+    list may be useful if you're executing foreign programs.
 
     stdio
 
-      Allows clock_getres, clock_gettime, close, dup, dup2, dup3,
-      fchdir, fstat, fsync, ftruncate, getdents, getegid, getrandom,
-      geteuid, getgid, getgroups, getitimer, getpgid, getpgrp, getpid,
-      getppid, getresgid, getresuid, getrlimit, getsid, gettimeofday,
-      getuid, lseek, madvise, brk, mmap, mprotect, munmap, nanosleep,
-      pipe, pipe2, poll, pread, preadv, pwrite, pwritev, read, readv,
-      recvfrom, recvmsg, select, sendmsg, sendto, setitimer, shutdown,
-      sigaction, sigprocmask, sigreturn, socketpair, umask, wait4,
-      write, writev.
+      Allows read, write, send, recv, recvfrom, close, clock_getres,
+      clock_gettime, dup, fchdir, fstat, fsync, fdatasync, ftruncate,
+      getdents, getegid, getrandom, geteuid, getgid, getgroups,
+      getitimer, getpgid, getpgrp, getpid, hgetppid, getresgid,
+      getresuid, getrlimit, getsid, gettimeofday, getuid, lseek,
+      madvise, brk, mmap/mprotect (PROT_EXEC isn't allowed), msync,
+      munmap, gethostname, nanosleep, pipe, pipe2, poll, setitimer,
+      shutdown, sigaction, sigsuspend, sigprocmask, socketpair, umask,
+      wait4, getrusage, ioctl(FIONREAD), ioctl(FIONBIO), ioctl(FIOCLEX),
+      ioctl(FIONCLEX), fcntl(F_GETFD), fcntl(F_SETFD), fcntl(F_GETFL),
+      fcntl(F_SETFL), raise, kill(getpid()).
 
     rpath
 
-      Allows chdir, getcwd, openat, fstatat, faccessat, readlinkat,
-      lstat, chmod, fchmod, fchmodat, chown, fchown, fchownat, fstat.
+      Allows chdir, getcwd, open, stat, fstat, access, readlink, chmod,
+      chmod, fchmod.
 
     wpath
 
-      Allows getcwd, openat, fstatat, faccessat, readlinkat, lstat,
-      chmod, fchmod, fchmodat, chown, fchown, fchownat, fstat.
+      Allows getcwd, open, stat, fstat, access, readlink, chmod, fchmod.
 
     cpath
 
-      Allows rename, renameat, link, linkat, symlink, symlinkat, unlink,
-      unlinkat, mkdir, mkdirat, rmdir.
-
-    dpath
-
-      Allows mknod
-
-    tmppath
-
-      Allows lstat, chmod, chown, unlink, fstat.
-
-    inet
-
-      Allows socket, listen, bind, connect, accept4, accept,
-      getpeername, getsockname, setsockopt, getsockopt.
+      Allows rename, link, symlink, unlink, mkdir, rmdir.
 
     fattr
 
-      Allows utimes, utimensat, chmod, fchmod, fchmodat, chown,
-      fchownat, lchown, fchown, utimes.
+      Allows chmod, fchmod, utimensat, futimens.
+
+    flock
+
+      Allows flock, fcntl(F_GETLK), fcntl(F_SETLK), fcntl(F_SETLKW).
+
+    tty
+
+      Allows isatty, tcgetwinsize, tcgets, tcsets, tcsetsw, tcsetsf.
+
+    inet
+
+      Allows socket (AF_INET), listen, bind, connect, accept,
+      getpeername, getsockname, setsockopt, getsockopt.
+
+    anet
+
+      Allows socket (AF_INET), listen, bind, accept,
+      getpeername, getsockname, setsockopt, getsockopt.
 
     unix
 
-      Allows socket, listen, bind, connect, accept4, accept,
+      Allows socket (AF_UNIX), listen, bind, connect, accept,
       getpeername, getsockname, setsockopt, getsockopt.
 
     dns
 
-      Allows sendto, recvfrom, socket, connect.
+      Allows sendto, recvfrom, socket(AF_INET), connect.
+
+    recvfd
+
+      Allows recvmsg, recvmmsg.
+
+    sendfd
+
+      Allows sendmsg, sendmmsg.
 
     proc
 
-      Allows fork, vfork, kill, getpriority, setpriority, setrlimit,
-      setpgid, setsid.
-
-    exec
-
-      Allows execve.
+      Allows fork, vfork, clone, kill, tgkill, getpriority, setpriority,
+      setrlimit, setpgid, setsid.
 
     id
 
       Allows setuid, setreuid, setresuid, setgid, setregid, setresgid,
       setgroups, setrlimit, getpriority, setpriority.
+
+    settime
+
+      Allows settimeofday and clock_adjtime.
+
+    chown
+
+      Allows chown.
+
+    unveil
+
+      Allows unveil().
+
+    exec
+
+      Allows execve.
+
+      If the executable in question needs a loader, then you will need
+      "rpath prot_exec" too. With APE, security is strongest when you
+      assimilate your binaries beforehand, using the --assimilate flag,
+      or the o//tool/build/assimilate.com program. On OpenBSD this is
+      mandatory.
+
+    prot_exec
+
+      Allows mmap(PROT_EXEC) and mprotect(PROT_EXEC).
+
+      This may be needed to launch non-static non-native executables,
+      such as non-assimilated APE binaries, or programs that link
+      dynamic shared objects, i.e. most Linux distro binaries.
+
+    `execpromises` only matters if "exec" is specified in `promises`. In
+    that case, this specifies the promises that'll apply once execve()
+    happens. If this is NULL then the default is used, which is
+    unrestricted. OpenBSD allows child processes to escape the sandbox
+    (so a pledged OpenSSH server process can do things like spawn a root
+    shell). Linux however requires monotonically decreasing privileges.
+    This function will will perform some validation on Linux to make
+    sure that `execpromises` is a subset of `promises`. Your libc
+    wrapper for execve() will then apply its SECCOMP BPF filter later.
+    Since Linux has to do this before calling sys_execve(), the executed
+    process will be weakened to have execute permissions too.
+
+    `mode` if specified should specify one penalty:
+
+      - `unix.PLEDGE_PENALTY_KILL_THREAD` causes the violating thread to
+        be killed. This is the default on Linux. It's effectively the
+        same as killing the process, since redbean has no threads. The
+        termination signal can't be caught and will be either `SIGSYS`
+        or `SIGABRT`. Consider enabling stderr logging below so you'll
+        know why your program failed. Otherwise check the system log.
+
+      - `unix.PLEDGE_PENALTY_KILL_PROCESS` causes the process and all
+        its threads to be killed. This is always the case on OpenBSD.
+
+      - `unix.PLEDGE_PENALTY_RETURN_EPERM` causes system calls to just
+        return an `EPERM` error instead of killing. This is a gentler
+        solution that allows code to display a friendly warning. Please
+        note this may lead to weird behaviors if the software being
+        sandboxed is lazy about checking error results.
+
+    `mode` may optionally bitwise or the following flags:
+
+      - `unix.PLEDGE_STDERR_LOGGING` enables friendly error message
+        logging letting you know which promises are needed whenever
+        violations occur. Without this, violations will be logged to
+        `dmesg` on Linux if the penalty is to kill the process. You
+        would then need to manually look up the system call number and
+        then cross reference it with the cosmopolitan libc pledge()
+        documentation. You can also use `strace -ff` which is easier.
+        This is ignored OpenBSD, which already has a good system log.
+        Turning on stderr logging (which uses SECCOMP trapping) also
+        means that the `unix.WTERMSIG()` on your killed processes will
+        always be `unix.SIGABRT` on both Linux and OpenBSD. Otherwise,
+        Linux prefers to raise `unix.SIGSYS`.
+
+  unix.unveil(path:str, permissions:str)
+      ├─→ true
+      └─→ nil, unix.Errno
+
+    Restricts filesystem operations, e.g.
+
+        unix.unveil(".", "r");     -- current dir + children visible
+        unix.unveil("/etc", "r");  -- make /etc readable too
+        unix.unveil(nil, nil);     -- commit and lock policy
+
+    Unveiling restricts a thread's view of the filesystem to a set of
+    allowed paths with specific privileges.
+
+    Once you start using unveil(), the entire file system is considered
+    hidden. You then specify, by repeatedly calling unveil(), which paths
+    should become unhidden. When you're finished, you call `unveil(nil,nil)`
+    which commits your policy, after which further use is forbidden, in
+    the current thread, as well as any threads or processes it spawns.
+
+    There are some differences between unveil() on Linux versus OpenBSD.
+
+    1. Build your policy and lock it in one go. On OpenBSD, policies take
+       effect immediately and may evolve as you continue to call unveil()
+       but only in a more restrictive direction. On Linux, nothing will
+       happen until you call `unveil(nil,nil)` which commits and locks.
+
+    2. Try not to overlap directory trees. On OpenBSD, if directory trees
+       overlap, then the most restrictive policy will be used for a given
+       file. On Linux overlapping may result in a less restrictive policy
+       and possibly even undefined behavior.
+
+    3. OpenBSD and Linux disagree on error codes. On OpenBSD, accessing
+       paths outside of the allowed set raises ENOENT, and accessing ones
+       with incorrect permissions raises EACCES. On Linux, both these
+       cases raise EACCES.
+
+    4. Unlike OpenBSD, Linux does nothing to conceal the existence of
+       paths. Even with an unveil() policy in place, it's still possible
+       to access the metadata of all files using functions like stat()
+       and open(O_PATH), provided you know the path. A sandboxed process
+       can always, for example, determine how many bytes of data are in
+       /etc/passwd, even if the file isn't readable. But it's still not
+       possible to use opendir() and go fishing for paths which weren't
+       previously known.
+
+    This system call is supported natively on OpenBSD and polyfilled on
+    Linux using the Landlock LSM[1].
+
+    This function requires OpenBSD or Linux 5.13+ (2022+). If the kernel
+    support isn't available (or we're in an emulator like Qemu or Blink)
+    then zero is returned and nothing happens (instead of raising
+    ENOSYS) because the files are still unveiled. Use `unix.unveil("",
+    nil)` to feature check the host system, which is defined as a no-op
+    that'll fail if the host system doesn't have the necessary features
+    that allow unix.unveil() impose bona-fide security restrictions.
+    Otherwise, if everything is good, a return value `>=0` is returned,
+    where `0` means OpenBSD, and `>=1` means Linux with Landlock LSM, in
+    which case the return code shall be the maximum supported Landlock
+    ABI version.
+
+    `path` is the file or directory to unveil
+
+    `permissions` is a string consisting of zero or more of the
+    following characters:
+
+      - 'r' makes `path` available for read-only path operations,
+        corresponding to the pledge promise "rpath".
+
+      - `w` makes `path` available for write operations, corresponding
+        to the pledge promise "wpath".
+
+      - `x` makes `path` available for execute operations,
+        corresponding to the pledge promises "exec" and "execnative".
+
+      - `c` allows `path` to be created and removed, corresponding to
+        the pledge promise "cpath".
 
   unix.gmtime(unixts:int)
       ├─→ year,mon,mday,hour,min,sec,gmtoffsec,wday,yday,dst:int,zone:str
@@ -3252,22 +4633,29 @@ UNIX MODULE
 
     Gets information about opened file descriptor.
 
-    `fd` should be a file descriptor that was opened using
-    `unix.open(path, O_RDONLY|O_DIRECTORY)`.
-
-    `flags` may have any of:
-
-    - `AT_SYMLINK_NOFOLLOW`: do not follow symbolic links.
-
-    `dirfd` defaults to to `unix.AT_FDCWD` and may optionally be set to
-    a directory file descriptor to which `path` is relative.
-
     A common use for fstat() is getting the size of a file. For example:
 
         fd = assert(unix.open("hello.txt", unix.O_RDONLY))
         st = assert(unix.fstat(fd))
         Log(kLogInfo, 'hello.txt is %d bytes in size' % {st:size()})
         unix.close(fd)
+
+  unix.statfs(path:str)
+      ├─→ unix.Statfs
+      └─→ nil, unix.Errno
+
+    Gets information about filesystem.
+
+    `path` is the path of a file or directory in the mounted filesystem.
+
+  unix.fstatfs(fd:int)
+      ├─→ unix.Statfs
+      └─→ nil, unix.Errno
+
+    Gets information about filesystem.
+
+    `fd` is an open() file descriptor of a file or directory in the
+    mounted filesystem.
 
   unix.opendir(path:str)
       ├─→ state:unix.Dir
@@ -3292,12 +4680,290 @@ UNIX MODULE
     Opens directory for listing its contents, via an fd.
 
     `fd` should be created by `open(path, O_RDONLY|O_DIRECTORY)`. The
-    returned unix.Dir ownership takes ownership of the file descriptor
-    and will close it automatically when garbage collected.
+    returned unix.Dir takes ownership of the file descriptor and will
+    close it automatically when garbage collected.
+
+  unix.isatty(fd:int)
+      ├─→ true
+      └─→ nil, unix.Errno
+
+    Returns true if file descriptor is a teletypewriter. Otherwise nil
+    with an Errno object holding one of the following values:
+
+    - `ENOTTY` if `fd` is valid but not a teletypewriter
+    - `EBADF` if `fd` isn't a valid file descriptor.
+    - `EPERM` if pledge() is used without `tty` in lenient mode
+
+    No other error numbers are possible.
+
+  unix.tcgetwinsize(fd:int)
+      ├─→ rows:int, cols:int
+      └─→ nil, unix.Errno
+
+    Returns cellular dimensions of pseudoteletypewriter display.
+
+  unix.tmpfd()
+      ├─→ fd:int
+      └─→ nil, unix.Errno
+
+    Returns file descriptor of open anonymous file.
+
+    This creates a secure temporary file inside `$TMPDIR`. If it isn't
+    defined, then `/tmp` is used on UNIX and GetTempPath() is used on
+    the New Technology. This resolution of `$TMPDIR` happens once.
+
+    Once close() is called, the returned file is guaranteed to be
+    deleted automatically. On UNIX the file is unlink()'d before this
+    function returns. On the New Technology it happens upon close().
+
+    On the New Technology, temporary files created by this function
+    should have better performance, because `kNtFileAttributeTemporary`
+    asks the kernel to more aggressively cache and reduce i/o ops.
+
+  unix.sched_yield()
+
+    Relinquishes scheduled quantum.
+
+  unix.mapshared(size:int)
+      └─→ unix.Memory()
+
+    Creates interprocess shared memory mapping.
+
+    This function allocates special memory that'll be inherited across
+    fork in a shared way. By default all memory in Redbean is "private"
+    memory that's only viewable and editable to the process that owns
+    it. When unix.fork() happens, memory is copied appropriately so
+    that changes to memory made in the child process, don't clobber
+    the memory at those same addresses in the parent process. If you
+    don't want that to happen, and you want the memory to be shared
+    similar to how it would be shared if you were using threads, then
+    you can use this function to achieve just that.
+
+    The memory object this function returns may be accessed using its
+    methods, which support atomics and futexes. It's very low-level.
+    For example, you can use it to implement scalable mutexes:
+
+        mem = unix.mapshared(8000 * 8)
+
+        LOCK = 0 -- pick an arbitrary word index for lock
+
+        -- From Futexes Are Tricky Version 1.1 § Mutex, Take 3;
+        -- Ulrich Drepper, Red Hat Incorporated, June 27, 2004.
+        function Lock()
+            local ok, old = mem:cmpxchg(LOCK, 0, 1)
+            if not ok then
+                if old == 1 then
+                    old = mem:xchg(LOCK, 2)
+                end
+                while old > 0 do
+                    mem:wait(LOCK, 2)
+                    old = mem:xchg(LOCK, 2)
+                end
+            end
+        end
+        function Unlock()
+            old = mem:fetch_add(LOCK, -1)
+            if old == 2 then
+                mem:store(LOCK, 0)
+                mem:wake(LOCK, 1)
+            end
+        end
+
+    It's possible to accomplish the same thing as unix.mapshared()
+    using files and unix.fcntl() advisory locks. However this goes
+    significantly faster. For example, that's what SQLite does and
+    we recommend using SQLite for IPC in redbean. But, if your app
+    has thousands of forked processes fighting for a file lock you
+    might need something lower level than file locks, to implement
+    things like throttling. Shared memory is a good way to do that
+    since there's nothing that's faster.
+
+    The `size` parameter needs to be a multiple of 8. The returned
+    memory is zero initialized. When allocating shared memory, you
+    should try to get as much use out of it as possible, since the
+    overhead of allocating a single shared mapping is 500 words of
+    resident memory and 8000 words of virtual memory. It's because
+    the Cosmopolitan Libc mmap() granularity is 2**16.
+
+    This system call does not fail. An exception is instead thrown
+    if sufficient memory isn't available.
 
 
 ────────────────────────────────────────────────────────────────────────────────
-
+ UNIX MEMORY OBJECT
+
+  unix.Memory encapsulates memory that's shared across fork() and
+  this module provides the fundamental synchronization primitives
+
+  Redbean memory maps may be used in two ways:
+
+    1. as an array of bytes a.k.a. a string
+    2. as an array of words a.k.a. integers
+
+  They're aliased, union, or overlapped views of the same memory.
+  For example if you write a string to your memory region, you'll
+  be able to read it back as an integer.
+
+  Reads, writes, and word operations will throw an exception if a
+  memory boundary error or overflow occurs.
+
+  unix.Memory:read([offset:int[, bytes:int]])
+      └─→ str
+
+    Reads bytes from memory region
+
+    `offset` is the starting byte index from which memory is copied,
+    which defaults to zero.
+
+    If `bytes` is none or nil, then the nul-terminated string at
+    `offset` is returned. You may specify `bytes` to safely read
+    binary data.
+
+    This operation happens atomically. Each shared mapping has a
+    single lock which is used to synchronize reads and writes to
+    that specific map. To make it scale, create additional maps.
+
+  unix.Memory:write([offset:int,] data:str[, bytes:int]])
+
+    Writes bytes to memory region.
+
+    `offset` is the starting byte index to which memory is copied,
+    which defaults to zero.
+
+    If `bytes` is none or nil, then an implicit nil-terminator
+    will be included after your `data` so things like json can
+    be easily serialized to shared memory.
+
+    This operation happens atomically. Each shared mapping has a
+    single lock which is used to synchronize reads and writes to
+    that specific map. To make it scale, create additional maps.
+
+  unix.Memory:load(word_index:int)
+      └─→ int
+
+    Loads word from memory region.
+
+    This operation is atomic and has relaxed barrier semantics.
+
+  unix.Memory:store(word_index:int, value:int)
+
+    Stores word from memory region.
+
+    This operation is atomic and has relaxed barrier semantics.
+
+  unix.Memory:xchg(word_index:int, value:int)
+      └─→ int
+
+    Exchanges value.
+
+    This sets word at `word_index` to `value` and returns the value
+    previously held within that word.
+
+    This operation is atomic and provides the same memory barrier
+    semantics as the aligned x86 LOCK XCHG instruction.
+
+  unix.Memory:cmpxchg(word_index:int, old:int, new:int)
+      └─→ success:bool, old:int
+
+    Compares and exchanges value.
+
+    This inspects the word at `word_index` and if its value is the same
+    as `old` then it'll be replaced by the value `new`, in which case
+    true shall be returned alongside `old`. If a different value was
+    held at word, then `false` shall be returned along with its value.
+
+    This operation happens atomically and provides the same memory
+    barrier semantics as the aligned x86 LOCK CMPXCHG instruction.
+
+  unix.Memory:fetch_add(word_index:int, value:int)
+      └─→ old:int
+
+    Fetches then adds value.
+
+    This method modifies the word at `word_index` to contain the sum of
+    its value and the `value` parameter. This method then returns the
+    value as it existed before the addition was performed.
+
+    This operation is atomic and provides the same memory barrier
+    semantics as the aligned x86 LOCK XADD instruction.
+
+  unix.Memory:fetch_and(word_index:int, value:int)
+      └─→ int
+
+    Fetches and bitwise ands value.
+
+    This operation happens atomically and provides the same memory
+    barrier ordering semantics as its x86 implementation.
+
+  unix.Memory:fetch_or(word_index:int, value:int)
+      └─→ int
+
+    Fetches and bitwise ors value.
+
+    This operation happens atomically and provides the same memory
+    barrier ordering semantics as its x86 implementation.
+
+  unix.Memory:fetch_xor(word_index:int, value:int)
+      └─→ int
+
+    Fetches and bitwise xors value.
+
+    This operation happens atomically and provides the same memory
+    barrier ordering semantics as its x86 implementation.
+
+  unix.Memory:wait(word_index:int, expect:int[, abs_deadline:int[, nanos:int]])
+      ├─→ 0
+      ├─→ nil, unix.Errno(unix.EINTR)
+      ├─→ nil, unix.Errno(unix.EAGAIN)
+      └─→ nil, unix.Errno(unix.ETIMEDOUT)
+
+    Waits for word to have a different value.
+
+    This method asks the kernel to suspend the process until either the
+    absolute deadline expires or we're woken up by another process that
+    calls unix.Memory:wake().
+
+    The `expect` parameter is the value you expect the word to have and
+    this function will return if that's not the case.  Please note this
+    parameter doesn't imply the kernel will poll the value for you, and
+    you still need to call wake() when you know the memory's changed.
+
+    The default behavior is to wait until the heat death of the universe
+    if necessary. You may alternatively specify an absolute deadline. If
+    it's less than or equal to the value returned by clock_gettime, then
+    this routine is non-blocking. Otherwise we'll block at most until
+    the current time reaches the absolute deadline.
+
+    Futexes are supported natively on Linux, FreeBSD, and OpenBSD. When
+    this interface is used on other platforms this method will manually
+    poll the memory location with exponential backoff. Doing this works
+    well enough that we're passing the *NSYNC unit tests, but is not as
+    low latency as having kernel supported futexes.
+
+    `EINTR` if a signal is delivered while waiting on deadline. Callers
+    should use futexes inside a loop that is able to cope with spurious
+    wakeups. We don't actually guarantee the value at word has in fact
+    changed when this returns.
+
+    `EAGAIN` is raised if, upon entry, the word at `word_index` had a
+    different value than what's specified at `expect`.
+
+    `ETIMEDOUT` is raised when the absolute deadline expires.
+
+  unix.Memory:wake(index:int[, count:int])
+      └─→ woken:int
+
+    Wakes other processes waiting on word.
+
+    This method may be used to signal or broadcast to waiters. The
+    `count` specifies the number of processes that should be woken,
+    which defaults to `INT_MAX`.
+
+    The return value is the number of processes that were actually woken
+    as a result of the system call. No failure conditions are defined.
+
+
+────────────────────────────────────────────────────────────────────────────────
  UNIX DIR OBJECT
 
   unix.Dir objects are created by opendir() or fdopendir(). The
@@ -3319,7 +4985,7 @@ UNIX MODULE
 
     Reads entry from directory stream.
 
-    Returns `nil` if there are no more entries. Or error, `nil` will
+    Returns `nil` if there are no more entries. On error, `nil` will
     be returned and `errno` will be non-nil.
 
     `kind` can be any of:
@@ -3357,7 +5023,6 @@ UNIX MODULE
 
 
 ────────────────────────────────────────────────────────────────────────────────
-
  UNIX RUSAGE OBJECT
 
   unix.Rusage objects are created by wait() or getrusage(). The
@@ -3389,7 +5054,7 @@ UNIX MODULE
     On Windows NT this is collected from
     NtProcessMemoryCountersEx::PeakWorkingSetSize / 1024.
 
-  unid.Rusage:idrss()
+  unix.Rusage:idrss()
       └─→ integralkilobytes:int
 
     Returns integral private memory consumption w.r.t. scheduled ticks.
@@ -3417,7 +5082,7 @@ UNIX MODULE
 
     Currently only available on FreeBSD and NetBSD.
 
-  unis.Rusage:isrss()
+  unix.Rusage:isrss()
       └─→ integralkilobytes:int
 
     Returns integral stack memory consumption w.r.t. scheduled ticks.
@@ -3524,7 +5189,6 @@ UNIX MODULE
 
 
 ────────────────────────────────────────────────────────────────────────────────
-
  UNIX STAT OBJECT
 
   unix.Stat objects are created by stat() or fstat(). The following
@@ -3569,7 +5233,7 @@ UNIX MODULE
     File birth time.
 
     This field should be accurate on Apple, Windows, and BSDs. On Linux
-    this is the mimimum of atim/mtim/ctim. On Windows NT nanos is only
+    this is the minimum of atim/mtim/ctim. On Windows NT nanos is only
     accurate to hectonanoseconds.
 
     Here's an example of how you might print a file timestamp:
@@ -3625,7 +5289,7 @@ UNIX MODULE
            print('thanks to file system compression')
         end
 
-    To tell whether or not compression is being used on a file,
+    To tell if compression is used on a file.
 
   unix.Stat:blksize()
       └─→ bytes:int
@@ -3667,7 +5331,123 @@ UNIX MODULE
 
 
 ────────────────────────────────────────────────────────────────────────────────
-
+ UNIX STATFS OBJECT
+
+  unix.Statfs objects are created by statfs() or fstatfs(). The
+  following accessor methods are available.
+
+  unix.Statfs:fstypename()
+      └─→ str
+
+    Type of filesystem.
+
+    Here's some examples of likely values:
+
+    - `"ext"` on Linux
+    - `"xfs"` on RHEL7
+    - `"apfs"` on Apple
+    - `"zfs"` on FreeBSD
+    - `"ffs"` on NetBSD and OpenBSD
+    - `"NTFS"` on Windows
+
+  unix.Statfs:type()
+      └─→ int
+
+    Type of filesystem.
+
+    This is a platform-specific magic number. Consider using the
+    unix.Statfs:fstypename() method instead. On Windows, this will
+    actually be a Knuth multiplicative hash of the name.
+
+  unix.Statfs:bsize()
+      └─→ int
+
+    Optimal transfer block size.
+
+    This field serves two purposes:
+
+      1. It tells you how to chunk i/o operations. For local disks,
+         it'll likely be any value between 512 and 4096 depending on the
+         operating system. For network filesystems it will likely be a
+         much larger value, e.g. 512kb.
+
+      2. It can be multiplied with the fields `blocks`, `bfree`, and
+         `bavail` to obtain a byte count.
+
+  unix.Statfs:blocks()
+      └─→ int
+
+    Total data blocks in filesystem.
+
+    The size of a block is measured as unix.Statfs:bsize().
+
+  unix.Statfs:bfree()
+      └─→ int
+
+    Total free blocks in filesystem.
+
+    The size of a block is measured as unix.Statfs:bsize().
+
+  unix.Statfs:bavail()
+      └─→ int
+
+    Total free blocks available in filesystem to unprivileged users.
+
+    The size of a block is measured as unix.Statfs:bsize().
+
+  unix.Statfs:files()
+      └─→ int
+
+    Total file nodes in filesystem.
+
+    On Windows this is always the maximum integer value.
+
+  unix.Statfs:ffree()
+      └─→ int
+
+    Total free file nodes in filesystem.
+
+    On Windows this is always the maximum integer value.
+
+  unix.Statfs:fsid()
+      └─→ int
+
+    Filesystem id.
+
+  unix.Statfs:namelen()
+      └─→ int
+
+    Maximum length of filename components in bytes.
+
+  unix.Statfs:flags()
+      └─→ int
+
+    Filesystem flags.
+
+    The following flags are defined:
+
+    - `ST_RDONLY`: Read-only filesystem (Linux/Windows/XNU/BSDs)
+    - `ST_NOSUID`: Setuid binaries forbidden (Linux/XNU/BSDs)
+    - `ST_NODEV`: Device files forbidden (Linux/XNU/BSDs)
+    - `ST_NOEXEC`: Execution forbidden (Linux/XNU/BSDs)
+    - `ST_SYNCHRONOUS`: Synchronous (Linux/XNU/BSDs)
+    - `ST_NOATIME`: No access time (Linux/XNU/BSDs)
+    - `ST_RELATIME`: Relative access time (Linux/NetBSD)
+    - `ST_APPEND`: Linux-only
+    - `ST_IMMUTABLE`: Linux-only
+    - `ST_MANDLOCK`: Linux-only
+    - `ST_NODIRATIME`: Linux-only
+    - `ST_WRITE`: Linux-only
+
+  unix.Statfs:owner()
+      └─→ int
+
+    User id of owner of filesystem mount.
+
+    On Linux this is always 0 for root. On Windows this is always 0.
+
+
+────────────────────────────────────────────────────────────────────────────────
  UNIX SIGSET OBJECT
 
   The unix.Sigset class defines a mutable bitset that may currently
@@ -3707,7 +5487,6 @@ UNIX MODULE
 
 
 ────────────────────────────────────────────────────────────────────────────────
-
  UNIX SIGNAL MAGNUMS
 
   unix.SIGINT
@@ -3795,7 +5574,6 @@ UNIX MODULE
 
 
 ────────────────────────────────────────────────────────────────────────────────
-
  UNIX ERRNO OBJECT
 
   This object is returned by system calls that fail. We prefer returning
@@ -3860,7 +5638,6 @@ UNIX MODULE
 
 
 ────────────────────────────────────────────────────────────────────────────────
-
  UNIX ERROR MAGNUMS
 
   unix.EINVAL
@@ -3936,11 +5713,10 @@ UNIX MODULE
 
     Raised by accept, access, bind, chdir, chmod, chown, close, connect,
     copy_file_range, dup, fcntl, flock, fsync, futimesat, opendir,
-    getpeername, getsockname, getsockopt, inotify_add_watch,
-    inotify_rm_watch, ioctl, link, listen, llseek, lseek, mkdir, mknod,
-    mmap, open, prctl, read, readahead, readlink, recv, rename, select,
-    send, shutdown, splice, stat, symlink, sync, sync_file_range,
-    timerfd_create, truncate, unlink, utimensat, write.
+    getpeername, getsockname, getsockopt, ioctl, link, listen, lseek,
+    mkdir, mknod, mmap, open, prctl, read, readahead, readlink, recv,
+    rename, select, send, shutdown, splice, stat, symlink, sync,
+    sync_file_range, timerfd_create, truncate, unlink, utimensat, write.
 
   unix.EAGAIN
     Resource temporarily unavailable (e.g. SO_RCVTIMEO expired, too many
@@ -3968,28 +5744,27 @@ UNIX MODULE
     calls that accept a pathname.
 
     Raised by access, bind, chdir, chmod, chown, chroot, execve,
-    gethostname, inotify_add_watch, link, mkdir, mknod, open, readlink,
-    rename, rmdir, stat, symlink, truncate, u unlink, utimensat.
+    gethostname, link, mkdir, mknod, open, readlink, rename, rmdir,
+    stat, symlink, truncate, unlink, utimensat.
 
   unix.EACCES
     Permission denied.
 
     Raised by access, bind, chdir, chmod, chown, chroot, clock_getres,
-    connect, execve, fcntl, getpriority, inotify_add_watch, link, mkdir,
-    mknod, mmap, mprotect, msgctl, open, prctl, ptrace, readlink,
-    rename, rmdir, semget, send, setpgid, socket, stat, symlink,
-    truncate, unlink, uselib, utime, utimensat.
+    connect, execve, fcntl, getpriority, link, mkdir, mknod, mmap,
+    mprotect, msgctl, open, prctl, ptrace, readlink, rename, rmdir,
+    semget, send, setpgid, socket, stat, symlink, truncate, unlink,
+    uselib, utime, utimensat.
 
   unix.ENOMEM
     We require more vespene gas.
 
     Raised by access, bind, chdir, chmod, chown, chroot, clone,
     copy_file_range, execve, fanotify_init, fork, getgroups, getrlimit,
-    inotify_add_watch, inotify_init, ioperm, link, mbind, mincore,
-    mkdir, mknod, mlock, mmap, mprotect, mremap, msync, open, poll,
-    readlink, recv, rename, rmdir, select, send, sigaltstack, splice,
-    stat, subpage_prot, swapon, symlink, sync_file_range, tee,
-    timer_create, timerfd_create, unlink.
+    link, mbind, mincore, mkdir, mknod, mlock, mmap, mprotect, mremap,
+    msync, open, poll, readlink, recv, rename, rmdir, select, send,
+    sigaltstack, splice, stat, subpage_prot, swapon, symlink,
+    sync_file_range, tee, timer_create, timerfd_create, unlink.
 
   unix.EPERM
     Operation not permitted.
@@ -4024,8 +5799,7 @@ UNIX MODULE
   unix.EEXIST
     File exists.
 
-    Raised by inotify_add_watch, link, mkdir, mknod, mmap, open, rename,
-    rmdir, symlink
+    Raised by link, mkdir, mknod, mmap, open, rename, rmdir, symlink
 
   unix.EXDEV
     Improper link.
@@ -4038,7 +5812,7 @@ UNIX MODULE
     Raised by arch_prctl, mmap, open, prctl, timerfd_create.
 
   unix.EISDIR
-    Is a a directory.
+    Is a directory.
 
     Raised by copy_file_range, execve, open, read, rename, truncate,
     unlink.
@@ -4046,14 +5820,14 @@ UNIX MODULE
   unix.ENFILE
     Too many open files in system.
 
-    Raised by accept, execve, inotify_init, mmap, open, pipe, socket,
-    socketpair, swapon, timerfd_create, uselib, userfaultfd.
+    Raised by accept, execve, mmap, open, pipe, socket, socketpair,
+    swapon, timerfd_create, uselib, userfaultfd.
 
   unix.EMFILE
     Too many open files.
 
-    Raised by accept, dup, execve, fanotify_init, fcntl, inotify_init,
-    open, pipe, socket, socketpair, timerfd_create.
+    Raised by accept, dup, execve, fcntl, open, pipe, socket,
+    socketpair, timerfd_create.
 
   unix.ENOTTY
     Inappropriate i/o control operation.
@@ -4073,9 +5847,8 @@ UNIX MODULE
   unix.ENOSPC
     No space left on device.
 
-    Raised by copy_file_range, fsync, inotify_add_watch, link,
-    mkdir, mknod, open, rename, symlink, sync_file_range,
-    write.
+    Raised by copy_file_range, fsync, link, mkdir, mknod, open, rename,
+    symlink, sync_file_range, write.
 
   unix.EDQUOT
     Disk quota exceeded.
@@ -4287,7 +6060,6 @@ UNIX MODULE
 
 
 ────────────────────────────────────────────────────────────────────────────────
-
  UNIX MISCELLANEOUS MAGNUMS
 
   unix.ARG_MAX
@@ -4366,7 +6138,6 @@ UNIX MODULE
 
 
 ────────────────────────────────────────────────────────────────────────────────
-
 LEGAL
 
   redbean contains software licensed ISC, MIT, BSD-2, BSD-3, zlib
@@ -4379,7 +6150,6 @@ LEGAL
 
 
 ────────────────────────────────────────────────────────────────────────────────
-
 SEE ALSO
 
   https://redbean.dev/

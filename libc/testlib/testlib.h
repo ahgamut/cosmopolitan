@@ -1,9 +1,5 @@
 #ifndef COSMOPOLITAN_LIBC_TESTLIB_H_
 #define COSMOPOLITAN_LIBC_TESTLIB_H_
-#include "libc/bits/weaken.h"
-#include "libc/errno.h"
-#include "libc/str/str.h"
-#include "libc/testlib/ugly.h"
 #if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 /*───────────────────────────────────────────────────────────────────────────│─╗
@@ -16,8 +12,8 @@ COSMOPOLITAN_C_START_
  * Test cases are guaranteed by the linker to be run in order, sorted by
  * the (SUITE, NAME) tuple passed here.
  */
-#define TEST(SUITE, NAME)           \
-  STATIC_YOINK("__testcase_start"); \
+#define TEST(SUITE, NAME)             \
+  __static_yoink("__testcase_start"); \
   __TEST_PROTOTYPE(SUITE, NAME, __TEST_ARRAY, )
 
 /**
@@ -29,20 +25,9 @@ COSMOPOLITAN_C_START_
  * temorarilly by the runtime while calling fixture functions. Fixtures
  * are also guaranteed by the linker to be run in sorted order.
  */
-#define FIXTURE(SUITE, NAME)       \
-  STATIC_YOINK("__fixture_start"); \
+#define FIXTURE(SUITE, NAME)         \
+  __static_yoink("__fixture_start"); \
   __FIXTURE("fixture", SUITE, NAME)
-
-/**
- * Registers explosive fixture with linker.
- *
- * All tests will run an additional time for each set of entries in the
- * Cartesian product of groups. That makes this similar to fixture, but
- * more appropriate for testing pure code (i.e. no syscalls) like math.
- */
-#define COMBO(GROUP, ENTRY)      \
-  STATIC_YOINK("__combo_start"); \
-  __FIXTURE("combo", GROUP, ENTRY)
 
 /**
  * Declares benchmark function.
@@ -53,8 +38,8 @@ COSMOPOLITAN_C_START_
  *
  * @see EZBENCH()
  */
-#define BENCH(SUITE, NAME)       \
-  STATIC_YOINK("__bench_start"); \
+#define BENCH(SUITE, NAME)         \
+  __static_yoink("__bench_start"); \
   __TEST_PROTOTYPE(SUITE, NAME, __BENCH_ARRAY, optimizespeed)
 
 #define ASSERT_GE(C, X) _TEST2("ASSERT_GE", C, >=, (X), #C, " ≥ ", #X, 1)
@@ -66,16 +51,52 @@ COSMOPOLITAN_C_START_
 #define EXPECT_LE(C, X) _TEST2("EXPECT_LE", C, <=, (X), #C, " ≤ ", #X, 0)
 #define EXPECT_LT(C, X) _TEST2("EXPECT_LT", C, <, (X), #C, " < ", #X, 0)
 
+#ifdef __aarch64__
+#define _TESTLIB_ASM_COMMENT "//"
+#else
+#define _TESTLIB_ASM_COMMENT "#"
+#endif
+
+#define __TEST_ARRAY(S)                     \
+  _Section(".piro.relo.sort.testcase.2." #S \
+           ",\"aw\",@init_array "_TESTLIB_ASM_COMMENT)
+
+#define __BENCH_ARRAY(S)                 \
+  _Section(".piro.relo.sort.bench.2." #S \
+           ",\"aw\",@init_array "_TESTLIB_ASM_COMMENT)
+
+#define __TEST_PROTOTYPE(S, N, A, K)               \
+  void S##_##N(void);                              \
+  testfn_t S##_##N##_ptr[] A(S##_##N) = {S##_##N}; \
+  K void S##_##N(void)
+
+#define __TEST_SECTION(NAME, CONTENT) \
+  ".section " NAME "\n" CONTENT "\n\t.previous\n"
+
+#define __RELOSECTION(NAME, CONTENT) \
+  __TEST_SECTION(".piro.relo.sort" NAME ",\"aw\",@progbits", CONTENT)
+
+#define __ROSTR(STR) __TEST_SECTION(".rodata.str1.1,\"aSM\",@progbits,1", STR)
+
+#define TESTLIB_STRINGIFY(A)  _TESTLIB_STRINGIFY(A)
+#define _TESTLIB_STRINGIFY(A) #A
+
+#define __FIXTURE(KIND, GROUP, ENTRY)                               \
+  asm(__RELOSECTION("." KIND ".2." #GROUP #ENTRY,                   \
+                    "\t.quad\t1f\n"                                 \
+                    "\t.quad\t2f\n"                                 \
+                    "\t.quad\t" TESTLIB_STRINGIFY(GROUP##_##ENTRY)) \
+          __ROSTR("1:\t.asciz\t" TESTLIB_STRINGIFY(#GROUP))         \
+              __ROSTR("2:\t.asciz\t" TESTLIB_STRINGIFY(#ENTRY)));   \
+  void GROUP##_##ENTRY(void)
+
 /**
  * Enables setup and teardown of test directories.
  *
- * If the linker says this symbol exists then, regardless of its value,
- * a unique test directory will be created at the start of each test,
- * the test will be run with that directory as its working directory,
- * and if the test succeeds it'll be removed along with any contents.
+ * These should be called from SetUpOnce().
  */
-extern char testlib_enable_tmp_setup_teardown;
-extern char testlib_enable_tmp_setup_teardown_once;
+void testlib_enable_tmp_setup_teardown(void);
+void testlib_enable_tmp_setup_teardown_once(void);
 
 /**
  * User-defined test setup function.
@@ -113,12 +134,12 @@ void TearDownOnce(void);
 
 #define ASSERT_SYS(ERRNO, WANT, GOT, ...)                                  \
   do {                                                                     \
-    int e = errno;                                                         \
+    int e = testlib_geterrno();                                            \
     __TEST_EQ(assert, __FILE__, __LINE__, __FUNCTION__, #WANT, #GOT, WANT, \
               GOT, __VA_ARGS__);                                           \
     __TEST_EQ(assert, __FILE__, __LINE__, __FUNCTION__, #ERRNO,            \
-              strerror(errno), ERRNO, errno, __VA_ARGS__);                 \
-    errno = e;                                                             \
+              testlib_strerror(), ERRNO, testlib_geterrno(), __VA_ARGS__); \
+    testlib_seterrno(e);                                                   \
   } while (0)
 
 #define ASSERT_BETWEEN(BEG, END, GOT) \
@@ -188,11 +209,12 @@ void TearDownOnce(void);
 
 #define EXPECT_SYS(ERRNO, WANT, GOT, ...)                                  \
   do {                                                                     \
-    errno = 0;                                                             \
+    int e = testlib_geterrno();                                            \
     __TEST_EQ(expect, __FILE__, __LINE__, __FUNCTION__, #WANT, #GOT, WANT, \
               GOT, __VA_ARGS__);                                           \
     __TEST_EQ(expect, __FILE__, __LINE__, __FUNCTION__, #ERRNO,            \
-              strerror(errno), ERRNO, errno, __VA_ARGS__);                 \
+              testlib_strerror(), ERRNO, testlib_geterrno(), __VA_ARGS__); \
+    testlib_seterrno(e);                                                   \
   } while (0)
 
 #define EXPECT_FALSE(X) _TEST2("EXPECT_FALSE", false, ==, (X), #X, "", "", 0)
@@ -268,12 +290,11 @@ void TearDownOnce(void);
     Got = (intptr_t)(GOT);                                                   \
     Want = (intptr_t)(WANT);                                                 \
     if (Want != Got) {                                                       \
-      if (g_testlib_shoulddebugbreak) DebugBreak();                          \
-      testlib_showerror_file = FILE;                                         \
-      testlib_showerror_func = FUNC;                                         \
+      testlib_error_enter(FILE, FUNC);                                       \
       testlib_showerror_##KIND##_eq(LINE, WANTCODE, GOTCODE,                 \
                                     testlib_formatint(Want),                 \
                                     testlib_formatint(Got), "" __VA_ARGS__); \
+      testlib_error_leave();                                                 \
     }                                                                        \
     (void)0;                                                                 \
   } while (0)
@@ -285,12 +306,11 @@ void TearDownOnce(void);
     Got = (intptr_t)(GOT);                                                   \
     Want = (intptr_t)(WANT);                                                 \
     if (Want == Got) {                                                       \
-      if (g_testlib_shoulddebugbreak) DebugBreak();                          \
-      testlib_showerror_file = FILE;                                         \
-      testlib_showerror_func = FUNC;                                         \
+      testlib_error_enter(FILE, FUNC);                                       \
       testlib_showerror_##KIND##_ne(LINE, WANTCODE, GOTCODE,                 \
                                     testlib_formatint(Want),                 \
                                     testlib_formatint(Got), "" __VA_ARGS__); \
+      testlib_error_leave();                                                 \
     }                                                                        \
   } while (0)
 
@@ -314,8 +334,6 @@ struct TestFixture {
 };
 
 extern char g_fixturename[256];
-extern char g_testlib_olddir[PATH_MAX];
-extern char g_testlib_tmpdir[PATH_MAX];
 extern bool g_testlib_shoulddebugbreak;     /* set by testmain */
 extern _Atomic(unsigned) g_testlib_ran;     /* set by wrappers */
 extern _Atomic(unsigned) g_testlib_failed;  /* set by wrappers */
@@ -325,7 +343,6 @@ extern const char *testlib_showerror_func;  /* set by macros */
 extern const testfn_t __bench_start[], __bench_end[];
 extern const testfn_t __testcase_start[], __testcase_end[];
 extern const struct TestFixture __fixture_start[], __fixture_end[];
-extern const struct TestFixture __combo_start[], __combo_end[];
 
 void testlib_showerror_assert_eq(int, const char *, const char *, char *,
                                  char *, const char *, ...) wontreturn;
@@ -344,18 +361,21 @@ void testlib_showerror_expect_ne(int, const char *, const char *, char *,
 void testlib_showerror_expect_true(int, const char *, const char *, char *,
                                    char *, const char *, ...);
 
+void testlib_error_leave(void);
+void testlib_error_enter(const char *, const char *);
 void testlib_showerror(const char *, int, const char *, const char *,
                        const char *, const char *, char *, char *);
 
-void thrashcodecache(void);
-
 void testlib_finish(void);
+int testlib_geterrno(void);
+void testlib_seterrno(int);
 void testlib_runalltests(void);
+const char *testlib_strerror(void);
 void testlib_runallbenchmarks(void);
-void testlib_runtestcases(testfn_t *, testfn_t *, testfn_t);
-void testlib_runcombos(testfn_t *, testfn_t *, const struct TestFixture *,
-                       const struct TestFixture *);
-void testlib_runfixtures(testfn_t *, testfn_t *, const struct TestFixture *,
+bool testlib_memoryexists(const void *);
+void testlib_runtestcases(const testfn_t *, const testfn_t *, testfn_t);
+void testlib_runfixtures(const testfn_t *, const testfn_t *,
+                         const struct TestFixture *,
                          const struct TestFixture *);
 int testlib_countfixtures(const struct TestFixture *,
                           const struct TestFixture *);
@@ -367,6 +387,7 @@ bool testlib_strcaseequals(size_t, const void *, const void *) nosideeffect;
 bool testlib_strncaseequals(size_t, const void *, const void *,
                             size_t) nosideeffect;
 void testlib_free(void *);
+void testlib_extract(const char *, const char *, int);
 bool testlib_binequals(const char16_t *, const void *, size_t) nosideeffect;
 bool testlib_hexequals(const char *, const void *, size_t) nosideeffect;
 bool testlib_startswith(size_t, const void *, const void *) nosideeffect;
@@ -391,7 +412,9 @@ forceinline void testlib_ontest() {
 
 forceinline void testlib_onfail2(bool isfatal) {
   testlib_incrementfailed();
-  if (isfatal) testlib_abort();
+  if (isfatal) {
+    testlib_abort();
+  }
 }
 
 forceinline void assertNotEquals(FILIFU_ARGS intptr_t donotwant, intptr_t got,

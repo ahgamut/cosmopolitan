@@ -26,15 +26,22 @@ TEST_LIBC_THREAD_DIRECTDEPS =				\
 	LIBC_CALLS					\
 	LIBC_FMT					\
 	LIBC_INTRIN					\
+	LIBC_LOG					\
 	LIBC_MEM					\
 	LIBC_NEXGEN32E					\
+	LIBC_PROC					\
 	LIBC_RUNTIME					\
+	LIBC_SOCK					\
+	LIBC_STDIO					\
 	LIBC_STR					\
-	LIBC_STUBS					\
 	LIBC_SYSV					\
+	LIBC_SYSV_CALLS					\
+	LIBC_TESTLIB					\
 	LIBC_THREAD					\
 	LIBC_TIME					\
-	LIBC_TESTLIB
+	LIBC_X						\
+	THIRD_PARTY_NSYNC				\
+	THIRD_PARTY_NSYNC_MEM
 
 TEST_LIBC_THREAD_DEPS :=				\
 	$(call uniq,$(foreach x,$(TEST_LIBC_THREAD_DIRECTDEPS),$($(x))))
@@ -51,6 +58,13 @@ o/$(MODE)/test/libc/thread/%.com.dbg:			\
 		$(CRT)					\
 		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
+
+o/$(MODE)/test/libc/thread/pthread_create_test.o:	\
+		private CPPFLAGS +=			\
+			-DSTACK_FRAME_UNLIMITED
+
+o/$(MODE)/test/libc/thread/pthread_kill_test.com.runs:	\
+		private .PLEDGE = stdio rpath wpath cpath fattr proc inet
 
 .PHONY: o/$(MODE)/test/libc/thread
 o/$(MODE)/test/libc/thread:				\

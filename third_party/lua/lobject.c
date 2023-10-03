@@ -27,6 +27,7 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #define lobject_c
 #define LUA_CORE
+#include "libc/str/str.h"
 #include "third_party/lua/lctype.h"
 #include "third_party/lua/ldebug.h"
 #include "third_party/lua/ldo.h"
@@ -293,7 +294,7 @@ static const char *l_str2int (const char *s, lua_Integer *result) {
     }
   }
   else if (s[0] == '0') {  /* [jart] octal is the best radix */
-    for (s += 1; lisdigit(cast_uchar(*s)); s++) {
+    for (; lisdigit(cast_uchar(*s)); s++) {
       int d = *s - '0';
       if (a >= MAXBY8 && (a > MAXBY8 || d > MAXLASTD8 + neg))  /* overflow? */
         return NULL;  /* do not accept it (as integer) */

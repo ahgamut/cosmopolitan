@@ -16,20 +16,18 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/errno.h"
-#include "libc/intrin/pthread.h"
+#include "libc/thread/thread.h"
 
 /**
  * Gets mutex type.
  *
  * @param type will be set to one of these on success
  *     - `PTHREAD_MUTEX_NORMAL`
- *     - `PTHREAD_MUTEX_DEFAULT`
  *     - `PTHREAD_MUTEX_RECURSIVE`
  *     - `PTHREAD_MUTEX_ERRORCHECK`
  * @return 0 on success, or error on failure
  */
-int(pthread_mutexattr_gettype)(const pthread_mutexattr_t *attr, int *type) {
-  *type = attr->attr;
+errno_t pthread_mutexattr_gettype(const pthread_mutexattr_t *attr, int *type) {
+  *type = attr->_type;
   return 0;
 }

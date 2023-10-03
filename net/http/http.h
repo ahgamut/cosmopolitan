@@ -140,7 +140,13 @@
 #define kHttpSecFetchMode                  84
 #define kHttpSecFetchUser                  85
 #define kHttpSecFetchDest                  86
-#define kHttpHeadersMax                    87
+#define kHttpCfRay                         87
+#define kHttpCfVisitor                     88
+#define kHttpCfConnectingIp                89
+#define kHttpCfIpcountry                   90
+#define kHttpSecChUaPlatform               91
+#define kHttpCdnLoop                       92
+#define kHttpHeadersMax                    93
 
 #if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
@@ -155,7 +161,7 @@ struct HttpHeader {
 };
 
 struct HttpHeaders {
-  unsigned n;
+  unsigned n, c;
   struct HttpHeader *p;
 };
 
@@ -203,12 +209,12 @@ bool IsAcceptablePath(const char *, size_t);
 bool IsAcceptableHost(const char *, size_t);
 bool IsAcceptablePort(const char *, size_t);
 bool IsReasonablePath(const char *, size_t);
-int64_t ParseIp(const char *, size_t);
 int ParseForwarded(const char *, size_t, uint32_t *, uint16_t *);
 bool IsMimeType(const char *, size_t, const char *);
 ssize_t Unchunk(struct HttpUnchunker *, char *, size_t, size_t *);
 const char *FindContentType(const char *, size_t);
-char *FoldHeader(struct HttpMessage *, char *, int, size_t *);
+bool IsNoCompressExt(const char *, size_t);
+char *FoldHeader(struct HttpMessage *, const char *, int, size_t *);
 
 COSMOPOLITAN_C_END_
 #endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */

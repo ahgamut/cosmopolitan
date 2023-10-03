@@ -1,81 +1,244 @@
 #ifndef COSMOPOLITAN_LIBC_THREAD_THREAD_H_
 #define COSMOPOLITAN_LIBC_THREAD_THREAD_H_
-#include "libc/calls/struct/timespec.h"
-#include "libc/intrin/pthread.h"
-#include "libc/runtime/runtime.h"
 
-#define CTHREAD_CREATE_DETACHED 1
-#define CTHREAD_CREATE_JOINABLE 0
+#define PTHREAD_KEYS_MAX              128
+#define PTHREAD_STACK_MIN             65536
+#define PTHREAD_DESTRUCTOR_ITERATIONS 4
+
+#define PTHREAD_BARRIER_SERIAL_THREAD 31337
+
+#define PTHREAD_MUTEX_DEFAULT    0
+#define PTHREAD_MUTEX_NORMAL     0
+#define PTHREAD_MUTEX_RECURSIVE  1
+#define PTHREAD_MUTEX_ERRORCHECK 2
+#define PTHREAD_MUTEX_STALLED    0
+#define PTHREAD_MUTEX_ROBUST     1
+
+#define PTHREAD_PROCESS_PRIVATE 0
+#define PTHREAD_PROCESS_SHARED  1
+
+#define PTHREAD_CREATE_JOINABLE 0
+#define PTHREAD_CREATE_DETACHED 1
+
+#define PTHREAD_INHERIT_SCHED  0
+#define PTHREAD_EXPLICIT_SCHED 1
+
+#define PTHREAD_CANCELED ((void *)-1)
+
+#define PTHREAD_CANCEL_ENABLE  0
+#define PTHREAD_CANCEL_DISABLE 1
+#define PTHREAD_CANCEL_MASKED  2
+
+#define PTHREAD_CANCEL_DEFERRED     0
+#define PTHREAD_CANCEL_ASYNCHRONOUS 1
+
+#define PTHREAD_SCOPE_SYSTEM  0
+#define PTHREAD_SCOPE_PROCESS 1
+
+#define PTHREAD_ATTR_NO_SIGMASK_NP -1
 
 #if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 
-enum cthread_state {
-  cthread_started = 0,
-  cthread_joining = 1,
-  cthread_finished = 2,
-  cthread_detached = 4,
-  cthread_main = 127,
+#define PTHREAD_ONCE_INIT          _PTHREAD_INIT
+#define PTHREAD_COND_INITIALIZER   _PTHREAD_INIT
+#define PTHREAD_RWLOCK_INITIALIZER _PTHREAD_INIT
+#define PTHREAD_MUTEX_INITIALIZER  _PTHREAD_INIT
+#define _PTHREAD_INIT \
+  { 0 }
+
+typedef uintptr_t pthread_t;
+typedef int pthread_id_np_t;
+typedef char pthread_condattr_t;
+typedef char pthread_rwlockattr_t;
+typedef char pthread_barrierattr_t;
+typedef unsigned pthread_key_t;
+typedef void (*pthread_key_dtor)(void *);
+
+typedef struct pthread_once_s {
+  _Atomic(uint32_t) _lock;
+} pthread_once_t;
+
+typedef struct pthread_spinlock_s {
+  _Atomic(int) _lock;
+} pthread_spinlock_t;
+
+typedef struct pthread_mutex_s {
+  _Atomic(int32_t) _lock;
+  unsigned _type : 2;
+  unsigned _pshared : 1;
+  unsigned _depth : 6;
+  unsigned _owner : 23;
+  long _pid;
+} pthread_mutex_t;
+
+typedef struct pthread_mutexattr_s {
+  char _type;
+  char _pshared;
+} pthread_mutexattr_t;
+
+typedef struct pthread_cond_s {
+  void *_nsync[2];
+} pthread_cond_t;
+
+typedef struct pthread_rwlock_s {
+  void *_nsync[2];
+  char _iswrite;
+} pthread_rwlock_t;
+
+typedef struct pthread_barrier_s {
+  void *_nsync;
+} pthread_barrier_t;
+
+typedef struct pthread_attr_s {
+  char __detachstate;
+  char __inheritsched;
+  char __havesigmask;
+  int __schedparam;
+  int __schedpolicy;
+  int __contentionscope;
+  int __guardsize;
+  size_t __stacksize;
+  uint32_t __sigmask[4];
+  void *__stackaddr;
+} pthread_attr_t;
+
+struct _pthread_cleanup_buffer {
+  void (*__routine)(void *);
+  void *__arg;
+  int __canceltype;
+  struct _pthread_cleanup_buffer *__prev;
 };
 
-struct cthread_descriptor_t {
-  struct cthread_descriptor_t *self;  /* 0x00 */
-  void *(*func)(void *);              /* 0x08 */
-  int32_t __pad0;                     /* 0x10 */
-  int32_t state;                      /* 0x14 */
-  void *arg;                          /* 0x18 */
-  void *pthread_ret_ptr;              /* 0x20 */
-  int64_t __pad1;                     /* 0x28 */
-  struct cthread_descriptor_t *self2; /* 0x30 */
-  int32_t tid;                        /* 0x38 */
-  int32_t err;                        /* 0x3c */
-  void *exitcode;
-  struct {
-    char *top, *bottom;
-  } stack, alloc;
-  jmp_buf exiter;
-  void *key[PTHREAD_KEYS_MAX];
-};
+/* clang-format off */
 
-typedef struct cthread_descriptor_t *cthread_t;
+int pthread_atfork(void (*)(void), void (*)(void), void (*)(void));
+int pthread_attr_destroy(pthread_attr_t *) paramsnonnull();
+int pthread_attr_getdetachstate(const pthread_attr_t *, int *) paramsnonnull();
+int pthread_attr_getguardsize(const pthread_attr_t *, size_t *) paramsnonnull();
+int pthread_attr_getinheritsched(const pthread_attr_t *, int *) paramsnonnull();
+int pthread_attr_getschedpolicy(const pthread_attr_t *, int *) paramsnonnull();
+int pthread_attr_getscope(const pthread_attr_t *, int *) paramsnonnull();
+int pthread_attr_getstack(const pthread_attr_t *, void **, size_t *) paramsnonnull();
+int pthread_attr_getstacksize(const pthread_attr_t *, size_t *) paramsnonnull();
+int pthread_attr_init(pthread_attr_t *) paramsnonnull();
+int pthread_attr_setdetachstate(pthread_attr_t *, int) paramsnonnull();
+int pthread_attr_setguardsize(pthread_attr_t *, size_t) paramsnonnull();
+int pthread_attr_setinheritsched(pthread_attr_t *, int) paramsnonnull();
+int pthread_attr_setschedpolicy(pthread_attr_t *, int) paramsnonnull();
+int pthread_attr_setscope(pthread_attr_t *, int) paramsnonnull();
+int pthread_attr_setstack(pthread_attr_t *, void *, size_t) paramsnonnull((1));
+int pthread_attr_setstacksize(pthread_attr_t *, size_t) paramsnonnull();
+int pthread_barrier_destroy(pthread_barrier_t *) paramsnonnull();
+int pthread_barrier_init(pthread_barrier_t *, const pthread_barrierattr_t *, unsigned) paramsnonnull((1));
+int pthread_barrier_wait(pthread_barrier_t *) paramsnonnull();
+int pthread_barrierattr_destroy(pthread_barrierattr_t *) paramsnonnull();
+int pthread_barrierattr_getpshared(const pthread_barrierattr_t *, int *) paramsnonnull();
+int pthread_barrierattr_init(pthread_barrierattr_t *) paramsnonnull();
+int pthread_barrierattr_setpshared(pthread_barrierattr_t *, int) paramsnonnull();
+int pthread_cancel(pthread_t);
+int pthread_cond_broadcast(pthread_cond_t *) paramsnonnull();
+int pthread_cond_destroy(pthread_cond_t *) paramsnonnull();
+int pthread_cond_init(pthread_cond_t *, const pthread_condattr_t *) paramsnonnull((1));
+int pthread_cond_signal(pthread_cond_t *) paramsnonnull();
+int pthread_cond_wait(pthread_cond_t *, pthread_mutex_t *) paramsnonnull();
+int pthread_condattr_destroy(pthread_condattr_t *) paramsnonnull();
+int pthread_condattr_getpshared(const pthread_condattr_t *, int *) paramsnonnull();
+int pthread_condattr_init(pthread_condattr_t *) paramsnonnull();
+int pthread_condattr_setpshared(pthread_condattr_t *, int) paramsnonnull();
+int pthread_create(pthread_t *, const pthread_attr_t *, void *(*)(void *), void *) paramsnonnull((1));
+int pthread_detach(pthread_t);
+int pthread_equal(pthread_t, pthread_t);
+int pthread_getattr_np(pthread_t, pthread_attr_t *) paramsnonnull();
+int pthread_getname_np(pthread_t, char *, size_t) paramsnonnull();
+int pthread_getunique_np(pthread_t, pthread_id_np_t *) paramsnonnull();
+int pthread_join(pthread_t, void **);
+int pthread_key_create(pthread_key_t *, pthread_key_dtor) paramsnonnull((1));
+int pthread_key_delete(pthread_key_t);
+int pthread_kill(pthread_t, int);
+int pthread_mutex_consistent(pthread_mutex_t *) paramsnonnull();
+int pthread_mutex_destroy(pthread_mutex_t *) paramsnonnull();
+int pthread_mutex_init(pthread_mutex_t *, const pthread_mutexattr_t *) paramsnonnull((1));
+int pthread_mutex_lock(pthread_mutex_t *) paramsnonnull();
+int pthread_mutex_trylock(pthread_mutex_t *) paramsnonnull();
+int pthread_mutex_unlock(pthread_mutex_t *) paramsnonnull();
+int pthread_mutexattr_destroy(pthread_mutexattr_t *) paramsnonnull();
+int pthread_mutexattr_getpshared(const pthread_mutexattr_t *, int *) paramsnonnull();
+int pthread_mutexattr_gettype(const pthread_mutexattr_t *, int *) paramsnonnull();
+int pthread_mutexattr_init(pthread_mutexattr_t *) paramsnonnull();
+int pthread_mutexattr_setpshared(pthread_mutexattr_t *, int) paramsnonnull();
+int pthread_mutexattr_settype(pthread_mutexattr_t *, int) paramsnonnull();
+int pthread_once(pthread_once_t *, void (*)(void)) paramsnonnull();
+int pthread_orphan_np(void);
+int pthread_rwlock_destroy(pthread_rwlock_t *) paramsnonnull();
+int pthread_rwlock_init(pthread_rwlock_t *, const pthread_rwlockattr_t *) paramsnonnull((1));
+int pthread_rwlock_rdlock(pthread_rwlock_t *) paramsnonnull();
+int pthread_rwlock_tryrdlock(pthread_rwlock_t *) paramsnonnull();
+int pthread_rwlock_trywrlock(pthread_rwlock_t *) paramsnonnull();
+int pthread_rwlock_unlock(pthread_rwlock_t *) paramsnonnull();
+int pthread_rwlock_wrlock(pthread_rwlock_t *) paramsnonnull();
+int pthread_rwlockattr_destroy(pthread_rwlockattr_t *) paramsnonnull();
+int pthread_rwlockattr_getpshared(const pthread_rwlockattr_t *, int *) paramsnonnull();
+int pthread_rwlockattr_init(pthread_rwlockattr_t *) paramsnonnull();
+int pthread_rwlockattr_setpshared(pthread_rwlockattr_t *, int) paramsnonnull();
+int pthread_setcancelstate(int, int *);
+int pthread_setcanceltype(int, int *);
+int pthread_setname_np(pthread_t, const char *) paramsnonnull();
+int pthread_setschedprio(pthread_t, int);
+int pthread_setspecific(pthread_key_t, const void *);
+int pthread_spin_destroy(pthread_spinlock_t *) paramsnonnull();
+int pthread_spin_init(pthread_spinlock_t *, int) paramsnonnull();
+int pthread_spin_lock(pthread_spinlock_t *) paramsnonnull();
+int pthread_spin_trylock(pthread_spinlock_t *) paramsnonnull();
+int pthread_spin_unlock(pthread_spinlock_t *) paramsnonnull();
+int pthread_testcancel_np(void);
+int pthread_tryjoin_np(pthread_t, void **);
+int pthread_yield(void);
+pthread_id_np_t pthread_getthreadid_np(void);
+pthread_t pthread_self(void) pureconst;
+void *pthread_getspecific(pthread_key_t);
+void pthread_cleanup_pop(struct _pthread_cleanup_buffer *, int) paramsnonnull();
+void pthread_cleanup_push(struct _pthread_cleanup_buffer *, void (*)(void *), void *) paramsnonnull((1));
+void pthread_exit(void *) wontreturn;
+void pthread_testcancel(void);
 
-typedef union cthread_sem_t {
-  struct {
-    uint64_t count;
-  } linux;
-} cthread_sem_t;
+/* clang-format on */
 
-typedef struct cthread_attr_t {
-  size_t stacksize, guardsize;
-  int mode;
-} cthread_attr_t;
+#define pthread_cleanup_push(routine, arg)  \
+  {                                         \
+    struct _pthread_cleanup_buffer _buffer; \
+    pthread_cleanup_push(&_buffer, (routine), (arg));
 
-extern const void *const _main_thread_ctor[];
+#define pthread_cleanup_pop(execute)        \
+  pthread_cleanup_pop(&_buffer, (execute)); \
+  }
 
-int cthread_create(cthread_t *, const cthread_attr_t *, void *(*)(void *),
-                   void *);
-
-int cthread_yield(void);
-cthread_t cthread_self(void);
-int cthread_join(cthread_t, void **);
-void cthread_exit(void *) wontreturn;
-int cthread_detach(cthread_t);
-int cthread_attr_init(cthread_attr_t *);
-int cthread_attr_destroy(cthread_attr_t *);
-int cthread_attr_setstacksize(cthread_attr_t *, size_t);
-size_t thread_attr_getstacksize(const cthread_attr_t *);
-int cthread_attr_setguardsize(cthread_attr_t *, size_t);
-size_t cthread_attr_getguardsize(const cthread_attr_t *);
-int cthread_attr_setdetachstate(cthread_attr_t *, int);
-int cthread_attr_getdetachstate(const cthread_attr_t *);
-int cthread_sem_init(cthread_sem_t *, int);
-int cthread_sem_destroy(cthread_sem_t *);
-int cthread_sem_wait(cthread_sem_t *, int, const struct timespec *);
-int cthread_sem_signal(cthread_sem_t *);
-int cthread_memory_wait32(int *, int, const struct timespec *);
-int cthread_memory_wake32(int *, int);
-void cthread_zombies_add(cthread_t);
-void cthread_zombies_reap(void);
+#if (__GNUC__ + 0) * 100 + (__GNUC_MINOR__ + 0) >= 407 && \
+    !defined(__STRICT_ANSI__) && !defined(MODE_DBG)
+extern const errno_t EBUSY;
+#define pthread_spin_lock(pSpin)                                  \
+  ({                                                              \
+    pthread_spinlock_t *_s = pSpin;                               \
+    while (__atomic_test_and_set(&_s->_lock, __ATOMIC_ACQUIRE)) { \
+    }                                                             \
+    0;                                                            \
+  })
+#define pthread_spin_unlock(pSpin)                     \
+  ({                                                   \
+    pthread_spinlock_t *_s = pSpin;                    \
+    __atomic_store_n(&_s->_lock, 0, __ATOMIC_RELEASE); \
+    0;                                                 \
+  })
+#define pthread_spin_trylock(pSpin)                                  \
+  ({                                                                 \
+    pthread_spinlock_t *_s = pSpin;                                  \
+    __atomic_test_and_set(&_s->_lock, __ATOMIC_ACQUIRE) ? EBUSY : 0; \
+  })
+#define pthread_spin_init(pSpin, multiprocess) \
+  (__atomic_store_n(&(pSpin)->_lock, 0, __ATOMIC_RELAXED), 0)
+#define pthread_spin_destroy(pSpin) \
+  (__atomic_store_n(&(pSpin)->_lock, -1, __ATOMIC_RELAXED), 0)
+#endif /* GCC 4.7+ */
 
 COSMOPOLITAN_C_END_
 #endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */

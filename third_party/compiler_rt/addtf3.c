@@ -12,8 +12,10 @@
 // default rounding (to nearest, ties to even).
 //
 //===----------------------------------------------------------------------===//
+#include "libc/math.h"
+#if !(LDBL_MANT_DIG == 53 && LDBL_MAX_EXP == 1024)
 
-STATIC_YOINK("huge_compiler_rt_license");
+__static_yoink("huge_compiler_rt_license");
 
 #define QUAD_PRECISION
 #include "third_party/compiler_rt/fp_lib.inc"
@@ -26,3 +28,5 @@ COMPILER_RT_ABI long double __addtf3(long double a, long double b){
 }
 
 #endif
+
+#endif /* long double is long */

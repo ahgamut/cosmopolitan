@@ -16,9 +16,9 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/strace.internal.h"
 #include "libc/calls/syscall_support-nt.internal.h"
 #include "libc/intrin/describeflags.internal.h"
+#include "libc/intrin/strace.internal.h"
 #include "libc/nt/files.h"
 
 __msabi extern typeof(CreateSymbolicLink) *const __imp_CreateSymbolicLinkW;
@@ -34,6 +34,6 @@ bool32 CreateSymbolicLink(const char16_t *lpSymlinkFileName,
   ok = __imp_CreateSymbolicLinkW(lpSymlinkFileName, lpTargetPathName, dwFlags);
   if (!ok) __winerr();
   NTTRACE("CreateSymbolicLink(%#hs, %#hs, %s) → %hhhd% m", lpSymlinkFileName,
-          lpTargetPathName, DescribeNtSymbolicLinkFlags(dwFlags), ok);
+          lpTargetPathName, DescribeNtSymlinkFlags(dwFlags), ok);
   return ok;
 }

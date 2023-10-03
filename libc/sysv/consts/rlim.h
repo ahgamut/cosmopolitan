@@ -1,19 +1,18 @@
 #ifndef COSMOPOLITAN_LIBC_SYSV_CONSTS_RLIM_H_
 #define COSMOPOLITAN_LIBC_SYSV_CONSTS_RLIM_H_
-#include "libc/runtime/symbolic.h"
-
-#define RLIM_INFINITY SYMBOLIC(RLIM_INFINITY)
-#define RLIM_NLIMITS SYMBOLIC(RLIM_NLIMITS)
-#define RLIM_SAVED_CUR SYMBOLIC(RLIM_SAVED_CUR)
-#define RLIM_SAVED_MAX SYMBOLIC(RLIM_SAVED_MAX)
-
 #if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 
-extern const long RLIM_INFINITY;
-extern const long RLIM_NLIMITS;
-extern const long RLIM_SAVED_CUR;
-extern const long RLIM_SAVED_MAX;
+extern const uint64_t RLIM_INFINITY;
+extern const uint64_t RLIM_NLIMITS;
+extern const uint64_t RLIM_SAVED_CUR;
+extern const uint64_t RLIM_SAVED_MAX;
+
+#define RLIM_INFINITY  RLIM_INFINITY
+#define RLIM_NLIMITS   RLIM_NLIMITS
+#define RLIM_SAVED_CUR RLIM_SAVED_CUR
+#define RLIM_SAVED_MAX RLIM_SAVED_MAX
+
 
 COSMOPOLITAN_C_END_
 #endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */

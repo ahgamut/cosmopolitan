@@ -23,6 +23,7 @@
 #include "libc/runtime/runtime.h"
 #include "libc/sysv/consts/madv.h"
 #include "libc/sysv/consts/o.h"
+#include "libc/x/x.h"
 
 /**
  * Reads entire file into memory.
@@ -32,12 +33,13 @@
  */
 void *xslurp(const char *path, size_t *opt_out_size) {
   int fd;
+  char *res;
   size_t i, got;
-  char *res, *p;
   ssize_t rc, size;
   res = NULL;
   if ((fd = open(path, O_RDONLY)) != -1) {
-    if ((size = getfiledescriptorsize(fd)) != -1 && (res = valloc(size + 1))) {
+    if ((size = lseek(fd, 0, SEEK_END)) != -1 &&
+        (res = memalign(4096, size + 1))) {
       if (size > 2 * 1024 * 1024) {
         fadvise(fd, 0, size, MADV_SEQUENTIAL);
       }
@@ -45,7 +47,7 @@ void *xslurp(const char *path, size_t *opt_out_size) {
       TryAgain:
         if ((rc = pread(fd, res + i, size - i, i)) != -1) {
           if (!(got = rc)) {
-            if (getfiledescriptorsize(fd) == -1) {
+            if (lseek(fd, 0, SEEK_CUR) == -1) {
               abort();  // TODO(jart): what is this
             }
           }

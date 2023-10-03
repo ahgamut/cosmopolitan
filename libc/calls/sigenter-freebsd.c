@@ -16,41 +16,48 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "ape/sections.internal.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
 #include "libc/calls/state.internal.h"
-#include "libc/calls/struct/sigaction-freebsd.internal.h"
+#include "libc/calls/struct/sigaction.h"
 #include "libc/calls/struct/siginfo-freebsd.internal.h"
+#include "libc/calls/struct/siginfo-meta.internal.h"
 #include "libc/calls/struct/siginfo.h"
 #include "libc/calls/struct/ucontext-freebsd.internal.h"
-#include "libc/calls/typedef/sigaction_f.h"
 #include "libc/calls/ucontext.h"
-#include "libc/intrin/kprintf.h"
 #include "libc/log/libfatal.internal.h"
 #include "libc/macros.internal.h"
+#include "libc/runtime/runtime.h"
+#include "libc/runtime/stack.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/sa.h"
 
+#ifdef __x86_64__
+
 privileged void __sigenter_freebsd(int sig, struct siginfo_freebsd *freebsdinfo,
                                    struct ucontext_freebsd *ctx) {
-  int rva, flags;
+#pragma GCC push_options
+#pragma GCC diagnostic ignored "-Wframe-larger-than="
   struct Goodies {
     ucontext_t uc;
     siginfo_t si;
   } g;
-  rva = __sighandrvas[sig & (NSIG - 1)];
+  CheckLargeStackAllocation(&g, sizeof(g));
+#pragma GCC pop_options
+  int rva, flags;
+  rva = __sighandrvas[sig];
   if (rva >= kSigactionMinRva) {
-    flags = __sighandflags[sig & (NSIG - 1)];
+    flags = __sighandflags[sig];
     if (~flags & SA_SIGINFO) {
-      ((sigaction_f)(_base + rva))(sig, 0, 0);
+      ((sigaction_f)(__executable_start + rva))(sig, 0, 0);
     } else {
       __repstosb(&g, 0, sizeof(g));
       g.uc.uc_mcontext.fpregs = &g.uc.__fpustate;
       g.uc.uc_stack.ss_sp = ctx->uc_stack.ss_sp;
       g.uc.uc_stack.ss_size = ctx->uc_stack.ss_size;
       g.uc.uc_stack.ss_flags = ctx->uc_stack.ss_flags;
-      g.uc.uc_flags = ctx->uc_flags;
-      __repmovsb(&g.uc.uc_sigmask, &ctx->uc_sigmask,
+      __repmovsb(&g.uc.uc_sigmask, ctx->uc_sigmask,
                  MIN(sizeof(g.uc.uc_sigmask), sizeof(ctx->uc_sigmask)));
       g.uc.uc_mcontext.r8 = ctx->uc_mcontext.mc_r8;
       g.uc.uc_mcontext.r9 = ctx->uc_mcontext.mc_r9;
@@ -75,22 +82,13 @@ privileged void __sigenter_freebsd(int sig, struct siginfo_freebsd *freebsdinfo,
       g.uc.uc_mcontext.err = ctx->uc_mcontext.mc_err;
       g.uc.uc_mcontext.trapno = ctx->uc_mcontext.mc_trapno;
       __repmovsb(&g.uc.__fpustate, &ctx->uc_mcontext.mc_fpstate, 512);
-      g.si.si_signo = freebsdinfo->si_signo;
-      g.si.si_errno = freebsdinfo->si_errno;
-      g.si.si_code = freebsdinfo->si_code;
-      if (freebsdinfo->si_pid) {
-        g.si.si_pid = freebsdinfo->si_pid;
-        g.si.si_uid = freebsdinfo->si_uid;
-      } else {
-        g.si.si_addr = (void *)freebsdinfo->si_addr;
-      }
-      g.si.si_value = freebsdinfo->si_value;
-      ((sigaction_f)(_base + rva))(sig, &g.si, &g.uc);
+      __siginfo2cosmo(&g.si, (void *)freebsdinfo);
+      ((sigaction_f)(__executable_start + rva))(sig, &g.si, &g.uc);
       ctx->uc_stack.ss_sp = g.uc.uc_stack.ss_sp;
       ctx->uc_stack.ss_size = g.uc.uc_stack.ss_size;
       ctx->uc_stack.ss_flags = g.uc.uc_stack.ss_flags;
       ctx->uc_flags = g.uc.uc_flags;
-      __repmovsb(&ctx->uc_sigmask, &g.uc.uc_sigmask,
+      __repmovsb(ctx->uc_sigmask, &g.uc.uc_sigmask,
                  MIN(sizeof(g.uc.uc_sigmask), sizeof(ctx->uc_sigmask)));
       ctx->uc_mcontext.mc_rdi = g.uc.uc_mcontext.rdi;
       ctx->uc_mcontext.mc_rsi = g.uc.uc_mcontext.rsi;
@@ -123,3 +121,5 @@ privileged void __sigenter_freebsd(int sig, struct siginfo_freebsd *freebsdinfo,
    * function, and 2) calls sys_sigreturn() once this returns.
    */
 }
+
+#endif /* __x86_64__ */

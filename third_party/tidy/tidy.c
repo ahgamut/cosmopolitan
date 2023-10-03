@@ -24,7 +24,10 @@
 #include "third_party/tidy/tidybuffio.h"
 #include "libc/assert.h"
 #include "libc/fmt/fmt.h"
-#include "libc/alg/alg.h"
+#include "libc/mem/alg.h"
+#include "libc/str/str.h"
+#include "libc/runtime/runtime.h"
+#include "libc/mem/mem.h"
 #include "third_party/tidy/sprtf.h"
 
 #if defined(_WIN32)

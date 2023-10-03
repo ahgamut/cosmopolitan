@@ -20,6 +20,7 @@
 #include "libc/calls/struct/rlimit.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
+#include "libc/nexgen32e/vendor.internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/sysv/consts/rlimit.h"
 #include "libc/testlib/testlib.h"
@@ -29,7 +30,7 @@ char buf[6] = {0};
 struct rlimit rlim = {0, 10};
 
 TEST(pipe, efault) {
-  EXPECT_SYS(EFAULT, -1, pipe(0));
+  EXPECT_SYS(EFAULT, -1, pipe(__veil("r", (void *)0)));
 }
 
 TEST(pipe, einval) {
@@ -48,6 +49,7 @@ TEST(pipe, ebadf) {
 
 TEST(pipe, emfile) {
   if (IsWindows()) return;  // TODO
+  if (IsCygwin()) return;
   ASSERT_NE(-1, (pid = fork()));
   if (!pid) {
     ASSERT_EQ(0, setrlimit(RLIMIT_NOFILE, &rlim));

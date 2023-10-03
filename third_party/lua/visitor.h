@@ -4,11 +4,11 @@
 COSMOPOLITAN_C_START_
 
 struct LuaVisited {
-  int n;
+  int i, n;
   const void **p;
 };
 
-bool LuaPushVisit(struct LuaVisited *, const void *);
+int LuaPushVisit(struct LuaVisited *, const void *);
 void LuaPopVisit(struct LuaVisited *);
 
 COSMOPOLITAN_C_END_

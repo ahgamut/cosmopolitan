@@ -2,6 +2,7 @@
 #define COSMOPOLITAN_LIBC_CALLS_STRUCT_SIGINFO_H_
 #include "libc/calls/struct/sigval.h"
 #if !(__ASSEMBLER__ + __LINKER__ + 0)
+COSMOPOLITAN_C_START_
 
 struct siginfo {
   int32_t si_signo;
@@ -11,11 +12,13 @@ struct siginfo {
     struct {
       union {
         struct {
+          /* signals sent by kill() and sigqueue() set these */
           int32_t si_pid;
           uint32_t si_uid;
         };
         struct {
-          int32_t si_timerid; /* SIGALRM */
+          /* SIGALRM sets these */
+          int32_t si_timerid;
           int32_t si_overrun;
         };
       };
@@ -54,5 +57,11 @@ struct siginfo {
 
 typedef struct siginfo siginfo_t;
 
+#ifdef _COSMO_SOURCE
+void __minicrash(int, siginfo_t *, void *);
+char __is_stack_overflow(siginfo_t *, void *);
+#endif
+
+COSMOPOLITAN_C_END_
 #endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
 #endif /* COSMOPOLITAN_LIBC_CALLS_STRUCT_SIGINFO_H_ */

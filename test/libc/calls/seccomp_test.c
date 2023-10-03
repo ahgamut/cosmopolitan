@@ -18,10 +18,10 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
-#include "libc/calls/struct/bpf.h"
-#include "libc/calls/struct/filter.h"
+#include "libc/calls/struct/bpf.internal.h"
+#include "libc/calls/struct/filter.internal.h"
 #include "libc/calls/struct/iovec.h"
-#include "libc/calls/struct/seccomp.h"
+#include "libc/calls/struct/seccomp.internal.h"
 #include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/errno.h"
 #include "libc/runtime/runtime.h"
@@ -32,6 +32,10 @@
 #include "libc/sysv/consts/sig.h"
 #include "libc/testlib/testlib.h"
 #include "tool/net/sandbox.h"
+
+void SetUpOnce(void) {
+  ASSERT_SYS(0, 0, pledge("stdio proc", 0));
+}
 
 // It's been reported that Chromebooks return EINVAL here.
 bool CanUseSeccomp(void) {
@@ -49,7 +53,7 @@ bool CanUseSeccomp(void) {
 }
 
 void SetUp(void) {
-  if (!__is_linux_2_6_23() || !CanUseSeccomp()) {
+  if (!IsLinux() || !__is_linux_2_6_23() || !CanUseSeccomp()) {
     exit(0);
   }
 }

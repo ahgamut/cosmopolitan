@@ -19,6 +19,7 @@
 #include "libc/errno.h"
 #include "libc/fmt/conv.h"
 #include "libc/mem/mem.h"
+#include "libc/stdckdint.h"
 
 /**
  * Manages array memory, the BSD way.
@@ -26,11 +27,10 @@
  * @param ptr may be NULL for malloc() behavior
  * @param nmemb may be 0 for free() behavior; shrinking is promised too
  * @return new address or NULL w/ errno and ptr is NOT free()'d
- * @threadsafe
  */
 void *reallocarray(void *ptr, size_t nmemb, size_t itemsize) {
   size_t n;
-  if (!__builtin_mul_overflow(nmemb, itemsize, &n)) {
+  if (!ckd_mul(&n, nmemb, itemsize)) {
     return realloc(ptr, n);
   } else {
     errno = ENOMEM;

@@ -31,7 +31,7 @@ asm(".ident\t\"\\n\\n\
 Musl libc (MIT License)\\n\
 Copyright 2005-2014 Rich Felker, et. al.\"");
 asm(".include \"libc/disclaimer.inc\"");
-/* clang-format off */
+// clang-format off
 
 /**
  * Computes remainder and part of quotient.
@@ -115,3 +115,7 @@ end:
 	*quo = sx^sy ? -(int)q : (int)q;
 	return sx ? -x : x;
 }
+
+#if LDBL_MANT_DIG == 53 && LDBL_MAX_EXP == 1024
+__weak_reference(remquo, remquol);
+#endif

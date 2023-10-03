@@ -17,11 +17,10 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/macros.internal.h"
-.real
-.code16 # ∩ .code32 ∩ .code64
 
 //	Function Profiling Hook.
 //	cc -pg adds this to the start of global functions.
 mcount:	ret
-	.endfn	mcount,weak
-	.alias	mcount,.mcount		# freebsd weirdness?
+	.endfn	mcount,globl,weak
+	.alias	mcount,_mcount		// aarch64 weirdness?
+	.alias	mcount,.mcount		// freebsd weirdness?

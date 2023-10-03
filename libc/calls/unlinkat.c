@@ -16,16 +16,19 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/weaken.h"
 #include "libc/calls/calls.h"
-#include "libc/calls/strace.internal.h"
+#include "libc/calls/struct/stat.h"
 #include "libc/calls/syscall-nt.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
+#include "libc/errno.h"
 #include "libc/intrin/asan.internal.h"
 #include "libc/intrin/describeflags.internal.h"
+#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/weaken.h"
+#include "libc/sysv/consts/s.h"
 #include "libc/sysv/errfuns.h"
-#include "libc/zipos/zipos.internal.h"
+#include "libc/runtime/zipos.internal.h"
 
 /**
  * Deletes inode and maybe the file too.
@@ -40,17 +43,30 @@
  */
 int unlinkat(int dirfd, const char *path, int flags) {
   int rc;
-  char buf[12];
-  if (IsAsan() && !__asan_is_valid(path, 1)) {
+
+  if (IsAsan() && !__asan_is_valid_str(path)) {
     rc = efault();
-  } else if (weaken(__zipos_notat) && (rc = __zipos_notat(dirfd, path)) == -1) {
+  } else if (_weaken(__zipos_notat) &&
+             (rc = __zipos_notat(dirfd, path)) == -1) {
     STRACE("zipos unlinkat not supported yet");
   } else if (!IsWindows()) {
     rc = sys_unlinkat(dirfd, path, flags);
   } else {
     rc = sys_unlinkat_nt(dirfd, path, flags);
   }
-  STRACE("unlinkat(%s, %#s, %#b) → %d% m", DescribeDirfd(buf, dirfd), path,
-         flags, rc);
+
+  // POSIX.1 says unlink(directory) raises EPERM but on Linux
+  // it always raises EISDIR, which is so much less ambiguous
+  if (!IsLinux() && rc == -1 && !flags && errno == EPERM) {
+    struct stat st;
+    if (!fstatat(dirfd, path, &st, 0) && S_ISDIR(st.st_mode)) {
+      errno = EISDIR;
+    } else {
+      errno = EPERM;
+    }
+  }
+
+  STRACE("unlinkat(%s, %#s, %#b) → %d% m", DescribeDirfd(dirfd), path, flags,
+         rc);
   return rc;
 }

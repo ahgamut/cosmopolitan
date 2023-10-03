@@ -16,12 +16,13 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/likely.h"
+#include "tool/plinko/lib/plinko.h"
 #include "libc/calls/calls.h"
-#include "libc/calls/strace.internal.h"
 #include "libc/calls/struct/sigaction.h"
+#include "libc/calls/syscall-sysv.internal.h"
 #include "libc/errno.h"
-#include "libc/intrin/kprintf.h"
+#include "libc/intrin/likely.h"
+#include "libc/intrin/strace.internal.h"
 #include "libc/log/countbranch.h"
 #include "libc/log/countexpr.h"
 #include "libc/log/log.h"
@@ -32,19 +33,19 @@
 #include "libc/runtime/symbols.internal.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
+#include "libc/sysv/consts/arch.h"
 #include "libc/sysv/consts/map.h"
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/prot.h"
 #include "libc/sysv/consts/sig.h"
 #include "libc/time/clockstonanos.internal.h"
-#include "third_party/getopt/getopt.h"
+#include "third_party/getopt/getopt.internal.h"
 #include "tool/build/lib/case.h"
 #include "tool/plinko/lib/char.h"
 #include "tool/plinko/lib/error.h"
 #include "tool/plinko/lib/gc.h"
 #include "tool/plinko/lib/histo.h"
 #include "tool/plinko/lib/index.h"
-#include "tool/plinko/lib/plinko.h"
 #include "tool/plinko/lib/print.h"
 #include "tool/plinko/lib/printf.h"
 #include "tool/plinko/lib/stack.h"
@@ -167,7 +168,7 @@ static int QuoteList(int x) {
 }
 
 static int GetAtom(const char *s) {
-  int x, y, t, u;
+  int x, y;
   ax = y = TERM;
   x = *s++ & 255;
   if (*s) y = GetAtom(s);
@@ -531,7 +532,7 @@ struct T DispatchIf(dword ea, dword tm, dword r, dword p1, dword p2, dword d) {
 struct T DispatchPrinc(dword ea, dword tm, dword r, dword p1, dword p2,
                        dword d) {
   bool b;
-  int x, e, A;
+  int e;
   e = LO(ea);
   SetFrame(r, e);
   b = literally;
@@ -544,7 +545,6 @@ struct T DispatchPrinc(dword ea, dword tm, dword r, dword p1, dword p2,
 
 struct T DispatchFlush(dword ea, dword tm, dword r, dword p1, dword p2,
                        dword d) {
-  int x, A;
   SetFrame(r, LO(ea));
   Flush(1);
   return Ret(MAKE(kIgnore0, 0), tm, r);
@@ -674,9 +674,9 @@ struct T DispatchTrace(dword ea, dword tm, dword r, dword p1, dword p2,
 struct T DispatchFtrace(dword ea, dword tm, dword r, dword p1, dword p2,
                         dword d) {
   ftrace_install();
-  ++__ftrace;
+  ftrace_enabled(+1);
   ea = MAKE(recurse(MAKE(Cadr(LO(ea)), HI(ea)), p1, p2), 0);
-  --__ftrace;
+  ftrace_enabled(-1);
   return Ret(ea, tm, r);
 }
 
@@ -793,15 +793,11 @@ Delegate:
 
 struct T DispatchCall1(dword ea, dword tm, dword r, dword p1, dword p2,
                        dword d) {
-  int a, b, e, f, t, u, y, p, z;
+  int b, e, u, y, p;
   e = LO(ea);
-  a = HI(ea);
   DCHECK_LT(e, 0);
   SetFrame(r, e);
-  f = Car(e);
-  z = Cdr(e);
   y = HI(d);
-  t = Car(y);
   // (eval ((⅄ (λ 𝑥 𝑦) 𝑏) 𝑧) 𝑎) ↩ (eval ((λ 𝑥 𝑦) 𝑧) 𝑏)
   y = Cdr(y);  // ((λ 𝑥 𝑦) 𝑏)
   u = Cdr(y);  //          𝑏
@@ -815,15 +811,11 @@ struct T DispatchCall1(dword ea, dword tm, dword r, dword p1, dword p2,
 
 struct T DispatchCall2(dword ea, dword tm, dword r, dword p1, dword p2,
                        dword d) {
-  int a, b, e, f, t, u, y, p, z;
+  int b, e, u, y, p;
   e = LO(ea);
-  a = HI(ea);
   DCHECK_LT(e, 0);
   SetFrame(r, e);
-  f = Car(e);
-  z = Cdr(e);
   y = HI(d);
-  t = Car(y);
   // (eval ((⅄ (λ 𝑥 𝑦) 𝑏) 𝑧) 𝑎) ↩ (eval ((λ 𝑥 𝑦) 𝑧) 𝑏)
   y = Cdr(y);  // ((λ 𝑥 𝑦) 𝑏)
   u = Cdr(y);  //          𝑏
@@ -877,7 +869,7 @@ static void PrintStats(long usec) {
           -cHeap - -cFrost, usec, cGets, cSets, cAtoms, -cFrost);
 }
 
-static wontreturn Exit(void) {
+static wontreturn int Exit(void) {
   exit(0 <= fails && fails <= 255 ? fails : 255);
 }
 
@@ -902,9 +894,8 @@ static wontreturn void PrintUsage(void) {
 }
 
 int Plinko(int argc, char *argv[]) {
-  long *p;
+  int S, x;
   bool trace;
-  int S, x, u, j;
   uint64_t t1, t2;
   tick = kStartTsc;
 #ifndef NDEBUG
@@ -936,8 +927,8 @@ int Plinko(int argc, char *argv[]) {
     }
   }
 
-  if (arch_prctl(ARCH_SET_FS, 0x200000000000) == -1 ||
-      arch_prctl(ARCH_SET_GS, (intptr_t)DispatchPlan) == -1) {
+  if (sys_arch_prctl(ARCH_SET_FS, 0x200000000000) == -1 ||
+      sys_arch_prctl(ARCH_SET_GS, (intptr_t)DispatchPlan) == -1) {
     fputs("error: ", stderr);
     fputs(strerror(errno), stderr);
     fputs("\nyour operating system doesn't allow you change both "

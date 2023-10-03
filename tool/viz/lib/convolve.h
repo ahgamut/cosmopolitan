@@ -1,27 +1,31 @@
 #ifndef COSMOPOLITAN_TOOL_VIZ_LIB_CONVOLVE_H_
 #define COSMOPOLITAN_TOOL_VIZ_LIB_CONVOLVE_H_
-#include "libc/bits/xmmintrin.internal.h"
+#include "dsp/tty/quant.h"
+#include "libc/mem/mem.h"
 #include "libc/str/str.h"
 #include "tool/viz/lib/graphic.h"
 #if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 
-forceinline void convolve(unsigned yn, unsigned xn, __m128 img[yn][xn], int KW,
-                          const float kernel[KW][KW], float C1, float C2) {
+typedef float convolve_t __attribute__((__vector_size__(16)));
+
+forceinline void convolve(unsigned yn, unsigned xn, ttyrgb_m128 img[yn][xn],
+                          int KW, const float kernel[KW][KW], float C1,
+                          float C2) {
   /* TODO(jart): nontemporal herringbone strategy */
   float f;
   struct Graphic g;
   unsigned y, x, i, j;
-  __v4sf p, kflip[KW][KW], (*tmp)[yn][xn];
+  convolve_t p, kflip[KW][KW], (*tmp)[yn][xn];
   for (i = 0; i < KW; ++i) {
     for (j = 0; j < KW; ++j) {
       f = kernel[i][j] / C1;
-      kflip[KW - i - 1][KW - j - 1] = (__v4sf){f, f, f, f};
+      kflip[KW - i - 1][KW - j - 1] = (convolve_t){f, f, f, f};
     }
   }
   bzero(&g, sizeof(g));
   resizegraphic(&g, yn, xn);
-  tmp = g.b.p;
+  tmp = g.b;
   for (y = 0; y < yn - KW; ++y) {
     for (x = 0; x < xn - KW; ++x) {
       bzero(&p, sizeof(p));
@@ -34,7 +38,7 @@ forceinline void convolve(unsigned yn, unsigned xn, __m128 img[yn][xn], int KW,
     }
   }
   memcpy(img, tmp, yn * xn * sizeof(img[0][0]));
-  bfree(&g.b);
+  free(g.b);
 }
 
 COSMOPOLITAN_C_END_

@@ -17,7 +17,8 @@
 /* clang-format off */
 #include "third_party/make/config.h"
 #include "third_party/make/getprogname.h"
-#include "libc/bits/safemacros.internal.h"
+#include "libc/intrin/safemacros.internal.h"
+#include "libc/errno.h"
 #include "third_party/make/dirname.h"
 
 char const *

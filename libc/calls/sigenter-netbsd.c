@@ -16,41 +16,43 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "ape/sections.internal.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
 #include "libc/calls/state.internal.h"
-#include "libc/calls/struct/sigaction-freebsd.internal.h"
+#include "libc/calls/struct/sigaction.h"
+#include "libc/calls/struct/siginfo-meta.internal.h"
 #include "libc/calls/struct/siginfo-netbsd.internal.h"
 #include "libc/calls/struct/siginfo.h"
 #include "libc/calls/struct/ucontext-netbsd.internal.h"
-#include "libc/calls/typedef/sigaction_f.h"
 #include "libc/calls/ucontext.h"
 #include "libc/log/libfatal.internal.h"
 #include "libc/macros.internal.h"
+#include "libc/runtime/runtime.h"
+#include "libc/runtime/stack.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/sa.h"
 
+#ifdef __x86_64__
+
 privileged void __sigenter_netbsd(int sig, struct siginfo_netbsd *si,
                                   struct ucontext_netbsd *ctx) {
-  int rva, flags;
+#pragma GCC push_options
+#pragma GCC diagnostic ignored "-Wframe-larger-than="
   ucontext_t uc;
+  CheckLargeStackAllocation(&uc, sizeof(uc));
+#pragma GCC pop_options
+  int rva, flags;
   struct siginfo si2;
-  rva = __sighandrvas[sig & (NSIG - 1)];
+  rva = __sighandrvas[sig];
   if (rva >= kSigactionMinRva) {
-    flags = __sighandflags[sig & (NSIG - 1)];
+    flags = __sighandflags[sig];
     if (~flags & SA_SIGINFO) {
-      ((sigaction_f)(_base + rva))(sig, 0, 0);
+      ((sigaction_f)(__executable_start + rva))(sig, 0, 0);
     } else {
       __repstosb(&uc, 0, sizeof(uc));
-      __repstosb(&si2, 0, sizeof(si2));
-      si2.si_signo = si->si_signo;
-      si2.si_code = si->si_code;
-      si2.si_errno = si->si_errno;
-      si2.si_pid = si->si_pid;
-      si2.si_uid = si->si_uid;
-      si2.si_value = si->si_value;
+      __siginfo2cosmo(&si2, (void *)si);
       uc.uc_mcontext.fpregs = &uc.__fpustate;
-      uc.uc_flags = ctx->uc_flags;
       uc.uc_stack.ss_sp = ctx->uc_stack.ss_sp;
       uc.uc_stack.ss_size = ctx->uc_stack.ss_size;
       uc.uc_stack.ss_flags = ctx->uc_stack.ss_flags;
@@ -77,8 +79,14 @@ privileged void __sigenter_netbsd(int sig, struct siginfo_netbsd *si,
       uc.uc_mcontext.err = ctx->uc_mcontext.err;
       uc.uc_mcontext.rip = ctx->uc_mcontext.rip;
       uc.uc_mcontext.rsp = ctx->uc_mcontext.rsp;
-      *uc.uc_mcontext.fpregs = ctx->uc_mcontext.__fpregs;
-      ((sigaction_f)(_base + rva))(sig, &si2, &uc);
+      __repmovsb(uc.uc_mcontext.fpregs, &ctx->uc_mcontext.__fpregs,
+                 sizeof(ctx->uc_mcontext.__fpregs));
+      ((sigaction_f)(__executable_start + rva))(sig, &si2, &uc);
+      ctx->uc_stack.ss_sp = uc.uc_stack.ss_sp;
+      ctx->uc_stack.ss_size = uc.uc_stack.ss_size;
+      ctx->uc_stack.ss_flags = uc.uc_stack.ss_flags;
+      __repmovsb(&ctx->uc_sigmask, &uc.uc_sigmask,
+                 MIN(sizeof(uc.uc_sigmask), sizeof(ctx->uc_sigmask)));
       ctx->uc_mcontext.rdi = uc.uc_mcontext.rdi;
       ctx->uc_mcontext.rsi = uc.uc_mcontext.rsi;
       ctx->uc_mcontext.rdx = uc.uc_mcontext.rdx;
@@ -100,7 +108,8 @@ privileged void __sigenter_netbsd(int sig, struct siginfo_netbsd *si,
       ctx->uc_mcontext.err = uc.uc_mcontext.err;
       ctx->uc_mcontext.rip = uc.uc_mcontext.rip;
       ctx->uc_mcontext.rsp = uc.uc_mcontext.rsp;
-      ctx->uc_mcontext.__fpregs = *uc.uc_mcontext.fpregs;
+      __repmovsb(&ctx->uc_mcontext.__fpregs, uc.uc_mcontext.fpregs,
+                 sizeof(ctx->uc_mcontext.__fpregs));
     }
   }
   /*
@@ -109,3 +118,5 @@ privileged void __sigenter_netbsd(int sig, struct siginfo_netbsd *si,
    * function, and 2) calls sys_sigreturn() once this returns.
    */
 }
+
+#endif /* __x86_64__ */

@@ -16,19 +16,20 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/bits.h"
-#include "libc/bits/pushpop.h"
-#include "libc/bits/safemacros.internal.h"
 #include "libc/calls/calls.h"
 #include "libc/dce.h"
 #include "libc/dns/hoststxt.h"
+#include "libc/dns/servicestxt.h"
 #include "libc/fmt/fmt.h"
-#include "libc/intrin/pthread.h"
+#include "libc/intrin/bits.h"
+#include "libc/intrin/pushpop.internal.h"
+#include "libc/intrin/safemacros.internal.h"
 #include "libc/macros.internal.h"
-#include "libc/nt/systeminfo.h"
+#include "libc/mem/mem.h"
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
+#include "libc/thread/thread.h"
 
 static struct HostsTxt *g_hoststxt;
 static struct HostsTxtInitialStaticMemory {
@@ -38,16 +39,11 @@ static struct HostsTxtInitialStaticMemory {
   char strings[64];
 } g_hoststxt_init;
 
-static textwindows dontinline char *GetNtHostsTxtPath(char *pathbuf,
-                                                      uint32_t size) {
-  const char *const kWinHostsPath = "\\drivers\\etc\\hosts";
-  uint32_t len = GetSystemDirectoryA(&pathbuf[0], size);
-  if (len && len + strlen(kWinHostsPath) + 1 < size) {
-    if (pathbuf[len] == '\\') pathbuf[len--] = '\0';
-    memcpy(&pathbuf[len], kWinHostsPath, strlen(kWinHostsPath) + 1);
-    return &pathbuf[0];
+static const char *GetHostsTxtPath(char *path, size_t size) {
+  if (!IsWindows()) {
+    return "/etc/hosts";
   } else {
-    return NULL;
+    return GetSystemDirectoryPath(path, size, "drivers\\etc\\hosts");
   }
 }
 
@@ -55,12 +51,10 @@ static textwindows dontinline char *GetNtHostsTxtPath(char *pathbuf,
  * Returns hosts.txt map.
  *
  * @note yoinking realloc() ensures there's no size limits
- * @threadsafe
  */
 const struct HostsTxt *GetHostsTxt(void) {
   FILE *f;
-  const char *path;
-  char pathbuf[PATH_MAX];
+  char pathbuf[256];
   struct HostsTxtInitialStaticMemory *init;
   init = &g_hoststxt_init;
   pthread_mutex_lock(&init->lock);
@@ -71,11 +65,7 @@ const struct HostsTxt *GetHostsTxt(void) {
     init->ht.strings.n = pushpop(ARRAYLEN(init->strings));
     init->ht.strings.p = init->strings;
     __cxa_atexit(FreeHostsTxt, &g_hoststxt, NULL);
-    path = "/etc/hosts";
-    if (IsWindows()) {
-      path = firstnonnull(GetNtHostsTxtPath(pathbuf, ARRAYLEN(pathbuf)), path);
-    }
-    if (fileexists(path) && (f = fopen(path, "r"))) {
+    if ((f = fopen(GetHostsTxtPath(pathbuf, sizeof(pathbuf)), "r"))) {
       if (ParseHostsTxt(g_hoststxt, f) == -1) {
         /* TODO(jart): Elevate robustness. */
       }
@@ -84,4 +74,22 @@ const struct HostsTxt *GetHostsTxt(void) {
   }
   pthread_mutex_unlock(&init->lock);
   return g_hoststxt;
+}
+
+/**
+ * Frees HOSTS.TXT data structure populated by ParseHostsTxt().
+ */
+void FreeHostsTxt(struct HostsTxt **ht) {
+  if (*ht) {
+    if ((*ht)->entries.p != g_hoststxt_init.entries) {
+      free((*ht)->entries.p);
+    }
+    if ((*ht)->strings.p != g_hoststxt_init.strings) {
+      free((*ht)->strings.p);
+    }
+    if (*ht != &g_hoststxt_init.ht) {
+      free(*ht);
+    }
+    *ht = 0;
+  }
 }

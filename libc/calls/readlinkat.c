@@ -16,17 +16,16 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/assert.h"
-#include "libc/bits/weaken.h"
-#include "libc/calls/strace.internal.h"
 #include "libc/calls/syscall-nt.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/intrin/asan.internal.h"
 #include "libc/intrin/describeflags.internal.h"
+#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/weaken.h"
 #include "libc/runtime/runtime.h"
+#include "libc/runtime/zipos.internal.h"
 #include "libc/sysv/errfuns.h"
-#include "libc/zipos/zipos.internal.h"
 
 /**
  * Reads symbolic link.
@@ -41,24 +40,30 @@
  *     and this buffer will *not* be nul-terminated
  * @return number of bytes written to buf, or -1 w/ errno; if the
  *     return is equal to bufsiz then truncation may have occurred
- * @error EINVAL if path isn't a symbolic link
+ * @raise EINVAL if path isn't a symbolic link
+ * @raise ENOENT if `path` didn't exist
+ * @raise ENOTDIR if parent component existed that's not a directory
+ * @raise ENOTDIR if base component ends with slash and is not a dir
+ * @raise ENAMETOOLONG if symlink-resolved `path` length exceeds `PATH_MAX`
+ * @raise ENAMETOOLONG if component in `path` exists longer than `NAME_MAX`
+ * @raise EBADF on relative `path` when `dirfd` isn't open or `AT_FDCWD`
+ * @raise ELOOP if a loop was detected resolving parent components
  * @asyncsignalsafe
  */
 ssize_t readlinkat(int dirfd, const char *path, char *buf, size_t bufsiz) {
-  char sb[12];
   ssize_t bytes;
-  if ((IsAsan() && !__asan_is_valid(buf, bufsiz)) || (bufsiz && !buf)) {
+  if ((bufsiz && !buf) || (IsAsan() && (!__asan_is_valid_str(path) ||
+                                        !__asan_is_valid(buf, bufsiz)))) {
     bytes = efault();
-  } else if (weaken(__zipos_notat) &&
+  } else if (_weaken(__zipos_notat) &&
              (bytes = __zipos_notat(dirfd, path)) == -1) {
-    STRACE("TOOD: zipos support for readlinkat");
+    STRACE("TODO: zipos support for readlinkat");
   } else if (!IsWindows()) {
-    assert(bufsiz);
     bytes = sys_readlinkat(dirfd, path, buf, bufsiz);
   } else {
     bytes = sys_readlinkat_nt(dirfd, path, buf, bufsiz);
   }
-  STRACE("readlinkat(%s, %#s, [%#.*s]) → %d% m", DescribeDirfd(sb, dirfd), path,
-         MAX(0, bytes), buf, bytes);
+  STRACE("readlinkat(%s, %#s, [%#.*s]) → %d% m", DescribeDirfd(dirfd), path,
+         (int)MAX(0, bytes), buf, bytes);
   return bytes;
 }

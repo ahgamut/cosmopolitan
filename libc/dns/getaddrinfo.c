@@ -16,15 +16,15 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/safemacros.internal.h"
 #include "libc/calls/calls.h"
 #include "libc/dns/dns.h"
 #include "libc/dns/hoststxt.h"
 #include "libc/dns/resolvconf.h"
 #include "libc/dns/servicestxt.h"
 #include "libc/fmt/conv.h"
+#include "libc/macros.internal.h"
+#include "libc/mem/gc.h"
 #include "libc/mem/mem.h"
-#include "libc/runtime/gc.h"
 #include "libc/sock/sock.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/af.h"
@@ -41,31 +41,36 @@
  * @param res receives a pointer that must be freed with freeaddrinfo(),
  *     and won't be modified if non-zero is returned
  * @return 0 on success or EAI_xxx value
- * @threadsafe
  */
 int getaddrinfo(const char *name, const char *service,
                 const struct addrinfo *hints, struct addrinfo **res) {
   int rc, port;
   const char *canon;
-  size_t protolen;
   struct addrinfo *ai;
   char proto[32];
   port = 0;
-  if (!name && !service) return EAI_NONAME;
-  if (!name && (hints->ai_flags & AI_CANONNAME)) return EAI_BADFLAGS;
+  if (!name && !service) {
+    return EAI_NONAME;
+  }
+  if (!name && hints && (hints->ai_flags & AI_CANONNAME)) {
+    return EAI_BADFLAGS;
+  }
   if (service && (port = parseport(service)) == -1) {
-    if (hints->ai_socktype == SOCK_STREAM)
+    if (hints && hints->ai_socktype == SOCK_STREAM) {
       strcpy(proto, "tcp");
-    else if (hints->ai_socktype == SOCK_DGRAM)
+    } else if (hints && hints->ai_socktype == SOCK_DGRAM) {
       strcpy(proto, "udp");
-    else /* ai_socktype == 0 */
+    } else {  // ai_socktype == 0
       strcpy(proto, "");
+    }
     if ((port = LookupServicesByName(service, proto, sizeof(proto), NULL, 0,
                                      NULL)) == -1) {
       return EAI_NONAME;
     }
   }
-  if (!(ai = newaddrinfo(port))) return EAI_MEMORY;
+  if (!(ai = newaddrinfo(port))) {
+    return EAI_MEMORY;
+  }
   if (service) ai->ai_addr4->sin_port = htons(port);
   if (hints) {
     ai->ai_socktype = hints->ai_socktype;
@@ -74,8 +79,8 @@ int getaddrinfo(const char *name, const char *service,
   if (!name) {
     ai->ai_addr4->sin_addr.s_addr =
         (hints && (hints->ai_flags & AI_PASSIVE) == AI_PASSIVE)
-            ? INADDR_ANY
-            : INADDR_LOOPBACK;
+            ? htonl(INADDR_ANY)
+            : htonl(INADDR_LOOPBACK);
     *res = ai;
     return 0;
   }
@@ -87,7 +92,7 @@ int getaddrinfo(const char *name, const char *service,
     return EAI_NONAME;
   } else if (ResolveHostsTxt(GetHostsTxt(), AF_INET, name, ai->ai_addr,
                              sizeof(ai->ai_addr4), &canon) > 0) {
-    memcpy(ai->ai_canonname, canon, min(strlen(canon), DNS_NAME_MAX) + 1);
+    strlcpy(ai->ai_canonname, canon, DNS_NAME_MAX + 1);
     *res = ai;
     return 0;
   } else {

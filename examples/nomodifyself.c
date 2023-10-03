@@ -7,6 +7,7 @@
 │   • http://creativecommons.org/publicdomain/zero/1.0/            │
 ╚─────────────────────────────────────────────────────────────────*/
 #endif
+#include "ape/sections.internal.h"
 #include "libc/dce.h"
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
@@ -19,7 +20,7 @@
  */
 
 int main(int argc, char *argv[]) {
-  if (_base[0] == 'M' && _base[1] == 'Z') {
+  if (__executable_start[0] == 'M' && __executable_start[1] == 'Z') {
     printf("success: %s spawned without needing to modify its "
            "executable header",
            argv[0]);

@@ -16,10 +16,10 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/alg/alg.h"
+#include "tool/build/lib/asmdown.h"
+#include "libc/mem/alg.h"
 #include "libc/mem/mem.h"
 #include "libc/str/str.h"
-#include "tool/build/lib/asmdown.h"
 #include "tool/build/lib/javadown.h"
 
 static bool IsSymbolChar1(char c) {
@@ -33,7 +33,6 @@ static bool IsSymbolChar2(char c) {
 }
 
 static bool IsSymbolString(const char *s) {
-  int i;
   if (!IsSymbolChar1(*s++)) return false;
   while (*s) {
     if (!IsSymbolChar2(*s++)) return false;
@@ -54,7 +53,8 @@ static bool IsSymbolString(const char *s) {
  */
 struct Asmdown *ParseAsmdown(const char *code, size_t size) {
   struct Asmdown *ad;
-  char *p1, *p2, *p3, *symbol, *alias;
+  const char *p1;
+  char *p2, *p3, *symbol, *alias;
   enum { BOL, COM, SYM, OTHER } state;
   int i, j, line, start_line, start_docstring, end_docstring, start_symbol;
   ad = calloc(1, sizeof(struct Asmdown));
@@ -75,6 +75,8 @@ struct Asmdown *ParseAsmdown(const char *code, size_t size) {
           start_symbol = i;
           state = SYM;
         } else if (code[i] == '\n') {
+          ++line;
+        } else if (i + 10 < size && !memcmp(code + i, "\t.ftrace1\t", 10)) {
           ++line;
         } else if (i + 8 < size && !memcmp(code + i, "\t.alias\t", 8)) {
           p1 = code + i + 8;
@@ -144,7 +146,7 @@ struct Asmdown *ParseAsmdown(const char *code, size_t size) {
         }
         break;
       default:
-        unreachable;
+        __builtin_unreachable();
     }
   }
   return ad;

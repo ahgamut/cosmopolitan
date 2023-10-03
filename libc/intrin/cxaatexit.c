@@ -16,17 +16,16 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/assert.h"
-#include "libc/bits/weaken.h"
-#include "libc/calls/strace.internal.h"
+#include "libc/intrin/bsr.h"
+#include "libc/intrin/cxaatexit.internal.h"
+#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/weaken.h"
 #include "libc/macros.internal.h"
 #include "libc/mem/mem.h"
-#include "libc/nexgen32e/bsr.h"
-#include "libc/runtime/cxaatexit.internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/sysv/errfuns.h"
 
-STATIC_YOINK("__cxa_finalize");
+__static_yoink("__cxa_finalize");
 
 /**
  * Adds global destructor.
@@ -42,17 +41,16 @@ STATIC_YOINK("__cxa_finalize");
  * @return 0 on success or nonzero w/ errno
  * @note folks have forked libc in past just to unbloat atexit()
  */
-noasan int __cxa_atexit(void *fp, void *arg, void *pred) {
+int __cxa_atexit(void *fp, void *arg, void *pred) {
   /* asan runtime depends on this function */
   unsigned i;
   struct CxaAtexitBlock *b, *b2;
-  _Static_assert(ATEXIT_MAX == CHAR_BIT * sizeof(b->mask), "");
   __cxa_lock();
   b = __cxa_blocks.p;
   if (!b) b = __cxa_blocks.p = &__cxa_blocks.root;
   if (!~b->mask) {
-    if (weaken(calloc) &&
-        (b2 = weaken(calloc)(1, sizeof(struct CxaAtexitBlock)))) {
+    if (_weaken(calloc) &&
+        (b2 = _weaken(calloc)(1, sizeof(struct CxaAtexitBlock)))) {
       b2->next = b;
       __cxa_blocks.p = b = b2;
     } else {
@@ -60,8 +58,7 @@ noasan int __cxa_atexit(void *fp, void *arg, void *pred) {
       return enomem();
     }
   }
-  i = bsr(~b->mask);
-  assert(i < ARRAYLEN(b->p));
+  i = _bsr(~b->mask);
   b->mask |= 1u << i;
   b->p[i].fp = fp;
   b->p[i].arg = arg;

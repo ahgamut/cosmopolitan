@@ -25,10 +25,12 @@
 #include "libc/stdio/stdio.h"
 #include "libc/fmt/fmt.h"
 #include "libc/fmt/fmt.h"
+#include "libc/str/str.h"
+#include "libc/runtime/runtime.h"
 #include "third_party/make/stdio.h"
 
 #if !_LIBC && ENABLE_NLS
-# include "third_party/make/gettext.h"
+#include "third_party/make/gettext.h"
 # define _(msgid) gettext (msgid)
 #endif
 
@@ -38,11 +40,7 @@
 # define _GL_ATTRIBUTE_FORMAT_PRINTF(a, b)
 # define _GL_ARG_NONNULL(a)
 #else
-# include "getprogname.h"
-#endif
-
-#if USE_UNLOCKED_IO
-# include "unlocked-io.h"
+#include "third_party/make/getprogname.h"
 #endif
 
 #ifndef _

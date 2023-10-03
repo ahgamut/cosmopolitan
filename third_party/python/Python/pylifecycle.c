@@ -4,6 +4,7 @@
 │ Python 3                                                                     │
 │ https://docs.python.org/3/license.html                                       │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "third_party/python/Include/pylifecycle.h"
 #include "libc/assert.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
@@ -13,12 +14,13 @@
 #include "libc/log/log.h"
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
+#include "libc/str/locale.h"
 #include "libc/sysv/consts/sig.h"
-#include "libc/unicode/locale.h"
 #include "third_party/python/Include/Python-ast.h"
 #include "third_party/python/Include/abstract.h"
 #include "third_party/python/Include/ast.h"
 #include "third_party/python/Include/boolobject.h"
+#include "third_party/python/Include/ceval.h"
 #include "third_party/python/Include/code.h"
 #include "third_party/python/Include/codecs.h"
 #include "third_party/python/Include/cosmo.h"
@@ -36,7 +38,6 @@
 #include "third_party/python/Include/parsetok.h"
 #include "third_party/python/Include/pydebug.h"
 #include "third_party/python/Include/pyerrors.h"
-#include "third_party/python/Include/pylifecycle.h"
 #include "third_party/python/Include/pymem.h"
 #include "third_party/python/Include/pystrcmp.h"
 #include "third_party/python/Include/pytime.h"
@@ -52,13 +53,10 @@
 
 /* Python interpreter top-level routines, including init/exit */
 
-_Py_IDENTIFIER(name);
-_Py_IDENTIFIER(flush);
-_Py_IDENTIFIER(stdout);
 _Py_IDENTIFIER(stderr);
 
 /* Forward */
-static void wait_for_thread_shutdown(void);
+void wait_for_thread_shutdown(void);
 #ifdef WITH_THREAD
 extern void _PyGILState_Init(PyInterpreterState *, PyThreadState *);
 extern void _PyGILState_Fini(void);
@@ -248,6 +246,7 @@ _Py_InitializeEx_Private(int install_sigs, int install_importlib)
     PySys_SetObject("__stderr__", pstderr);
     Py_DECREF(pstderr);
 
+    _PyImportLookupTables_Init();
     _PyImport_Init();
 
     _PyImportHooks_Init();
@@ -469,7 +468,7 @@ Py_EndInterpreter(PyThreadState *tstate)
    the threading module was imported in the first place.
    The shutdown routine will wait until all non-daemon
    "threading" threads have completed. */
-static void
+void
 wait_for_thread_shutdown(void)
 {
 #ifdef WITH_THREAD

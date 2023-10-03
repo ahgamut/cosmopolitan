@@ -41,6 +41,7 @@ struct child
 
     struct file *file;          /* File being remade.  */
 
+    char *tmpdir;               /* Temporary directory */
     char *sh_batch_file;        /* Script file for shell commands */
     char **command_lines;       /* Array of variable-expanded cmd lines.  */
     char *command_ptr;          /* Ptr into command_lines[command_line].  */
@@ -70,7 +71,7 @@ void start_waiting_jobs (void);
 char **construct_command_argv (char *line, char **restp, struct file *file,
                                int cmd_flags, char** batch_file);
 
-pid_t child_execute_job (struct childbase *child, int good_stdin, char **argv);
+pid_t child_execute_job (struct childbase *, int, char **, bool);
 
 #ifdef _AMIGA
 void exec_command (char **argv) NORETURN;
@@ -84,3 +85,5 @@ void unblock_all_sigs (void);
 
 extern unsigned int job_slots_used;
 extern unsigned int jobserver_tokens;
+
+void delete_tmpdir (struct child *);

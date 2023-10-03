@@ -16,11 +16,11 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/calls.h"
-#include "libc/intrin/lockxadd.h"
-#include "libc/nt/process.h"
+#include "libc/atomic.h"
+#include "libc/intrin/atomic.h"
+#include "libc/runtime/internal.h"
 
-static textwindows char16_t *UintToChar16Array(char16_t p[21], uint64_t x) {
+static textwindows char16_t *itoa16(char16_t p[21], uint64_t x) {
   char t;
   size_t a, b, i = 0;
   do {
@@ -37,14 +37,15 @@ static textwindows char16_t *UintToChar16Array(char16_t p[21], uint64_t x) {
   return p + i;
 }
 
-textwindows char16_t *CreatePipeName(char16_t *a) {
-  static long x;
+// This function is called very early by WinMain().
+textwindows char16_t *__create_pipe_name(char16_t *a) {
   char16_t *p = a;
   const char *q = "\\\\?\\pipe\\cosmo\\";
+  static atomic_uint x;
   while (*q) *p++ = *q++;
-  p = UintToChar16Array(p, GetCurrentProcessId());
+  p = itoa16(p, __pid);
   *p++ = '-';
-  p = UintToChar16Array(p, _lockxadd(&x, 1));
+  p = itoa16(p, atomic_fetch_add(&x, 1));
   *p = 0;
   return a;
 }

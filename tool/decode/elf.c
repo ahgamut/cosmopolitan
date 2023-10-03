@@ -16,17 +16,23 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/safemacros.internal.h"
+#include "libc/elf/elf.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/stat.h"
+#include "libc/elf/def.h"
 #include "libc/elf/elf.h"
 #include "libc/elf/struct/rela.h"
 #include "libc/elf/struct/shdr.h"
 #include "libc/errno.h"
 #include "libc/fmt/conv.h"
+#include "libc/fmt/libgen.h"
+#include "libc/intrin/bits.h"
+#include "libc/intrin/safemacros.internal.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
 #include "libc/macros.internal.h"
+#include "libc/mem/gc.internal.h"
+#include "libc/mem/mem.h"
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
@@ -34,7 +40,7 @@
 #include "libc/sysv/consts/map.h"
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/prot.h"
-#include "libc/x/x.h"
+#include "libc/x/xasprintf.h"
 #include "tool/decode/lib/asmcodegen.h"
 #include "tool/decode/lib/elfidnames.h"
 #include "tool/decode/lib/flagger.h"
@@ -49,8 +55,8 @@ static struct stat st[1];
 static Elf64_Ehdr *elf;
 
 static void startfile(void) {
-  showtitle("αcτµαlly pδrταblε εxεcµταblε", "tool/decode/elf", basename(path),
-            NULL, &kModelineAsm);
+  showtitle("αcτµαlly pδrταblε εxεcµταblε", "tool/decode/elf",
+            basename(gc(strdup(path))), NULL, &kModelineAsm);
   printf("#include \"libc/elf.h\"\n\n", path);
 }
 
@@ -102,8 +108,9 @@ static void printelfehdr(void) {
 }
 
 static void printelfsegmentheader(int i) {
-  Elf64_Phdr *phdr = GetElfSegmentHeaderAddress(elf, st->st_size, i);
-  printf("/\tElf64_Phdr *phdr = GetElfSegmentHeaderAddress(elf, st->st_size, "
+  Elf64_Phdr *phdr = GetElfProgramHeaderAddress(elf, st->st_size, i);
+  if (!phdr) return;
+  printf("/\tElf64_Phdr *phdr = GetElfProgramHeaderAddress(elf, st->st_size, "
          "%d)\n",
          i);
   printf(".Lph%d:", i);
@@ -131,6 +138,7 @@ static void printelfsegmentheaders(void) {
 static void printelfsectionheader(int i, char *shstrtab) {
   Elf64_Shdr *shdr;
   shdr = GetElfSectionHeaderAddress(elf, st->st_size, i);
+  if (!shdr) return;
   printf("/\tElf64_Shdr *shdr = GetElfSectionHeaderAddress(elf, st->st_size, "
          "%d)\n",
          i);
@@ -158,7 +166,11 @@ static void printelfsectionheader(int i, char *shstrtab) {
 static void printelfsectionheaders(void) {
   Elf64_Half i;
   char *shstrtab;
+  const char *str;
+  Elf64_Shdr *shdr, *shshdr;
+  shshdr = GetElfSectionHeaderAddress(elf, st->st_size, elf->e_shstrndx);
   shstrtab = GetElfSectionNameStringTable(elf, st->st_size);
+  if (!shshdr || !shstrtab) return;
   if (shstrtab) {
     printf("\n");
     printf("\t.org\t%#x\n", elf->e_shoff);
@@ -166,13 +178,54 @@ static void printelfsectionheaders(void) {
       printelfsectionheader(i, shstrtab);
     }
     printf("\n/\t%s\n", "elf->e_shstrndx");
-    printf("\t.org\t%#x\n",
-           GetElfSectionHeaderAddress(elf, st->st_size, elf->e_shstrndx)
-               ->sh_offset);
+    printf("\t.org\t%#x\n", shshdr->sh_offset);
     for (i = 0; i < elf->e_shnum; ++i) {
-      Elf64_Shdr *shdr = GetElfSectionHeaderAddress(elf, st->st_size, i);
-      const char *str = GetElfString(elf, st->st_size, shstrtab, shdr->sh_name);
+      shdr = GetElfSectionHeaderAddress(elf, st->st_size, i);
+      if (!shdr) break;
+      str = GetElfString(elf, st->st_size, shstrtab, shdr->sh_name);
       show(".asciz", format(b1, "%`'s", str), NULL);
+    }
+  }
+}
+
+static void printelfgroups(void) {
+  for (int i = 0; i < elf->e_shnum; ++i) {
+    Elf64_Shdr *shdr = GetElfSectionHeaderAddress(elf, st->st_size, i);
+    if (!shdr) break;
+    if (shdr->sh_type == SHT_GROUP) {
+      const Elf64_Shdr *symhdr =
+          GetElfSectionHeaderAddress(elf, st->st_size, shdr->sh_link);
+      if (!symhdr) break;
+      const Elf64_Shdr *strhdr =
+          GetElfSectionHeaderAddress(elf, st->st_size, symhdr->sh_link);
+      if (!strhdr) break;
+      Elf64_Sym *syms = GetElfSectionAddress(elf, st->st_size, symhdr);
+      if (!syms) break;
+      char *strs = GetElfSectionAddress(elf, st->st_size, strhdr);
+      if (!strs) break;
+      printf("\n");
+      printf("//\t%s group\n",
+             GetElfString(elf, st->st_size, strs, syms[shdr->sh_info].st_name));
+      printf("\t.org\t%#x\n", shdr->sh_offset);
+      bool first = true;
+      for (char *p = (char *)elf + shdr->sh_offset;
+           p < (char *)elf + shdr->sh_offset + shdr->sh_size; p += 4) {
+        if (first) {
+          first = false;
+          if (READ32LE(p) == GRP_COMDAT) {
+            printf("\t.long\tGRP_COMDAT\n");
+            continue;
+          }
+        }
+        const Elf64_Shdr *section =
+            GetElfSectionHeaderAddress(elf, st->st_size, READ32LE(p));
+        printf("\t.long\t%#x\t\t\t# %s\n", READ32LE(p),
+               section ? GetElfString(
+                             elf, st->st_size,
+                             GetElfSectionNameStringTable(elf, st->st_size),
+                             section->sh_name)
+                       : 0);
+      }
     }
   }
 }
@@ -206,14 +259,15 @@ static void printelfsymbol(Elf64_Sym *sym, char *strtab, char *shstrtab) {
               GetElfString(elf, st->st_size, strtab, sym->st_name)));
   printelfsymbolinfo(sym);
   printelfsymbolother(sym);
+  Elf64_Shdr *shdr =
+      GetElfSectionHeaderAddress(elf, st->st_size, sym->st_shndx);
   show(".short", format(b1, "%d", sym->st_shndx),
        format(b2, "%s sym->st_shndx",
               sym->st_shndx < 0xff00
                   ? format(b1, "%`'s",
-                           GetElfString(elf, st->st_size, shstrtab,
-                                        GetElfSectionHeaderAddress(
-                                            elf, st->st_size, sym->st_shndx)
-                                            ->sh_name))
+                           shdr ? GetElfString(elf, st->st_size, shstrtab,
+                                               shdr->sh_name)
+                                : 0)
                   : findnamebyid(kElfSpecialSectionNames, sym->st_shndx)));
   show(".quad", format(b1, "%#x", sym->st_value), "sym->st_value");
   show(".quad", format(b1, "%#x", sym->st_size), "sym->st_size");
@@ -221,14 +275,15 @@ static void printelfsymbol(Elf64_Sym *sym, char *strtab, char *shstrtab) {
 
 static void printelfsymboltable(void) {
   size_t i, symcount = 0;
-  Elf64_Sym *symtab = GetElfSymbolTable(elf, st->st_size, &symcount);
-  char *strtab = GetElfStringTable(elf, st->st_size);
+  Elf64_Sym *symtab = GetElfSymbols(elf, st->st_size, SHT_SYMTAB, &symcount);
+  if (!symtab) return;
+  char *strtab = GetElfStringTable(elf, st->st_size, ".strtab");
   char *shstrtab = GetElfSectionNameStringTable(elf, st->st_size);
-  if (symtab && strtab) {
-    printf("\n\n");
-    printf("\t.org\t%#x\n", (intptr_t)symtab - (intptr_t)elf);
-    for (i = 0; i < symcount; ++i) {
-      printf(".Lsym%d:\n", i);
+  printf("\n\n");
+  printf("\t.org\t%#x\n", (intptr_t)symtab - (intptr_t)elf);
+  for (i = 0; i < symcount; ++i) {
+    printf(".Lsym%d:\n", i);
+    if (strtab && shstrtab) {
       printelfsymbol(&symtab[i], strtab, shstrtab);
     }
   }
@@ -236,14 +291,15 @@ static void printelfsymboltable(void) {
 
 static void printelfdynsymboltable(void) {
   size_t i, symcount = 0;
-  Elf64_Sym *symtab = GetElfDynSymbolTable(elf, st->st_size, &symcount);
-  char *strtab = GetElfDynStringTable(elf, st->st_size);
+  Elf64_Sym *symtab = GetElfSymbols(elf, st->st_size, SHT_DYNSYM, &symcount);
+  if (!symtab) return;
+  char *strtab = GetElfStringTable(elf, st->st_size, ".dynstr");
   char *shstrtab = GetElfSectionNameStringTable(elf, st->st_size);
-  if (symtab && strtab) {
-    printf("\n\n");
-    printf("\t.org\t%#x\n", (intptr_t)symtab - (intptr_t)elf);
-    for (i = 0; i < symcount; ++i) {
-      printf(".Lsym%d:\n", i);
+  printf("\n\n");
+  printf("\t.org\t%#x\n", (intptr_t)symtab - (intptr_t)elf);
+  for (i = 0; i < symcount; ++i) {
+    printf(".Lsym%d:\n", i);
+    if (strtab && shstrtab) {
       printelfsymbol(&symtab[i], strtab, shstrtab);
     }
   }
@@ -271,9 +327,9 @@ static void printelfrelocations(void) {
   size_t i, j, count;
   const Elf64_Sym *syms;
   const Elf64_Rela *rela;
-  const Elf64_Shdr *shdr, *symtab;
   char *strtab, *shstrtab, *symbolname;
-  strtab = GetElfStringTable(elf, st->st_size);
+  const Elf64_Shdr *shdr, *shdr2, *symtab;
+  strtab = GetElfStringTable(elf, st->st_size, ".strtab");
   shstrtab = GetElfSectionNameStringTable(elf, st->st_size);
   for (i = 0; i < elf->e_shnum; ++i) {
     if ((shdr = GetElfSectionHeaderAddress(elf, st->st_size, i)) &&
@@ -286,20 +342,25 @@ static void printelfrelocations(void) {
                        (uintptr_t)elf + shdr->sh_offset + shdr->sh_size));
            ++rela, ++j) {
         symtab = GetElfSectionHeaderAddress(elf, st->st_size, shdr->sh_link);
+        if (!symtab) continue;
         count = symtab->sh_size / symtab->sh_entsize;
         syms = GetElfSectionAddress(elf, st->st_size, symtab);
         sym = ELF64_R_SYM(rela->r_info);
         if (0 <= sym && sym < count) {
-          symbolname =
-              getelfsymbolname(elf, st->st_size, strtab, shstrtab, syms + sym);
+          if (syms && strtab && shstrtab) {
+            symbolname = getelfsymbolname(elf, st->st_size, strtab, shstrtab,
+                                          syms + sym);
+          } else {
+            symbolname = xasprintf("evil-sym-%d", sym);
+          }
         } else {
           symbolname = xasprintf("bad-sym-%d", sym);
         }
         printf("/\t%s+%#lx → %s%c%#lx\n",
-               GetElfString(
-                   elf, st->st_size, shstrtab,
-                   GetElfSectionHeaderAddress(elf, st->st_size, shdr->sh_info)
-                       ->sh_name),
+               (shdr2 =
+                    GetElfSectionHeaderAddress(elf, st->st_size, shdr->sh_info))
+                   ? GetElfString(elf, st->st_size, shstrtab, shdr2->sh_name)
+                   : 0,
                rela->r_offset, symbolname, rela->r_addend >= 0 ? '+' : '-',
                ABS(rela->r_addend));
         printf("%s_%zu_%zu:\n", ".Lrela", i, j);
@@ -346,6 +407,7 @@ int main(int argc, char *argv[]) {
   printelfehdr();
   printelfsegmentheaders();
   printelfsectionheaders();
+  printelfgroups();
   printelfrelocations();
   printelfsymboltable();
   printelfdynsymboltable();

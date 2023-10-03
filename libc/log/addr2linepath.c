@@ -16,8 +16,48 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/log/log.h"
+#include "libc/atomic.h"
+#include "libc/calls/calls.h"
+#include "libc/cosmo.h"
+#include "libc/errno.h"
+#include "libc/limits.h"
+#include "libc/runtime/runtime.h"
+#include "libc/str/str.h"
+
+#ifdef __x86_64__
+#define ADDR2LINE "o/third_party/gcc/bin/x86_64-linux-musl-addr2line"
+#elif defined(__aarch64__)
+#define ADDR2LINE "o/third_party/gcc/bin/aarch64-linux-musl-addr2line"
+#endif
+
+static struct {
+  atomic_uint once;
+  char *res;
+  char buf[PATH_MAX];
+} g_addr2line;
+
+const void GetAddr2linePathInit(void) {
+  int e = errno;
+  const char *path;
+  if (!(path = getenv("ADDR2LINE"))) {
+    path = ADDR2LINE;
+  }
+  char *buf = g_addr2line.buf;
+  if (isexecutable(path)) {
+    if (*path != '/' && getcwd(buf, PATH_MAX)) {
+      strlcat(buf, "/", PATH_MAX);
+    }
+    strlcat(buf, path, PATH_MAX);
+  }
+  if (*buf) {
+    g_addr2line.res = buf;
+  } else {
+    g_addr2line.res = commandv("addr2line", buf, PATH_MAX);
+  }
+  errno = e;
+}
 
 const char *GetAddr2linePath(void) {
-  return commandvenv("ADDR2LINE", "addr2line");
+  cosmo_once(&g_addr2line.once, GetAddr2linePathInit);
+  return g_addr2line.res;
 }

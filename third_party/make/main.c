@@ -14,23 +14,38 @@ A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
 You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-/* clang-format off */
 #include "third_party/make/makeint.inc"
-#include "third_party/make/os.h"
+/**/
 #include "third_party/make/filedef.h"
+#include "third_party/make/os.h"
+/**/
 #include "third_party/make/dep.h"
-#include "third_party/make/variable.h"
 #include "third_party/make/job.h"
+#include "third_party/make/variable.h"
+/**/
 #include "third_party/make/commands.h"
-#include "third_party/make/rule.h"
 #include "third_party/make/debug.h"
-#include "libc/runtime/stack.h"
+#include "third_party/make/rule.h"
+/**/
+#include "libc/calls/calls.h"
+#include "libc/calls/struct/bpf.internal.h"
+#include "libc/calls/struct/filter.internal.h"
+#include "libc/calls/struct/seccomp.internal.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
+#include "libc/dce.h"
 #include "libc/limits.h"
+#include "libc/macros.internal.h"
+#include "libc/runtime/runtime.h"
+#include "libc/runtime/stack.h"
+#include "libc/sock/sock.h"
+#include "libc/stdio/stdio.h"
+#include "libc/sysv/consts/audit.h"
+#include "libc/sysv/consts/pr.h"
 #include "libc/sysv/consts/sig.h"
-#include "libc/log/log.h"
 #include "third_party/make/getopt.h"
+// clang-format off
 
-STATIC_STACK_SIZE(0x200000);  // 2mb stack
+STATIC_STACK_SIZE(0x00800000);  // 8mb stack
 
 #define HAVE_WAIT_NOHANG
 
@@ -338,6 +353,10 @@ static const char *const usage[] =
                               Consider FILE to be infinitely new.\n"),
     N_("\
   --warn-undefined-variables  Warn when an undefined variable is referenced.\n"),
+    N_("\
+  --strace                    Log system calls.\n"),
+    N_("\
+  --ftrace                    Log function calls.\n"),
     NULL
   };
 
@@ -617,13 +636,11 @@ expand_command_line_file (const char *name)
 
 /* Toggle -d on receipt of SIGUSR1.  */
 
-#ifdef SIGUSR1
 static RETSIGTYPE
 debug_signal_handler (int sig UNUSED)
 {
   db_level = db_level ? DB_NONE : DB_BASIC;
 }
-#endif
 
 static void
 decode_debug_flags (void)
@@ -954,6 +971,8 @@ reset_jobserver (void)
 int
 main (int argc, char **argv, char **envp)
 {
+  ShowCrashReports();
+
   static char *stdin_nm = 0;
   int makefile_status = MAKE_SUCCESS;
   struct goaldep *read_files;
@@ -961,16 +980,10 @@ main (int argc, char **argv, char **envp)
   unsigned int restarts = 0;
   unsigned int syncing = 0;
   int argv_slots;
-#ifdef WINDOWS32
-  const char *unix_path = NULL;
-  const char *windows32_path = NULL;
 
-  SetUnhandledExceptionFilter (handle_runtime_exceptions);
-
-  /* start off assuming we have no shell */
-  unixy_shell = 0;
-  no_default_sh_exe = 1;
-#endif
+  // [jart] workaround to prevent make -j fork bomb
+  default_load_average = __get_cpu_count();
+  max_load_average = default_load_average;
 
   /* Useful for attaching debuggers, etc.  */
   SPIN ("main-entry");
@@ -1025,8 +1038,13 @@ main (int argc, char **argv, char **envp)
   FATAL_SIG (SIGTERM);
   FATAL_SIG (SIGXCPU);
   FATAL_SIG (SIGXFSZ);
+  FATAL_SIG (SIGPIPE); /* [jart] handle case of piped into less */
 
 #undef  FATAL_SIG
+
+#ifndef NDEBUG
+  ShowCrashReports();
+#endif
 
   /* Do not ignore the child-death signal.  This must be done before
      any children could possibly be created; otherwise, the wait
@@ -1090,11 +1108,7 @@ main (int argc, char **argv, char **envp)
 
   /* Figure out where we are.  */
 
-#ifdef WINDOWS32
-  if (getcwd_fs (current_directory, GET_PATH_MAX) == 0)
-#else
   if (getcwd (current_directory, GET_PATH_MAX) == 0)
-#endif
     {
 #ifdef  HAVE_GETCWD
       perror_with_name ("getcwd", "");
@@ -1603,9 +1617,7 @@ main (int argc, char **argv, char **envp)
 #endif
 
   /* Let the user send us SIGUSR1 to toggle the -d flag during the run.  */
-#ifdef SIGUSR1
   bsd_signal (SIGUSR1, debug_signal_handler);
-#endif
 
   /* Define the initial list of suffixes for old-style rules.  */
   set_default_suffixes ();
@@ -1656,7 +1668,10 @@ main (int argc, char **argv, char **envp)
           p = quote_for_env (p, eval_strings->list[i]);
           *(p++) = ' ';
         }
+#pragma GCC push_options
+#pragma GCC diagnostic ignored "-Wstringop-overflow" /* wut */
       p[-1] = '\0';
+#pragma GCC pop_options
 
       define_variable_cname ("-*-eval-flags-*-", value, o_automatic, 0);
     }
@@ -2969,7 +2984,8 @@ print_version (void)
     /* Do it only once.  */
     return;
 
-  printf ("%sGNU Make %s\n", precede, version_string);
+  printf ("%sLandlock Make " LANDLOCKMAKE_VERSION " (GNU Make %s)\n",
+          precede, version_string);
 
   if (!remote_description || *remote_description == '\0')
     printf (_("%sBuilt for %s\n"), precede, make_host);
@@ -2982,6 +2998,8 @@ print_version (void)
      year, and none of the rest of it should be translated (including the
      word "Copyright"), so it hardly seems worth it.  */
 
+  printf ("%sCopyright (C) 2022 Justine Alexandra Roberts Tunney\n",
+          precede);
   printf ("%sCopyright (C) 1988-2020 Free Software Foundation, Inc.\n",
           precede);
 

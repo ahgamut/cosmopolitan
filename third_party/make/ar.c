@@ -16,7 +16,7 @@ You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.  */
 #include "third_party/make/makeint.inc"
 /**/
-#include "libc/alg/alg.h"
+#include "libc/mem/alg.h"
 #include "third_party/make/dep.h"
 #include "third_party/make/filedef.h"
 #include "third_party/musl/fnmatch.h"
@@ -193,7 +193,7 @@ ar_glob_match (int desc UNUSED, const char *mem, int truncated UNUSED,
   if (fnmatch (state->pattern, mem, FNM_PATHNAME|FNM_PERIOD) == 0)
     {
       /* We have a match.  Add it to the chain.  */
-      struct nameseq *new = xcalloc (state->size);
+      struct nameseq *new = xcalloc (1, state->size);
         new->name = strcache_add(concat(4, state->arname, "(", mem, ")"));
       new->next = state->chain;
       state->chain = new;

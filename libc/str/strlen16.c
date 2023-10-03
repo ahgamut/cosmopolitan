@@ -29,9 +29,10 @@ typedef char16_t xmm_t __attribute__((__vector_size__(16), __aligned__(16)));
  * @return number of shorts (excluding NUL)
  * @asyncsignalsafe
  */
-noasan size_t strlen16(const char16_t *s) {
+size_t strlen16(const char16_t *s) {
+#if defined(__x86_64__) && !defined(__chibicc__)
   size_t n;
-  xmm_t v, z = {0};
+  xmm_t z = {0};
   unsigned m, k = (uintptr_t)s & 15;
   const xmm_t *p = (const xmm_t *)((uintptr_t)s & -16);
   if (IsAsan()) __asan_verify(s, 2);
@@ -40,4 +41,9 @@ noasan size_t strlen16(const char16_t *s) {
   n = (const char16_t *)p + (__builtin_ctzl(m) >> 1) - s;
   if (IsAsan()) __asan_verify(s, n * 2);
   return n;
+#else
+  size_t n = 0;
+  while (*s++) ++n;
+  return n;
+#endif
 }

@@ -16,13 +16,17 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/bits.h"
-#include "libc/bits/safemacros.internal.h"
+#include "libc/dce.h"
+#include "libc/intrin/bits.h"
+#include "libc/intrin/safemacros.internal.h"
+#include "libc/nt/enum/fileflagandattributes.h"
+#include "libc/nt/files.h"
 #include "libc/nt/thunk/msabi.h"
 #include "libc/runtime/internal.h"
 #include "libc/str/str.h"
-#include "libc/str/tpenc.h"
 #include "libc/str/utf16.h"
+
+__msabi extern typeof(GetFileAttributes) *const __imp_GetFileAttributesW;
 
 struct DosArgv {
   const char16_t *s;
@@ -31,7 +35,7 @@ struct DosArgv {
   wint_t wc;
 };
 
-textwindows noasan void DecodeDosArgv(int ignore, struct DosArgv *st) {
+textwindows void DecodeDosArgv(int ignore, struct DosArgv *st) {
   wint_t x, y;
   for (;;) {
     if (!(x = *st->s++)) break;
@@ -47,7 +51,7 @@ textwindows noasan void DecodeDosArgv(int ignore, struct DosArgv *st) {
   st->wc = x;
 }
 
-static textwindows noasan void AppendDosArgv(wint_t wc, struct DosArgv *st) {
+static textwindows void AppendDosArgv(wint_t wc, struct DosArgv *st) {
   uint64_t w;
   w = tpenc(wc);
   do {
@@ -56,7 +60,7 @@ static textwindows noasan void AppendDosArgv(wint_t wc, struct DosArgv *st) {
   } while (w >>= 8);
 }
 
-static textwindows noasan int Count(int c, struct DosArgv *st) {
+static textwindows int Count(int c, struct DosArgv *st) {
   int ignore, n = 0;
   asm("" : "=g"(ignore));
   while (st->wc == c) {
@@ -66,27 +70,25 @@ static textwindows noasan int Count(int c, struct DosArgv *st) {
   return n;
 }
 
-/**
- * Tokenizes and transcodes Windows NT CLI args, thus avoiding
- * CommandLineToArgv() schlepping in forty megs of dependencies.
- *
- * @param s is the command line string provided by the executive
- * @param buf is where we'll store double-NUL-terminated decoded args
- * @param size is how many bytes are available in buf
- * @param argv is where we'll store the decoded arg pointer array, which
- *     is guaranteed to be NULL-terminated if max>0
- * @param max specifies the item capacity of argv, or 0 to do scanning
- * @return number of args written, excluding the NULL-terminator; or,
- *     if the output buffer wasn't passed, or was too short, then the
- *     number of args that *would* have been written is returned; and
- *     there are currently no failure conditions that would have this
- *     return -1 since it doesn't do system calls
- * @see test/libc/dosarg_test.c
- * @see libc/runtime/ntspawn.c
- * @note kudos to Simon Tatham for figuring out quoting behavior
- */
-textwindows noasan int GetDosArgv(const char16_t *cmdline, char *buf,
-                                  size_t size, char **argv, size_t max) {
+// Tokenizes and transcodes Windows NT CLI args, thus avoiding
+// CommandLineToArgv() schlepping in forty megs of dependencies.
+//
+// @param s is the command line string provided by the executive
+// @param buf is where we'll store double-NUL-terminated decoded args
+// @param size is how many bytes are available in buf
+// @param argv is where we'll store the decoded arg pointer array, which
+//     is guaranteed to be NULL-terminated if max>0
+// @param max specifies the item capacity of argv, or 0 to do scanning
+// @return number of args written, excluding the NULL-terminator; or,
+//     if the output buffer wasn't passed, or was too short, then the
+//     number of args that *would* have been written is returned; and
+//     there are currently no failure conditions that would have this
+//     return -1 since it doesn't do system calls
+// @see test/libc/dosarg_test.c
+// @see libc/runtime/ntspawn.c
+// @note kudos to Simon Tatham for figuring out quoting behavior
+textwindows int GetDosArgv(const char16_t *cmdline, char *buf, size_t size,
+                           char **argv, size_t max) {
   bool inquote;
   int i, argc, slashes, quotes, ignore;
   static struct DosArgv st_;

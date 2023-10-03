@@ -16,15 +16,17 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/assert.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/stat.h"
 #include "libc/elf/def.h"
+#include "libc/errno.h"
 #include "libc/fmt/conv.h"
-#include "libc/intrin/kprintf.h"
+#include "libc/fmt/libgen.h"
 #include "libc/limits.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
-#include "libc/runtime/gc.internal.h"
+#include "libc/mem/gc.internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
 #include "libc/sysv/consts/clock.h"
@@ -36,8 +38,8 @@
 #include "libc/sysv/consts/s.h"
 #include "libc/time/time.h"
 #include "libc/x/x.h"
-#include "libc/zip.h"
-#include "third_party/getopt/getopt.h"
+#include "libc/zip.internal.h"
+#include "third_party/getopt/getopt.internal.h"
 #include "tool/build/lib/elfwriter.h"
 #include "tool/build/lib/stripcomponents.h"
 
@@ -47,25 +49,47 @@ char *symbol_;
 char *outpath_;
 bool nocompress_;
 bool basenamify_;
-int64_t image_base_;
 int strip_components_;
 const char *path_prefix_;
 struct timespec timestamp;
-size_t kZipCdirHdrLinkableSizeBootstrap;
 
-wontreturn void PrintUsage(int rc) {
-  kprintf("%s%s%s\n", "Usage: ", program_invocation_name,
-          " [-n] [-B] [-C INT] [-P PREFIX] [-o FILE] [-s SYMBOL] [-y YOINK] "
-          "[FILE...]");
+wontreturn void PrintUsage(int fd, int rc) {
+  tinyprint(fd, "\n\
+NAME\n\
+\n\
+  Cosmpolitan Zip File Compiler\n\
+\n\
+SYNOPSIS\n\
+\n\
+  ",
+            program_invocation_name, " [FLAGS] FILE...\n\
+\n\
+DESCRIPTION\n\
+\n\
+  This program may be used to turn arbitrary files into .zip.o files\n\
+  which can be incrementally linked into binaries, without quadratic\n\
+  compression complexity.\n\
+\n\
+FLAGS\n\
+\n\
+  -h              show help\n\
+  -o PATH         output path\n\
+  -0              disable compression\n\
+  -B              basename-ify zip filename\n\
+  -N ZIPPATH      zip filename (defaults to input arg)\n\
+  -P ZIPPATH      prepend path zip filename using join\n\
+  -C INTEGER      strips leading path components from zip filename\n\
+  -y SYMBOL       generate yoink for symbol (default __zip_eocd)\n\
+\n\
+",
+            NULL);
   exit(rc);
 }
 
 void GetOpts(int *argc, char ***argv) {
   int opt;
-  yoink_ = "__zip_start";
-  image_base_ = IMAGE_BASE_VIRTUAL;
-  kZipCdirHdrLinkableSizeBootstrap = kZipCdirHdrLinkableSize;
-  while ((opt = getopt(*argc, *argv, "?0nhBL:N:C:P:o:s:y:b:")) != -1) {
+  yoink_ = "__zip_eocd";
+  while ((opt = getopt(*argc, *argv, "?0nhBN:C:P:o:s:y:")) != -1) {
     switch (opt) {
       case 'o':
         outpath_ = optarg;
@@ -90,49 +114,59 @@ void GetOpts(int *argc, char ***argv) {
       case 'B':
         basenamify_ = true;
         break;
-      case 'b':
-        image_base_ = strtol(optarg, NULL, 0);
-        break;
       case '0':
         nocompress_ = true;
         break;
-      case 'L':
-        kZipCdirHdrLinkableSizeBootstrap = strtoul(optarg, NULL, 0);
-        break;
       case '?':
       case 'h':
-        PrintUsage(EXIT_SUCCESS);
+        PrintUsage(1, EXIT_SUCCESS);
       default:
-        PrintUsage(EX_USAGE);
+        PrintUsage(2, EX_USAGE);
     }
   }
   *argc -= optind;
   *argv += optind;
-  CHECK_NOTNULL(outpath_);
+  if (!outpath_) {
+    tinyprint(2,
+              "error: no output path specified\n"
+              "run ",
+              program_invocation_name, " -h for usage\n", NULL);
+    exit(1);
+  }
 }
 
 void ProcessFile(struct ElfWriter *elf, const char *path) {
   int fd;
   void *map;
-  size_t pathlen;
   struct stat st;
   const char *name;
-  CHECK_NE(-1, (fd = open(path, O_RDONLY)));
-  CHECK_NE(-1, fstat(fd, &st));
+  if (stat(path, &st)) {
+    perror(path);
+    exit(1);
+  }
   if (S_ISDIR(st.st_mode)) {
+    if ((fd = open(path, O_RDONLY | O_DIRECTORY)) == -1) {
+      perror(path);
+      exit(1);
+    }
     map = "";
     st.st_size = 0;
   } else if (st.st_size) {
-    CHECK_NE(MAP_FAILED,
-             (map = mmap(NULL, st.st_size, PROT_READ, MAP_SHARED, fd, 0)));
+    if ((fd = open(path, O_RDONLY)) == -1 ||
+        (map = mmap(0, st.st_size, PROT_READ, MAP_SHARED, fd, 0)) ==
+            MAP_FAILED) {
+      perror(path);
+      exit(1);
+    }
   } else {
-    map = NULL;
+    fd = -1;
+    map = 0;
   }
   if (name_) {
     name = name_;
   } else {
     name = path;
-    if (basenamify_) name = basename(name);
+    if (basenamify_) name = basename(gc(xstrdup(name)));
     name = StripComponents(name, strip_components_);
     if (path_prefix_) name = gc(xjoinpaths(path_prefix_, name));
   }
@@ -143,23 +177,22 @@ void ProcessFile(struct ElfWriter *elf, const char *path) {
     }
   }
   elfwriter_zip(elf, name, name, strlen(name), map, st.st_size, st.st_mode,
-                timestamp, timestamp, timestamp, nocompress_, image_base_,
-                kZipCdirHdrLinkableSizeBootstrap);
-  if (st.st_size) CHECK_NE(-1, munmap(map, st.st_size));
+                timestamp, timestamp, timestamp, nocompress_);
+  if (st.st_size) {
+    unassert(!munmap(map, st.st_size));
+  }
   close(fd);
 }
 
 void PullEndOfCentralDirectoryIntoLinkage(struct ElfWriter *elf) {
   elfwriter_align(elf, 1, 0);
-  elfwriter_startsection(elf, ".yoink", SHT_PROGBITS,
-                         SHF_ALLOC | SHF_EXECINSTR);
+  elfwriter_startsection(elf, ".yoink", SHT_PROGBITS, SHF_EXECINSTR);
   elfwriter_yoink(elf, yoink_, STB_GLOBAL);
   elfwriter_finishsection(elf);
 }
 
 void CheckFilenameKosher(const char *path) {
-  CHECK_LE(kZipCfileHdrMinSize + strlen(path),
-           kZipCdirHdrLinkableSizeBootstrap);
+  CHECK_LE(kZipCfileHdrMinSize + strlen(path), 65535);
   CHECK(!startswith(path, "/"));
   CHECK(!strstr(path, ".."));
 }
@@ -178,6 +211,7 @@ void zipobj(int argc, char **argv) {
 }
 
 int main(int argc, char **argv) {
+  ShowCrashReports();
   timestamp.tv_sec = 1647414000; /* determinism */
   /* clock_gettime(CLOCK_REALTIME, &timestamp); */
   zipobj(argc, argv);

@@ -7,17 +7,18 @@
 │   • http://creativecommons.org/publicdomain/zero/1.0/            │
 ╚─────────────────────────────────────────────────────────────────*/
 #endif
-#include "libc/calls/calls.h"
 #include "libc/calls/struct/stat.h"
+#include "libc/calls/calls.h"
 #include "libc/errno.h"
 #include "libc/fmt/conv.h"
 #include "libc/fmt/fmt.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
-#include "libc/runtime/gc.h"
+#include "libc/mem/gc.h"
 #include "libc/stdio/stdio.h"
+#include "libc/str/str.h"
 #include "libc/sysv/consts/s.h"
-#include "libc/x/x.h"
+#include "libc/x/xiso8601.h"
 
 /**
  * @fileoverview File metadata viewer.
@@ -89,6 +90,10 @@ void PrintFileMetadata(const char *pathname, struct stat *st) {
 int main(int argc, char *argv[]) {
   size_t i;
   struct stat st;
+  if (argc <= 1) {
+    PrintFileMetadata(".", &st);
+    return 0;
+  }
   for (i = 1; i < argc; ++i) {
     if (!strcmp(argv[i], "-n")) {
       numeric = true;

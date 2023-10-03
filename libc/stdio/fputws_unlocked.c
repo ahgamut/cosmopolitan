@@ -17,6 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/errno.h"
+#include "libc/stdio/internal.h"
 #include "libc/stdio/stdio.h"
 
 /**
@@ -28,7 +29,7 @@
  *
  * @param s is a NUL-terminated string that's non-NULL
  * @param f is an open stream
- * @return strlen(s) or -1 w/ errno on error
+ * @return strlen(s), or -1 w/ errno
  */
 int fputws_unlocked(const wchar_t *s, FILE *f) {
   int res = 0;

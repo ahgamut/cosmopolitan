@@ -16,16 +16,17 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/weaken.h"
 #include "libc/calls/calls.h"
+#include "libc/intrin/weaken.h"
 #include "libc/log/log.h"
 #include "libc/runtime/runtime.h"
 #include "libc/str/str.h"
+#include "third_party/dlmalloc/dlmalloc.h"
 
 #define MESSAGE "dlmalloc_abort()\n"
 
 void dlmalloc_abort(void) {
   write(2, MESSAGE, strlen(MESSAGE));
-  if (weaken(__die)) weaken(__die)();
+  if (_weaken(__die)) _weaken(__die)();
   _Exit(44);
 }

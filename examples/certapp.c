@@ -15,6 +15,7 @@
 │ See the License for the specific language governing permissions and          │
 │ limitations under the License.                                               │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/errno.h"
 #include "libc/fmt/conv.h"
 #include "libc/stdio/stdio.h"
 #include "libc/sysv/consts/exit.h"
@@ -25,7 +26,7 @@
 #include "third_party/mbedtls/ssl.h"
 #include "third_party/mbedtls/x509_crt.h"
 
-STATIC_YOINK("ssl_root_support");
+__static_yoink("ssl_root_support");
 
 #define MODE_NONE 0
 #define MODE_FILE 1

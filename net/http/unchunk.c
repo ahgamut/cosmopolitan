@@ -18,6 +18,7 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/macros.internal.h"
 #include "libc/str/str.h"
+#include "libc/str/tab.internal.h"
 #include "libc/sysv/errfuns.h"
 #include "net/http/escape.h"
 #include "net/http/http.h"
@@ -108,7 +109,7 @@ ssize_t Unchunk(struct HttpUnchunker *u, char *p, size_t n, size_t *l) {
         return u->i;
         break;
       default:
-        unreachable;
+        __builtin_unreachable();
     }
   }
   return 0;

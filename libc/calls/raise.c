@@ -17,65 +17,37 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
-#include "libc/calls/getconsolectrlevent.internal.h"
 #include "libc/calls/sig.internal.h"
-#include "libc/calls/strace.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
-#include "libc/calls/syscall_support-nt.internal.h"
-#include "libc/intrin/kprintf.h"
-#include "libc/nt/console.h"
-#include "libc/nt/errors.h"
-#include "libc/nt/process.h"
-#include "libc/nt/runtime.h"
-#include "libc/nt/synchronization.h"
-#include "libc/runtime/internal.h"
-#include "libc/runtime/runtime.h"
-#include "libc/str/str.h"
+#include "libc/dce.h"
+#include "libc/intrin/strace.internal.h"
+#include "libc/runtime/syslib.internal.h"
 #include "libc/sysv/consts/sicode.h"
-#include "libc/sysv/consts/sig.h"
-
-static textwindows inline bool HasWorkingConsole(void) {
-  return !!(__ntconsolemode[0] | __ntconsolemode[1] | __ntconsolemode[2]);
-}
+#include "libc/thread/tls.h"
 
 /**
- * Sends signal to this process.
+ * Sends signal to self.
+ *
+ * This is basically the same as:
+ *
+ *     pthread_kill(pthread_self(), sig);
+ *
+ * Note `SIG_DFL` still results in process death for most signals.
  *
  * @param sig can be SIGALRM, SIGINT, SIGTERM, SIGKILL, etc.
- * @return 0 on success or -1 w/ errno
+ * @return 0 on success, or nonzero on failure
  * @asyncsignalsafe
  */
 int raise(int sig) {
-  int rc, event;
-  STRACE("raise(%G) → ...", sig);
-  if (sig == SIGTRAP) {
-    DebugBreak();
+  int rc;
+  if (IsXnuSilicon()) {
+    rc = __syslib->__raise(sig);
+  } else if (IsWindows()) {
+    __sig_raise(sig, SI_TKILL);
     rc = 0;
-  } else if (sig == SIGFPE) {
-    volatile int x = 0;
-    x = 1 / x;
-    rc = 0;
-  } else if (!IsWindows()) {
-    // XXX: should be tkill() or tgkill() on linux
-    rc = sys_kill(getpid(), sig, 1);
   } else {
-    if (HasWorkingConsole() && (event = GetConsoleCtrlEvent(sig)) != -1) {
-      // XXX: MSDN says "If this parameter is zero, the signal is
-      //      generated in all processes that share the console of the
-      //      calling process." which seems to imply multiple process
-      //      groups potentially. We just shouldn't use this because it
-      //      doesn't make any sense and it's so evil.
-      if (GenerateConsoleCtrlEvent(event, 0)) {
-        SleepEx(100, true);
-        __sig_check(false);
-        rc = 0;
-      } else {
-        rc = __winerr();
-      }
-    } else {
-      rc = __sig_raise(sig, SI_USER);
-    }
+    rc = sys_tkill(gettid(), sig, 0);
   }
-  STRACE("...raise(%G) → %d% m", sig, rc);
+  STRACE("raise(%G) → %d% m", sig, rc);
   return rc;
 }

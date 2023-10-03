@@ -1,56 +1,57 @@
 #ifndef COSMOPOLITAN_LIBC_RUNTIME_STACK_H_
 #define COSMOPOLITAN_LIBC_RUNTIME_STACK_H_
-#include "ape/config.h"
-#include "libc/dce.h"
-#include "libc/nt/version.h"
-#include "libc/runtime/runtime.h"
 #if !(__ASSEMBLER__ + __LINKER__ + 0)
+#ifdef _COSMO_SOURCE
 
 /**
- * Tunes APE stack maximum size.
- *
- * This defaults to `STACKSIZE`. The bottom-most page will be protected
- * to ensure your stack does not magically grow beyond this value. It's
- * possible to detect stack overflows, by calling `ShowCrashReports()`.
- * Your stack size must be a power of two; the linker will check this.
- *
- * If you want to know how much stack your programs needs, then
- *
- *     STATIC_YOINK("stack_usage_logging");
- *
- * will install an atexit() handler that appends to `o/$MODE/stack.log`
- *
- * @see libc/sysv/systemfive.S
- * @see ape/ape.lds
+ * Returns preferred size and alignment of thread stack.
  */
-#define STATIC_STACK_SIZE(BYTES) \
-  STATIC_SYMBOL("ape_stack_memsz", _STACK_STRINGIFY(BYTES) _STACK_EXTRA)
+#define GetStackSize() 262144
 
 /**
- * Tunes APE stack virtual address.
+ * Returns preferred stack guard size.
  *
- * This value must be aligned according to your stack size, and that's
- * checked by your linker script. This defaults to `0x700000000000` so
- *
- * 1. It's easy to see how close you are to the bottom
- * 2. The linker script error is unlikely to happen
- *
- * This macro will be respected, with two exceptions
- *
- * 1. In MODE=tiny the operating system provided stack is used instead
- * 2. Windows 7 doesn't support 64-bit addresses, so we'll instead use
- *    `0x10000000 - GetStackSize()` as the stack address
- *
- * @see libc/sysv/systemfive.S
- * @see libc/nt/winmain.greg.c
- * @see ape/ape.lds
+ * This is the max cpu page size of supported architectures.
  */
-#define STATIC_STACK_ADDR(ADDR) \
-  STATIC_SYMBOL("ape_stack_vaddr", _STACK_STRINGIFY(ADDR))
+#define GetGuardSize() 16384
+
+/**
+ * Align APE main thread stack at startup.
+ *
+ * You need this in your main program module:
+ *
+ *     STATIC_STACK_ALIGN(GetStackSize());
+ *
+ * If you want to use GetStackAddr() and HaveStackMemory() safely on
+ * your main thread in your process. It causes crt.S to waste a tiny
+ * amount of memory to ensure those macros go extremely fast.
+ */
+#define STATIC_STACK_ALIGN(BYTES) \
+  _STACK_SYMBOL("ape_stack_align", _STACK_STRINGIFY(BYTES) _STACK_EXTRA)
+
+/**
+ * Makes program stack executable if declared, e.g.
+ *
+ *     STATIC_EXEC_STACK();
+ *     int main() {
+ *       char code[16] = {
+ *           0x55,                          // push %rbp
+ *           0xb8, 0007, 0x00, 0x00, 0x00,  // mov  $7,%eax
+ *           0x5d,                          // push %rbp
+ *           0xc3,                          // ret
+ *       };
+ *       int (*func)(void) = (void *)code;
+ *       printf("result %d should be 7\n", func());
+ *     }
+ */
+#define STATIC_EXEC_STACK() _STACK_SYMBOL("ape_stack_pf", "7")
 
 #define _STACK_STRINGIFY(ADDR) #ADDR
+#define _STACK_SYMBOL(NAME, VALUE)       \
+  __asm__(".equ\t" NAME "," VALUE "\n\t" \
+          ".globl\t" NAME)
 
-#if IsAsan()
+#ifdef __SANITIZE_ADDRESS__
 #define _STACK_EXTRA "*2"
 #else
 #define _STACK_EXTRA ""
@@ -64,48 +65,98 @@ extern char ape_stack_memsz[] __attribute__((__weak__));
 extern char ape_stack_align[] __attribute__((__weak__));
 
 /**
- * Returns size of stack, which is always a two power.
+ * Returns address of bottom of current stack.
+ *
+ * This always works on threads. If you want it to work on the main
+ * process too, then you'll need STATIC_STACK_ALIGN(GetStackSize())
+ * which will burn O(256kb) of memory to ensure thread invariants.
  */
-#define GetStackSize() ((uintptr_t)ape_stack_memsz)
+#define GetStackAddr() ((GetStackPointer() - 1) & -GetStackSize())
+
+#define GetStaticStackSize() ((uintptr_t)ape_stack_memsz)
 
 /**
- * Returns address of bottom of stack.
+ * Returns true if at least `n` bytes of stack are available.
  *
- * This takes into consideration threads and sigaltstack. This is
- * implemented as a fast pure expression, since we're able to make the
- * assumption that stack sizes are two powers and aligned. This is
- * thanks to (1) the linker script checks the statically chosen sizes,
- * and (2) the mmap() address picker will choose aligned addresses when
- * the provided size is a two power.
+ * This always works on threads. If you want it to work on the main
+ * process too, then you'll need STATIC_STACK_ALIGN(GetStackSize())
+ * which will burn O(256kb) of memory to ensure thread invariants,
+ * which make this check exceedingly fast.
  */
-#define GetStackAddr(ADDEND)                                                 \
-  ((void *)((((intptr_t)__builtin_frame_address(0) - 1) & -GetStackSize()) + \
-            (ADDEND)))
+#define HaveStackMemory(n) \
+  (GetStackPointer() >= GetStackAddr() + GetGuardSize() + (n))
 
 /**
- * Returns preferred bottom address of stack.
+ * Extends stack memory by poking large allocations.
  *
- * This is the stakc address of the main process. The only time that
- * isn't guaranteed to be the case is in MODE=tiny, since it doesn't
- * link the code for stack creation at startup. This generally isn't
- * problematic, since MODE=tiny doesn't use any of the runtime codes
- * which want the stack to be cheaply knowable, e.g. ftrace, kprintf
+ * This can be particularly useful depending on how your system
+ * implements guard pages. For example, Windows can make stacks
+ * that aren't fully committed, in which case there's only 4096
+ * bytes of grows-down guard pages made by portable executable.
+ * If you alloca() more memory than that, you should call this,
+ * since it'll not only ensure stack overflows are detected, it
+ * will also trigger the stack to grow down safely.
  */
-#define GetStaticStackAddr(ADDEND)              \
-  ({                                            \
-    intptr_t vAddr;                             \
-    if (!IsWindows() || IsAtLeastWindows10()) { \
-      __asm__(".weak\tape_stack_vaddr\n\t"      \
-              "movabs\t%1+ape_stack_vaddr,%0"   \
-              : "=r"(vAddr)                     \
-              : "i"(ADDEND));                   \
-    } else {                                    \
-      vAddr = 0x100000000 - GetStackSize();     \
-    }                                           \
-    (void *)vAddr;                              \
+__funline void CheckLargeStackAllocation(void *p, ssize_t n) {
+  for (; n > 0; n -= 4096) {
+    ((char *)p)[n - 1] = 0;
+  }
+}
+
+void *NewCosmoStack(void) vallocesque;
+int FreeCosmoStack(void *) libcesque;
+
+/**
+ * Tunes stack size of main thread on Windows.
+ *
+ * On UNIX systems use `RLIMIT_STACK` to tune the main thread size.
+ */
+#define STATIC_STACK_SIZE(BYTES) \
+  _STACK_SYMBOL("ape_stack_memsz", _STACK_STRINGIFY(BYTES) _STACK_EXTRA)
+
+/**
+ * Tunes main thread stack address on Windows.
+ */
+#define STATIC_STACK_ADDR(ADDR) \
+  _STACK_SYMBOL("ape_stack_vaddr", _STACK_STRINGIFY(ADDR))
+
+#ifdef __x86_64__
+/**
+ * Returns preferred bottom address of main thread stack.
+ *
+ * On UNIX systems we favor the system provided stack, so this only
+ * really applies to Windows. It's configurable at link time. It is
+ * needed because polyfilling fork requires that we know, precicely
+ * where the stack memory begins and ends.
+ */
+#define GetStaticStackAddr(ADDEND)          \
+  ({                                        \
+    intptr_t vAddr;                         \
+    __asm__(".weak\tape_stack_vaddr\n\t"    \
+            "movabs\t%1+ape_stack_vaddr,%0" \
+            : "=r"(vAddr)                   \
+            : "i"(ADDEND));                 \
+    vAddr;                                  \
   })
+#else
+#define GetStaticStackAddr(ADDEND) (GetStackAddr() + ADDEND)
+#endif
+
+#define GetStackPointer()           \
+  ({                                \
+    uintptr_t __sp;                 \
+    __asm__(__mov_sp : "=r"(__sp)); \
+    __sp;                           \
+  })
+
+#ifdef __x86_64__
+#define __mov_sp "mov\t%%rsp,%0"
+#elif defined(__aarch64__)
+#define __mov_sp "mov\t%0,sp"
+#endif
 
 COSMOPOLITAN_C_END_
 #endif /* GNU ELF */
+#endif /* _COSMO_SOURCE */
 #endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
 #endif /* COSMOPOLITAN_LIBC_RUNTIME_STACK_H_ */

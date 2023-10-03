@@ -26,9 +26,7 @@ THIRD_PARTY_MAXMIND_A_DIRECTDEPS =					\
 	LIBC_RUNTIME							\
 	LIBC_STDIO							\
 	LIBC_STR							\
-	LIBC_STUBS							\
-	LIBC_SYSV							\
-	LIBC_UNICODE
+	LIBC_SYSV
 
 THIRD_PARTY_MAXMIND_A_DEPS :=						\
 	$(call uniq,$(foreach x,$(THIRD_PARTY_MAXMIND_A_DIRECTDEPS),$($(x))))
@@ -42,8 +40,8 @@ $(THIRD_PARTY_MAXMIND_A).pkg:						\
 		$(THIRD_PARTY_MAXMIND_A_OBJS)				\
 		$(foreach x,$(THIRD_PARTY_MAXMIND_A_DIRECTDEPS),$($(x)_A).pkg)
 
-$(THIRD_PARTY_MAXMIND_A_OBJS):						\
-		OVERRIDE_CFLAGS +=					\
+$(THIRD_PARTY_MAXMIND_A_OBJS): private					\
+		CFLAGS +=						\
 			-fdata-sections					\
 			-ffunction-sections
 

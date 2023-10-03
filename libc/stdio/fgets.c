@@ -23,15 +23,17 @@
  *
  * This function is similar to getline() except it'll truncate lines
  * exceeding size. The line ending marker is included and may be removed
- * using _chomp().
+ * using chomp().
+ *
+ * When reading from the console on Windows in `ICANON` mode, the
+ * returned line will end with `\r\n` rather than `\n`.
  *
  * @param s is output buffer
  * @param size is capacity of s
- * @param f is non-null file oject stream pointer
+ * @param f is non-null file object stream pointer
  * @return s on success, NULL on error, or NULL if EOF happens when
  *     zero characters have been read
  * @see fgets_unlocked()
- * @threadsafe
  */
 char *fgets(char *s, int size, FILE *f) {
   char *res;

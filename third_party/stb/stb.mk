@@ -26,8 +26,6 @@ THIRD_PARTY_STB_A_OBJS =				\
 
 THIRD_PARTY_STB_A_DIRECTDEPS =				\
 	DSP_CORE					\
-	LIBC_ALG					\
-	LIBC_BITS					\
 	LIBC_FMT					\
 	LIBC_INTRIN					\
 	LIBC_LOG					\
@@ -36,7 +34,6 @@ THIRD_PARTY_STB_A_DIRECTDEPS =				\
 	LIBC_RUNTIME					\
 	LIBC_STDIO					\
 	LIBC_STR					\
-	LIBC_STUBS					\
 	LIBC_TINYMATH					\
 	LIBC_X						\
 	THIRD_PARTY_ZLIB
@@ -57,17 +54,17 @@ $(THIRD_PARTY_STB_A).pkg:				\
 		$(THIRD_PARTY_STB_A_OBJS)		\
 		$(foreach x,$(THIRD_PARTY_STB_A_DIRECTDEPS),$($(x)_A).pkg)
 
-$(THIRD_PARTY_STB_A_OBJS):				\
-		OVERRIDE_CFLAGS +=			\
+$(THIRD_PARTY_STB_A_OBJS): private			\
+		CFLAGS +=				\
 			-ffunction-sections		\
 			-fdata-sections
 
-$(THIRD_PARTY_STB_A_OBJS):				\
-		OVERRIDE_CPPFLAGS +=			\
+o/$(MODE)/third_party/stb/stb_vorbis.o: private		\
+		CPPFLAGS +=				\
 			-DSTACK_FRAME_UNLIMITED
 
-o/$(MODE)/third_party/stb/stb_truetype.o:		\
-		OVERRIDE_CFLAGS +=			\
+o/$(MODE)/third_party/stb/stb_truetype.o: private	\
+		CFLAGS +=				\
 			-Os
 
 THIRD_PARTY_STB_LIBS = $(foreach x,$(THIRD_PARTY_STB_ARTIFACTS),$($(x)))

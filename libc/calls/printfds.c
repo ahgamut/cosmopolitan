@@ -18,8 +18,8 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/internal.h"
 #include "libc/calls/state.internal.h"
+#include "libc/calls/struct/fd.internal.h"
 #include "libc/intrin/kprintf.h"
-#include "libc/intrin/spinlock.h"
 
 static const char *__fdkind2str(int x) {
   switch (x) {
@@ -50,7 +50,6 @@ void __printfds(void) {
   for (i = 0; i < g_fds.n; ++i) {
     if (!g_fds.p[i].kind) continue;
     kprintf("%3d %s", i, __fdkind2str(g_fds.p[i].kind));
-    if (g_fds.p[i].zombie) kprintf(" zombie");
     if (g_fds.p[i].flags) kprintf(" flags=%#x", g_fds.p[i].flags);
     if (g_fds.p[i].mode) kprintf(" mode=%#o", g_fds.p[i].mode);
     if (g_fds.p[i].handle) kprintf(" handle=%ld", g_fds.p[i].handle);

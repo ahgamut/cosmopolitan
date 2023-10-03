@@ -29,8 +29,6 @@ THIRD_PARTY_COMPILER_RT_A_CHECKS =				\
 THIRD_PARTY_COMPILER_RT_A_DIRECTDEPS =				\
 	LIBC_INTRIN						\
 	LIBC_NEXGEN32E						\
-	LIBC_STUBS						\
-	LIBC_TINYMATH
 
 THIRD_PARTY_COMPILER_RT_A_DEPS :=				\
 	$(call uniq,$(foreach x,$(THIRD_PARTY_COMPILER_RT_A_DIRECTDEPS),$($(x))))
@@ -44,10 +42,14 @@ $(THIRD_PARTY_COMPILER_RT_A).pkg:				\
 		$(THIRD_PARTY_COMPILER_RT_A_OBJS)		\
 		$(foreach x,$(THIRD_PARTY_COMPILER_RT_A_DIRECTDEPS),$($(x)_A).pkg)
 
-$(THIRD_PARTY_COMPILER_RT_A_OBJS):				\
-		DEFAULT_CFLAGS +=					\
-			$(OLD_CODE)					\
+$(THIRD_PARTY_COMPILER_RT_A_OBJS): private			\
+		DEFAULT_CFLAGS +=				\
+			$(OLD_CODE)				\
 			-DCRT_HAS_128BIT
+
+# these assembly files are safe to build on aarch64
+o/$(MODE)/third_party/compiler_rt/comprt.o: third_party/compiler_rt/comprt.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
 
 THIRD_PARTY_COMPILER_RT_LIBS = $(foreach x,$(THIRD_PARTY_COMPILER_RT_ARTIFACTS),$($(x)))
 THIRD_PARTY_COMPILER_RT_SRCS = $(foreach x,$(THIRD_PARTY_COMPILER_RT_ARTIFACTS),$($(x)_SRCS))

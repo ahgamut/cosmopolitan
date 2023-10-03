@@ -16,87 +16,90 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/bits.h"
-#include "libc/bits/likely.h"
-#include "libc/bits/weaken.h"
-#include "libc/calls/calls.h"
+#include "libc/calls/cp.internal.h"
 #include "libc/calls/internal.h"
-#include "libc/calls/state.internal.h"
-#include "libc/calls/strace.internal.h"
 #include "libc/calls/struct/iovec.h"
+#include "libc/calls/struct/iovec.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/intrin/asan.internal.h"
-#include "libc/intrin/describeflags.internal.h"
-#include "libc/intrin/kprintf.h"
-#include "libc/macros.internal.h"
-#include "libc/sysv/consts/iov.h"
+#include "libc/intrin/likely.h"
+#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/weaken.h"
+#include "libc/runtime/zipos.internal.h"
 #include "libc/sysv/errfuns.h"
-#include "libc/zipos/zipos.internal.h"
 
 static ssize_t Preadv(int fd, struct iovec *iov, int iovlen, int64_t off) {
-  static bool once, demodernize;
-  int i, err;
-  ssize_t rc;
-  size_t got, toto;
+  int e, i;
+  size_t got;
+  ssize_t rc, toto;
 
-  if (fd < 0) return einval();
-  if (iovlen < 0) return einval();
-  if (IsAsan() && !__asan_is_valid_iov(iov, iovlen)) return efault();
+  if (fd < 0) {
+    return ebadf();
+  }
+
+  if (iovlen < 0) {
+    return einval();
+  }
+
+  if (IsAsan() && !__asan_is_valid_iov(iov, iovlen)) {
+    return efault();
+  }
+
   if (fd < g_fds.n && g_fds.p[fd].kind == kFdZip) {
-    return weaken(__zipos_read)(
+    return _weaken(__zipos_read)(
         (struct ZiposHandle *)(intptr_t)g_fds.p[fd].handle, iov, iovlen, off);
-  } else if (IsWindows()) {
+  }
+
+  if (IsMetal()) {
+    return espipe();  // must be serial or console if not zipos
+  }
+
+  if (IsWindows()) {
     if (fd < g_fds.n) {
-      return sys_read_nt(g_fds.p + fd, iov, iovlen, off);
+      if (g_fds.p[fd].kind == kFdSocket) {
+        return espipe();
+      } else {
+        return sys_read_nt(fd, iov, iovlen, off);
+      }
     } else {
       return ebadf();
     }
-  } else if (IsMetal()) {
-    return enosys();
   }
 
-  if (iovlen == 1) {
-    return sys_pread(fd, iov[0].iov_base, iov[0].iov_len, off, off);
-  }
-
-  /*
-   * NT, 2018-era XNU, and 2007-era Linux don't support this system call
-   */
-  if (!__vforked && !once) {
-    err = errno;
-    rc = sys_preadv(fd, iov, iovlen, off, off);
-    if (rc == -1 && errno == ENOSYS) {
-      errno = err;
-      once = true;
-      demodernize = true;
-      STRACE("demodernizing %s() due to %s", "preadv", "ENOSYS");
-    } else {
-      once = true;
-      return rc;
-    }
-  }
-
-  if (!demodernize) {
-    return sys_preadv(fd, iov, iovlen, off, off);
+  while (iovlen && !iov->iov_len) {
+    --iovlen;
+    ++iov;
   }
 
   if (!iovlen) {
-    return sys_pread(fd, NULL, 0, off, off);
+    return sys_pread(fd, 0, 0, off, off);
   }
+
+  if (iovlen == 1) {
+    return sys_pread(fd, iov->iov_base, iov->iov_len, off, off);
+  }
+
+  e = errno;
+  rc = sys_preadv(fd, iov, iovlen, off, off);
+  if (rc != -1 || errno != ENOSYS) return rc;
+  errno = e;
 
   for (toto = i = 0; i < iovlen; ++i) {
     rc = sys_pread(fd, iov[i].iov_base, iov[i].iov_len, off, off);
     if (rc == -1) {
-      if (toto && (errno == EINTR || errno == EAGAIN)) {
-        return toto;
-      } else {
-        return -1;
+      if (!toto) {
+        toto = -1;
+      } else if (errno != EINTR) {
+        notpossible;
       }
+      break;
     }
     got = rc;
     toto += got;
+    off += got;
     if (got != iov[i].iov_len) {
       break;
     }
@@ -109,18 +112,16 @@ static ssize_t Preadv(int fd, struct iovec *iov, int iovlen, int64_t off) {
  * Reads with maximum generality.
  *
  * @return number of bytes actually read, or -1 w/ errno
+ * @cancellationpoint
  * @asyncsignalsafe
  * @vforksafe
  */
 ssize_t preadv(int fd, struct iovec *iov, int iovlen, int64_t off) {
   ssize_t rc;
+  BEGIN_CANCELLATION_POINT;
   rc = Preadv(fd, iov, iovlen, off);
-#if defined(SYSDEBUG) && _DATATRACE
-  if (UNLIKELY(__strace > 0)) {
-    kprintf(STRACE_PROLOGUE "preadv(%d, [", fd);
-    DescribeIov(iov, iovlen, rc != -1 ? rc : 0);
-    kprintf("], %d, %'ld) → %'ld% m\n", iovlen, off, rc);
-  }
-#endif
+  END_CANCELLATION_POINT;
+  STRACE("preadv(%d, [%s], %d, %'ld) → %'ld% m", fd,
+         DescribeIovec(rc, iov, iovlen), iovlen, off, rc);
   return rc;
 }

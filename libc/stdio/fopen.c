@@ -17,11 +17,12 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
-#include "libc/calls/strace.internal.h"
 #include "libc/mem/mem.h"
+#include "libc/stdio/internal.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/o.h"
+#include "libc/sysv/errfuns.h"
 
 static const char *fixpathname(const char *pathname, int flags) {
   if ((flags & O_ACCMODE) == O_RDONLY && strcmp(pathname, "-") == 0) {
@@ -59,6 +60,10 @@ FILE *fopen(const char *pathname, const char *mode) {
   FILE *f = 0;
   bool noclose;
   int fd, flags;
+  if (!pathname) {
+    efault();
+    return 0;
+  }
   flags = fopenflags(mode);
   pathname = fixpathname(pathname, flags);
   if ((fd = openpathname(pathname, flags, &noclose)) != -1) {
@@ -68,6 +73,5 @@ FILE *fopen(const char *pathname, const char *mode) {
       close(fd);
     }
   }
-  STRACE("fopen(%#s, %#s) → %p% m", pathname, mode, f);
   return f;
 }

@@ -16,53 +16,117 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/pushpop.h"
-#include "libc/calls/internal.h"
-#include "libc/calls/strace.internal.h"
-#include "libc/intrin/pthread.h"
-#include "libc/intrin/spinlock.h"
+#include "libc/calls/state.internal.h"
+#include "libc/calls/struct/fd.internal.h"
+#include "libc/calls/ttydefaults.h"
+#include "libc/dce.h"
+#include "libc/intrin/atomic.h"
+#include "libc/intrin/extend.internal.h"
+#include "libc/intrin/getenv.internal.h"
+#include "libc/intrin/kprintf.h"
+#include "libc/intrin/nomultics.internal.h"
+#include "libc/intrin/pushpop.internal.h"
+#include "libc/intrin/weaken.h"
+#include "libc/nt/console.h"
+#include "libc/nt/createfile.h"
+#include "libc/nt/enum/accessmask.h"
+#include "libc/nt/enum/creationdisposition.h"
+#include "libc/nt/enum/fileflagandattributes.h"
+#include "libc/nt/enum/filesharemode.h"
 #include "libc/nt/runtime.h"
+#include "libc/runtime/memtrack.internal.h"
+#include "libc/runtime/runtime.h"
+#include "libc/sock/sock.h"
+#include "libc/sysv/consts/map.h"
 #include "libc/sysv/consts/o.h"
+#include "libc/thread/thread.h"
 
-STATIC_YOINK("_init_g_fds");
+#define OPEN_MAX 16
+
+#ifdef __x86_64__
+__static_yoink("_init_g_fds");
+#endif
 
 struct Fds g_fds;
-static pthread_mutex_t __fds_lock_obj;
+static struct Fd g_fds_static[OPEN_MAX];
 
-void(__fds_lock)(void) {
-  __fds_lock_obj.attr = PTHREAD_MUTEX_RECURSIVE;
-  pthread_mutex_lock(&__fds_lock_obj);
-}
-
-void(__fds_unlock)(void) {
-  __fds_lock_obj.attr = PTHREAD_MUTEX_RECURSIVE;
-  pthread_mutex_unlock(&__fds_lock_obj);
-}
-
-textstartup void InitializeFileDescriptors(void) {
-  struct Fds *fds;
-  fds = VEIL("r", &g_fds);
-  pushmov(&fds->n, ARRAYLEN(fds->__init_p));
-  fds->f = 3;
-  fds->p = fds->__init_p;
-  if (IsMetal()) {
-    pushmov(&fds->f, 3ull);
-    fds->__init_p[0].kind = pushpop(kFdSerial);
-    fds->__init_p[1].kind = pushpop(kFdSerial);
-    fds->__init_p[2].kind = pushpop(kFdSerial);
-    fds->__init_p[0].handle = VEIL("r", 0x3F8ull);
-    fds->__init_p[1].handle = VEIL("r", 0x3F8ull);
-    fds->__init_p[2].handle = VEIL("r", 0x3F8ull);
-  } else if (IsWindows()) {
-    pushmov(&fds->f, 3ull);
-    fds->__init_p[0].kind = pushpop(kFdFile);
-    fds->__init_p[1].kind = pushpop(kFdFile);
-    fds->__init_p[2].kind = pushpop(kFdFile);
-    fds->__init_p[0].handle = GetStdHandle(pushpop(kNtStdInputHandle));
-    fds->__init_p[1].handle = GetStdHandle(pushpop(kNtStdOutputHandle));
-    fds->__init_p[2].handle = GetStdHandle(pushpop(kNtStdErrorHandle));
+static int Atoi(const char *str) {
+  int i;
+  for (i = 0; '0' <= *str && *str <= '9'; ++str) {
+    i *= 10;
+    i += *str - '0';
   }
-  fds->__init_p[0].flags = O_RDONLY;
-  fds->__init_p[1].flags = O_WRONLY | O_APPEND;
-  fds->__init_p[2].flags = O_WRONLY | O_APPEND;
+  return i;
+}
+
+static textwindows dontinline void SetupWinStd(struct Fds *fds, int i, int x,
+                                               int sockset) {
+  int64_t h;
+  h = GetStdHandle(x);
+  if (!h || h == -1) return;
+  fds->p[i].kind = ((1 << i) & sockset) ? pushpop(kFdSocket) : pushpop(kFdFile);
+  fds->p[i].handle = h;
+  atomic_store_explicit(&fds->f, i + 1, memory_order_relaxed);
+}
+
+textstartup void __init_fds(int argc, char **argv, char **envp) {
+  struct Fds *fds;
+  __fds_lock_obj._type = PTHREAD_MUTEX_RECURSIVE;
+  fds = __veil("r", &g_fds);
+  fds->n = 4;
+  atomic_store_explicit(&fds->f, 3, memory_order_relaxed);
+  if (_weaken(_extend)) {
+    fds->p = fds->e = (void *)kMemtrackFdsStart;
+    fds->e =
+        _weaken(_extend)(fds->p, fds->n * sizeof(*fds->p), fds->e, MAP_PRIVATE,
+                         kMemtrackFdsStart + kMemtrackFdsSize);
+  } else {
+    fds->p = g_fds_static;
+    fds->e = g_fds_static + OPEN_MAX;
+  }
+  if (IsMetal()) {
+    extern const char vga_console[];
+    fds->f = 3;
+    if (_weaken(vga_console)) {
+      fds->p[0].kind = pushpop(kFdConsole);
+      fds->p[1].kind = pushpop(kFdConsole);
+      fds->p[2].kind = pushpop(kFdConsole);
+    } else {
+      fds->p[0].kind = pushpop(kFdSerial);
+      fds->p[1].kind = pushpop(kFdSerial);
+      fds->p[2].kind = pushpop(kFdSerial);
+    }
+    fds->p[0].handle = __veil("r", 0x3F8ull);
+    fds->p[1].handle = __veil("r", 0x3F8ull);
+    fds->p[2].handle = __veil("r", 0x3F8ull);
+  } else if (IsWindows()) {
+    int sockset = 0;
+    struct Env var;
+    var = __getenv(envp, "__STDIO_SOCKETS");
+    if (var.s) {
+      int i = var.i + 1;
+      do {
+        envp[i - 1] = envp[i];
+      } while (envp[i]);
+      sockset = Atoi(var.s);
+    }
+    if (sockset && !_weaken(socket)) {
+#ifdef SYSDEBUG
+      kprintf("%s: parent process passed sockets as stdio, but this program"
+              " can't use them since it didn't link the socket() function\n",
+              argv[0]);
+      _Exit(1);
+#else
+      sockset = 0;  // let ReadFile() fail
+#endif
+    }
+    SetupWinStd(fds, 0, kNtStdInputHandle, sockset);
+    SetupWinStd(fds, 1, kNtStdOutputHandle, sockset);
+    SetupWinStd(fds, 2, kNtStdErrorHandle, sockset);
+    __veof = CTRL('D');
+    __vintr = CTRL('C');
+    __vquit = CTRL('\\');
+  }
+  fds->p[1].flags = O_WRONLY | O_APPEND;
+  fds->p[2].flags = O_WRONLY | O_APPEND;
 }

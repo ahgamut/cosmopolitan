@@ -17,10 +17,11 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
-#include "libc/fmt/fmt.h"
+#include "libc/dce.h"
 #include "libc/macros.internal.h"
 #include "libc/mem/mem.h"
-#include "libc/stdio/append.internal.h"
+#include "libc/stdio/append.h"
+#include "libc/stdio/stdio.h"
 
 #define W sizeof(size_t)
 
@@ -43,9 +44,9 @@ ssize_t(vappendf)(char **b, const char *f, va_list v) {
       z.n = ROUNDUP(z.n, W);
       if ((p = realloc(p, z.n))) {
         z.n = malloc_usable_size(p);
-        assert(!(z.n & (W - 1)));
+        unassert(!(z.n & (W - 1)));
         s = (vsnprintf)(p + z.i, z.n - W - z.i, f, w);
-        assert(s == r);
+        unassert(s == r);
         *b = p;
       } else {
         va_end(w);

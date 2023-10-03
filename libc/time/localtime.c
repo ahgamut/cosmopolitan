@@ -2,36 +2,36 @@
 │vi: set et ft=c ts=8 tw=8 fenc=utf-8                                       :vi│
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #define LOCALTIME_IMPLEMENTATION
-#include "libc/bits/bits.h"
+#include "libc/calls/blockcancel.internal.h"
 #include "libc/calls/calls.h"
-#include "libc/intrin/nopl.h"
-#include "libc/intrin/pthread.h"
-#include "libc/intrin/spinlock.h"
+#include "libc/intrin/bits.h"
+#include "libc/mem/gc.h"
 #include "libc/mem/mem.h"
-#include "libc/nexgen32e/threaded.h"
-#include "libc/runtime/gc.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/o.h"
+#include "libc/thread/thread.h"
+#include "libc/thread/tls.h"
+#include "libc/time/struct/tm.h"
 #include "libc/time/time.h"
 #include "libc/time/tz.internal.h"
 #include "libc/time/tzfile.internal.h"
 
-STATIC_YOINK("zip_uri_support");
-STATIC_YOINK("usr/share/zoneinfo/");
-STATIC_YOINK("usr/share/zoneinfo/Anchorage");
-STATIC_YOINK("usr/share/zoneinfo/Beijing");
-STATIC_YOINK("usr/share/zoneinfo/Berlin");
-STATIC_YOINK("usr/share/zoneinfo/Boulder");
-STATIC_YOINK("usr/share/zoneinfo/Chicago");
-STATIC_YOINK("usr/share/zoneinfo/GMT");
-STATIC_YOINK("usr/share/zoneinfo/GST");
-STATIC_YOINK("usr/share/zoneinfo/Honolulu");
-STATIC_YOINK("usr/share/zoneinfo/Israel");
-STATIC_YOINK("usr/share/zoneinfo/Japan");
-STATIC_YOINK("usr/share/zoneinfo/London");
-STATIC_YOINK("usr/share/zoneinfo/Melbourne");
-STATIC_YOINK("usr/share/zoneinfo/New_York");
-STATIC_YOINK("usr/share/zoneinfo/UTC");
+__static_yoink("zipos");
+__static_yoink("usr/share/zoneinfo/");
+__static_yoink("usr/share/zoneinfo/Anchorage");
+__static_yoink("usr/share/zoneinfo/Beijing");
+__static_yoink("usr/share/zoneinfo/Berlin");
+__static_yoink("usr/share/zoneinfo/Boulder");
+__static_yoink("usr/share/zoneinfo/Chicago");
+__static_yoink("usr/share/zoneinfo/GMT");
+__static_yoink("usr/share/zoneinfo/GST");
+__static_yoink("usr/share/zoneinfo/Honolulu");
+__static_yoink("usr/share/zoneinfo/Israel");
+__static_yoink("usr/share/zoneinfo/Japan");
+__static_yoink("usr/share/zoneinfo/London");
+__static_yoink("usr/share/zoneinfo/Melbourne");
+__static_yoink("usr/share/zoneinfo/New_York");
+__static_yoink("usr/share/zoneinfo/UTC");
 
 // clang-format off
 /* Convert timestamp from time_t to struct tm.  */
@@ -47,22 +47,24 @@ STATIC_YOINK("usr/share/zoneinfo/UTC");
 
 static pthread_mutex_t locallock;
 
-int localtime_lock(void) {
+void localtime_wipe(void) {
+	pthread_mutex_init(&locallock, 0);
+}
+
+void localtime_lock(void) {
 	pthread_mutex_lock(&locallock);
-	return 0;
 }
 
 void localtime_unlock(void) {
 	pthread_mutex_unlock(&locallock);
 }
 
-#if defined(__GNUC__) && !defined(__llvm__) && !defined(__STRICT_ANSI__)
-#define localtime_lock()   _NOPL0("__threadcalls", localtime_lock)
-#define localtime_unlock() _NOPL0("__threadcalls", localtime_unlock)
-#else
-#define localtime_lock()   (__threaded ? localtime_lock() : 0)
-#define localtime_unlock() (__threaded ? localtime_unlock() : 0)
-#endif
+__attribute__((__constructor__)) static void localtime_init(void) {
+	localtime_wipe();
+	pthread_atfork(localtime_lock,
+		       localtime_unlock,
+		       localtime_wipe);
+}
 
 #ifndef TZ_ABBR_MAX_LEN
 #define TZ_ABBR_MAX_LEN	16
@@ -187,7 +189,7 @@ static bool increment_overflow(int *, int);
 static bool increment_overflow_time(time_t *, int_fast32_t);
 static int_fast32_t leapcorr(struct state const *, time_t);
 static bool normalize_overflow32(int_fast32_t *, int *, int);
-static struct tm *localtime_timesub(time_t const *, int_fast32_t, 
+static struct tm *localtime_timesub(time_t const *, int_fast32_t,
 				    struct state const *, struct tm *);
 static bool localtime_typesequiv(struct state const *, int, int);
 static bool localtime_tzparse(char const *, struct state *, struct state *);
@@ -358,8 +360,8 @@ union local_storage {
    format if DOEXTEND.  Use *LSP for temporary storage.  Return 0 on
    success, an errno value on failure.  */
 static int
-localtime_tzloadbody(char const *name, struct state *sp, bool doextend,
-		     union local_storage *lsp)
+localtime_tzloadbody_(char const *name, struct state *sp, bool doextend,
+		      union local_storage *lsp)
 {
 	register int			i;
 	register int			fid;
@@ -521,7 +523,7 @@ localtime_tzloadbody(char const *name, struct state *sp, bool doextend,
 			sp->chars[i] = *p++;
 		/* Ensure '\0'-terminated, and make it safe to call
 		   ttunspecified later.  */
-		memset(&sp->chars[i], 0, CHARS_EXTRA);
+		bzero(&sp->chars[i], CHARS_EXTRA);
 
 		/* Read leap seconds, discarding those out of time_t range.  */
 		leapcnt = 0;
@@ -733,6 +735,17 @@ localtime_tzloadbody(char const *name, struct state *sp, bool doextend,
 	sp->defaulttype = i;
 
 	return 0;
+}
+
+static int /* [jart] pthread cancellation safe */
+localtime_tzloadbody(char const *name, struct state *sp, bool doextend,
+		     union local_storage *lsp)
+{
+	int rc;
+	BLOCK_CANCELLATIONS;
+	rc = localtime_tzloadbody_(name, sp, doextend, lsp);
+	ALLOW_CANCELLATIONS;
+	return rc;
 }
 
 /* Load tz data from the file named NAME into *SP.  Read extended
@@ -1417,9 +1430,22 @@ localtime_tzset_unlocked(void)
 void
 tzset(void)
 {
-	if (localtime_lock() != 0)
-		return;
+	localtime_lock();
 	localtime_tzset_unlocked();
+	localtime_unlock();
+}
+
+static void
+gmtcheck(void)
+{
+	static bool gmt_is_set;
+	localtime_lock();
+	if (! gmt_is_set) {
+		gmtptr = malloc(sizeof *gmtptr);
+		if (gmtptr)
+			gmtload(gmtptr);
+		gmt_is_set = true;
+	}
 	localtime_unlock();
 }
 
@@ -1432,8 +1458,7 @@ static void
 localtime_gmtcheck(void)
 {
 	static bool gmt_is_set;
-	if (localtime_lock() != 0)
-		return;
+	localtime_lock();
 	if (! gmt_is_set) {
 		gmtptr = malloc(sizeof *gmtptr);
 		__cxa_atexit(FreeGmt, gmtptr, 0);
@@ -1545,11 +1570,7 @@ localsub(struct state const *sp, time_t const *timep, int_fast32_t setname,
 static struct tm *
 localtime_tzset(time_t const *timep, struct tm *tmp, bool setname)
 {
-	int err = localtime_lock();
-	if (err) {
-		errno = err;
-		return NULL;
-	}
+	localtime_lock();
 	if (setname || !lcl_is_set)
 		localtime_tzset_unlocked();
 	tmp = localsub(lclptr, timep, setname, tmp);
@@ -1594,6 +1615,9 @@ gmtsub(struct state const *sp, time_t const *timep, int_fast32_t offset,
 * Re-entrant version of gmtime.
 */
 
+/**
+ * Converts UNIX timestamp to broken-down representation.
+ */
 struct tm *
 gmtime_r(const time_t *timep, struct tm *tmp)
 {
@@ -1601,6 +1625,10 @@ gmtime_r(const time_t *timep, struct tm *tmp)
 	return gmtsub(gmtptr, timep, 0, tmp);
 }
 
+/**
+ * Converts UNIX timestamp to broken-down representation.
+ * @threadunsafe (see gmtime_r)
+ */
 struct tm *
 gmtime(const time_t *timep)
 {
@@ -2160,15 +2188,34 @@ time_t
 mktime(struct tm *tmp)
 {
 	time_t t;
-	int err = localtime_lock();
-	if (err) {
-		errno = err;
-		return -1;
-	}
+	localtime_lock();
 	localtime_tzset_unlocked();
 	t = mktime_tzname(lclptr, tmp, true);
 	localtime_unlock();
 	return t;
+}
+
+time_t
+timelocal(struct tm *tmp)
+{
+	if (tmp != NULL)
+		tmp->tm_isdst = -1;	/* in case it wasn't initialized */
+	return mktime(tmp);
+}
+
+time_t
+timegm(struct tm *tmp)
+{
+	return timeoff(tmp, 0);
+}
+
+time_t
+timeoff(struct tm *tmp, long offset)
+{
+	if (tmp)
+		tmp->tm_isdst = 0;
+	gmtcheck();
+	return localtime_time1(tmp, gmtsub, gmtptr, offset);
 }
 
 static int_fast32_t

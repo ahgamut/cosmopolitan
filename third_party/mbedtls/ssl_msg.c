@@ -1253,8 +1253,6 @@ MBEDTLS_STATIC_TESTABLE int mbedtls_ssl_cf_hmac(
     const unsigned char * const okey = ikey + block_size;
     const size_t hash_size = mbedtls_md_get_size( ctx->md_info );
 
-    unsigned char aux_out[MBEDTLS_MD_MAX_SIZE];
-    size_t offset;
     int ret = MBEDTLS_ERR_THIS_CORRUPTION;
 
 #define MD_CHK( func_call ) \
@@ -5060,7 +5058,7 @@ int mbedtls_ssl_handle_message_type( mbedtls_ssl_context *ssl )
         if( ssl->in_msglen != 1 )
         {
             MBEDTLS_SSL_DEBUG_MSG( 1, ( "invalid CCS message, len: %" MBEDTLS_PRINTF_SIZET,
-                           ssl->in_msglen ) );
+                                        ssl->in_msglen ) );
             return( MBEDTLS_ERR_SSL_INVALID_RECORD );
         }
 
@@ -5096,7 +5094,7 @@ int mbedtls_ssl_handle_message_type( mbedtls_ssl_context *ssl )
                to be packed in a single message, but Mbed TLS doesn't
                currently support this. */
             MBEDTLS_SSL_DEBUG_MSG( 1, ( "invalid alert message, len: %" MBEDTLS_PRINTF_SIZET,
-                           ssl->in_msglen ) );
+                                        ssl->in_msglen ) );
             return( MBEDTLS_ERR_SSL_INVALID_RECORD );
         }
 

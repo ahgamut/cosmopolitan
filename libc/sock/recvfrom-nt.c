@@ -16,34 +16,40 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/calls/internal.h"
 #include "libc/calls/struct/iovec.h"
+#include "libc/errno.h"
 #include "libc/nt/struct/overlapped.h"
 #include "libc/nt/winsock.h"
 #include "libc/sock/internal.h"
 #include "libc/sock/syscall_fd.internal.h"
 #include "libc/sysv/errfuns.h"
 
-/**
- * Performs datagram receive on New Technology.
- *
- * @param fd must be a socket
- * @return number of bytes received, or -1 w/ errno
- */
-textwindows ssize_t sys_recvfrom_nt(struct Fd *fd, const struct iovec *iov,
+textwindows ssize_t sys_recvfrom_nt(int fd, const struct iovec *iov,
                                     size_t iovlen, uint32_t flags,
                                     void *opt_out_srcaddr,
                                     uint32_t *opt_inout_srcaddrsize) {
+  int err;
   ssize_t rc;
-  uint32_t got = 0;
+  uint32_t got;
+  struct SockFd *sockfd;
   struct NtIovec iovnt[16];
   struct NtOverlapped overlapped = {.hEvent = WSACreateEvent()};
-  if (_check_interrupts(true, g_fds.p)) return eintr();
-  if (!WSARecvFrom(fd->handle, iovnt, __iovec2nt(iovnt, iov, iovlen), &got,
+  err = errno;
+  if (!WSARecvFrom(g_fds.p[fd].handle, iovnt, __iovec2nt(iovnt, iov, iovlen), 0,
                    &flags, opt_out_srcaddr, opt_inout_srcaddrsize, &overlapped,
                    NULL)) {
-    rc = got;
+    if (WSAGetOverlappedResult(g_fds.p[fd].handle, &overlapped, &got, false,
+                               &flags)) {
+      rc = got;
+    } else {
+      rc = -1;
+    }
   } else {
-    rc = __wsablock(fd->handle, &overlapped, &flags, true);
+    errno = err;
+    sockfd = (struct SockFd *)g_fds.p[fd].extra;
+    rc = __wsablock(g_fds.p + fd, &overlapped, &flags, kSigOpRestartable,
+                    sockfd->rcvtimeo);
   }
   WSACloseEvent(overlapped.hEvent);
   return rc;

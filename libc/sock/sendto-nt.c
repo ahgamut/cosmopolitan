@@ -21,27 +21,29 @@
 #include "libc/nt/struct/overlapped.h"
 #include "libc/nt/winsock.h"
 #include "libc/sock/internal.h"
+#include "libc/sock/syscall_fd.internal.h"
 #include "libc/sysv/errfuns.h"
 
-/**
- * Performs datagram socket send on the New Technology.
- *
- * @param fd must be a socket
- * @return number of bytes handed off, or -1 w/ errno
- */
 textwindows ssize_t sys_sendto_nt(int fd, const struct iovec *iov,
                                   size_t iovlen, uint32_t flags,
                                   void *opt_in_addr, uint32_t in_addrsize) {
   ssize_t rc;
   uint32_t sent = 0;
+  struct SockFd *sockfd;
   struct NtIovec iovnt[16];
   struct NtOverlapped overlapped = {.hEvent = WSACreateEvent()};
-  if (_check_interrupts(true, g_fds.p)) return eintr();
-  if (!WSASendTo(g_fds.p[fd].handle, iovnt, __iovec2nt(iovnt, iov, iovlen),
-                 &sent, flags, opt_in_addr, in_addrsize, &overlapped, NULL)) {
-    rc = sent;
+  if (!WSASendTo(g_fds.p[fd].handle, iovnt, __iovec2nt(iovnt, iov, iovlen), 0,
+                 flags, opt_in_addr, in_addrsize, &overlapped, NULL)) {
+    if (WSAGetOverlappedResult(g_fds.p[fd].handle, &overlapped, &sent, false,
+                               &flags)) {
+      rc = sent;
+    } else {
+      rc = -1;
+    }
   } else {
-    rc = __wsablock(g_fds.p[fd].handle, &overlapped, &flags, true);
+    sockfd = (struct SockFd *)g_fds.p[fd].extra;
+    rc = __wsablock(g_fds.p + fd, &overlapped, &flags, kSigOpRestartable,
+                    sockfd->sndtimeo);
   }
   WSACloseEvent(overlapped.hEvent);
   return rc;

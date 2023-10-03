@@ -27,16 +27,17 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/math.h"
 #include "libc/tinymath/expo.internal.h"
+#include "libc/tinymath/freebsd.internal.h"
 
 asm(".ident\t\"\\n\\n\
 Musl libc (MIT License)\\n\
 Copyright 2005-2014 Rich Felker, et. al.\"");
 asm(".include \"libc/disclaimer.inc\"");
-/* clang-format off */
+// clang-format off
 
 /**
  * Returns hyperbolic sine of 𝑥.
- * 
+ *
  *     sinh(x) = (exp(x) - 1/exp(x))/2
  *             = (exp(x)-1 + (exp(x)-1)/exp(x))/2
  *             = x + x^3/6 + o(x^5)
@@ -74,3 +75,7 @@ double sinh(double x)
 	t = __expo2(absx, 2*h);
 	return t;
 }
+
+#if LDBL_MANT_DIG == 53 && LDBL_MAX_EXP == 1024
+__weak_reference(sinh, sinhl);
+#endif

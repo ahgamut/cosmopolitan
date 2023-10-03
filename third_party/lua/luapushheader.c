@@ -16,12 +16,13 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/mem/mem.h"
 #include "net/http/http.h"
 #include "third_party/lua/cosmo.h"
 #include "third_party/lua/lauxlib.h"
 #include "third_party/lua/lua.h"
 
-int LuaPushHeader(lua_State *L, struct HttpMessage *m, char *b, int h) {
+int LuaPushHeader(lua_State *L, struct HttpMessage *m, const char *b, int h) {
   char *val;
   size_t vallen;
   if (!kHttpRepeatable[h]) {

@@ -5,23 +5,31 @@
 │ https://docs.python.org/3/license.html                                       │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #define PY_SSIZE_T_CLEAN
-#include "libc/alg/alg.h"
+#include "third_party/python/Modules/posixmodule.h"
 #include "libc/assert.h"
-#include "libc/bits/weaken.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
 #include "libc/calls/makedev.h"
 #include "libc/calls/struct/dirent.h"
+#include "libc/calls/struct/iovec.h"
+#include "libc/calls/struct/rusage.h"
+#include "libc/calls/struct/sched_param.h"
 #include "libc/calls/struct/stat.macros.h"
+#include "libc/calls/struct/statvfs.h"
+#include "libc/calls/struct/timespec.h"
+#include "libc/calls/struct/timeval.h"
 #include "libc/calls/struct/tms.h"
 #include "libc/calls/struct/utsname.h"
 #include "libc/calls/struct/winsize.h"
 #include "libc/calls/syscall-sysv.internal.h"
+#include "libc/stdio/sysparam.h"
 #include "libc/calls/termios.h"
 #include "libc/calls/weirdtypes.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/log/log.h"
+#include "libc/mem/alg.h"
+#include "libc/mem/gc.internal.h"
 #include "libc/nt/createfile.h"
 #include "libc/nt/dll.h"
 #include "libc/nt/enum/creationdisposition.h"
@@ -30,7 +38,7 @@
 #include "libc/nt/files.h"
 #include "libc/nt/runtime.h"
 #include "libc/runtime/dlfcn.h"
-#include "libc/runtime/gc.internal.h"
+#include "libc/runtime/pathconf.h"
 #include "libc/runtime/sysconf.h"
 #include "libc/sock/sendfile.internal.h"
 #include "libc/sock/sock.h"
@@ -45,14 +53,18 @@
 #include "libc/sysv/consts/prio.h"
 #include "libc/sysv/consts/s.h"
 #include "libc/sysv/consts/sched.h"
+#include "libc/sysv/consts/seek.h"
 #include "libc/sysv/consts/sf.h"
 #include "libc/sysv/consts/sicode.h"
 #include "libc/sysv/consts/st.h"
+#include "libc/sysv/consts/termios.h"
 #include "libc/sysv/consts/w.h"
 #include "libc/sysv/consts/waitid.h"
 #include "libc/sysv/errfuns.h"
+#include "libc/time/struct/utimbuf.h"
 #include "libc/time/time.h"
 #include "libc/x/x.h"
+#include "third_party/musl/lockf.h"
 #include "third_party/musl/passwd.h"
 #include "third_party/python/Include/abstract.h"
 #include "third_party/python/Include/boolobject.h"
@@ -77,7 +89,6 @@
 #include "third_party/python/Include/warnings.h"
 #include "third_party/python/Include/yoink.h"
 #include "third_party/python/Modules/_multiprocessing/multiprocessing.h"
-#include "third_party/python/Modules/posixmodule.h"
 #include "third_party/python/pyconfig.h"
 /* clang-format off */
 
@@ -116,14 +127,6 @@ module os
 /*[clinic end generated code: output=da39a3ee5e6b4b0d input=94a0f0f978acae17]*/
 
 #define NAMLEN(dirent) strlen((dirent)->d_name)
-
-#ifndef MAXPATHLEN
-#if defined(PATH_MAX) && PATH_MAX > 1024 /* TODO: wut? */
-#define MAXPATHLEN PATH_MAX
-#else
-#define MAXPATHLEN 1024
-#endif
-#endif /* MAXPATHLEN */
 
 #ifdef UNION_WAIT
 /* Emulate some macros on systems that have a union instead of macros */
@@ -3394,7 +3397,7 @@ os__getfinalpathname_impl(PyObject *module, PyObject *path)
     int result_length;
     PyObject *result;
     if (!(path_utf8 = PyUnicode_AsUTF8String(path))) return 0;
-    path_utf16 = gc(utf8toutf16(PyBytes_AS_STRING(path_utf8), PyBytes_GET_SIZE(path_utf8), 0));
+    path_utf16 = gc(utf8to16(PyBytes_AS_STRING(path_utf8), PyBytes_GET_SIZE(path_utf8), 0));
     Py_DECREF(path_utf8);
     if (!path_utf16) return PyErr_NoMemory();
     Py_BEGIN_ALLOW_THREADS
@@ -3434,7 +3437,7 @@ os__getfinalpathname_impl(PyObject *module, PyObject *path)
         buf_size = result_length;
         target_path = tmp;
     }
-    final8 = gc(utf16toutf8(target_path, result_length, &final8z));
+    final8 = gc(utf16to8(target_path, result_length, &final8z));
     result = PyUnicode_FromStringAndSize(final8, final8z);
 cleanup:
     if (target_path != buf) {
@@ -3532,7 +3535,7 @@ os__getvolumepathname_impl(PyObject *module, PyObject *path)
     size_t buflen;
     bool32 ret;
     if (!(path_utf8 = PyUnicode_AsUTF8String(path))) return 0;
-    path_utf16 = gc(utf8toutf16(PyBytes_AS_STRING(path_utf8), PyBytes_GET_SIZE(path_utf8), &buflen));
+    path_utf16 = gc(utf8to16(PyBytes_AS_STRING(path_utf8), PyBytes_GET_SIZE(path_utf8), &buflen));
     Py_DECREF(path_utf8);
     if (!path_utf16) return PyErr_NoMemory();
     buflen += 1;
@@ -3549,7 +3552,7 @@ os__getvolumepathname_impl(PyObject *module, PyObject *path)
                             Py_SAFE_DOWNCAST(buflen, size_t, uint32_t));
     Py_END_ALLOW_THREADS
     if (ret) {
-        mountpath8 = gc(utf16toutf8(mountpath, -1, &buflen));
+        mountpath8 = gc(utf16to8(mountpath, -1, &buflen));
         result = PyUnicode_FromStringAndSize(mountpath8, buflen);
     } else {
         result = win32_error_object("_getvolumepathname", path);
@@ -10475,7 +10478,7 @@ get_terminal_size(PyObject *self, PyObject *args)
      */
     if (!PyArg_ParseTuple(args, "|i", &fd))
         return NULL;
-    if (ioctl(fd, TIOCGWINSZ, &w))
+    if (tcgetwinsize(fd, &w))
         return PyErr_SetFromErrno(PyExc_OSError);
     columns = w.ws_col;
     lines = w.ws_row;
@@ -10506,7 +10509,7 @@ os_cpu_count_impl(PyObject *module)
 /*[clinic end generated code: output=5fc29463c3936a9c input=e7c8f4ba6dbbadd3]*/
 {
     int ncpu;
-    ncpu = GetCpuCount();
+    ncpu = __get_cpu_count();
     if (ncpu >= 1)
         return PyLong_FromLong(ncpu);
     else
@@ -11893,10 +11896,10 @@ all_ins(PyObject *m)
     if (PyModule_AddIntMacro(m, CLD_CONTINUED)) return -1;
 
     /* constants for lockf */
-    if (F_LOCK && PyModule_AddIntMacro(m, F_LOCK)) return -1;
-    if (F_TLOCK && PyModule_AddIntMacro(m, F_TLOCK)) return -1;
+    if (PyModule_AddIntMacro(m, F_LOCK)) return -1;
+    if (PyModule_AddIntMacro(m, F_TLOCK)) return -1;
     if (PyModule_AddIntMacro(m, F_ULOCK)) return -1;
-    if (F_TEST && PyModule_AddIntMacro(m, F_TEST)) return -1;
+    if (PyModule_AddIntMacro(m, F_TEST)) return -1;
 
 #ifdef HAVE_SPAWNV
     if (PyModule_AddIntConstant(m, "P_WAIT", _P_WAIT)) return -1;

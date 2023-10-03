@@ -7,10 +7,10 @@
 │   • http://creativecommons.org/publicdomain/zero/1.0/            │
 ╚─────────────────────────────────────────────────────────────────*/
 #endif
-#include "libc/log/log.h"
+#include "libc/runtime/runtime.h"
 
 /**
- * Automatically launchs GDB Debugger TUI during crash.
+ * Automatically launches GDB Debugger TUI during crash.
  *
  * Run the following inside a terminal:
  *
@@ -41,6 +41,6 @@
 
 int main(int argc, char *argv[]) {
   ShowCrashReports();
-  asm("int3"); /* cf. __die(), perror("msg"), abort(), exit(1), _Exit(1) */
+  __builtin_trap();
   return 0;
 }

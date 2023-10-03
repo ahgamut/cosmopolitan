@@ -11,12 +11,12 @@
 #include "libc/calls/struct/dirent.h"
 #include "libc/calls/struct/stat.h"
 #include "libc/log/check.h"
-#include "libc/runtime/gc.h"
+#include "libc/mem/gc.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/dt.h"
 #include "libc/sysv/consts/s.h"
-#include "libc/x/x.h"
+#include "libc/x/xasprintf.h"
 
 struct stat st;
 

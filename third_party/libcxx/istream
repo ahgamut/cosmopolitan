@@ -10,6 +10,20 @@
 #ifndef _LIBCPP_ISTREAM
 #define _LIBCPP_ISTREAM
 
+#include "third_party/libcxx/__config"
+#include "third_party/libcxx/version"
+#include "third_party/libcxx/ostream"
+
+#if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
+#pragma GCC system_header
+#endif
+
+_LIBCPP_PUSH_MACROS
+#include "third_party/libcxx/__undef_macros"
+
+
+_LIBCPP_BEGIN_NAMESPACE_STD
+
 /*
     istream synopsis
 
@@ -157,20 +171,6 @@ template <class charT, class traits, class T>
 }  // std
 
 */
-
-#include "third_party/libcxx/__config"
-#include "third_party/libcxx/version"
-#include "third_party/libcxx/ostream"
-
-#if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
-#pragma GCC system_header
-#endif
-
-_LIBCPP_PUSH_MACROS
-#include "third_party/libcxx/__undef_macros"
-
-
-_LIBCPP_BEGIN_NAMESPACE_STD
 
 template <class _CharT, class _Traits>
 class _LIBCPP_TEMPLATE_VIS basic_istream
@@ -359,7 +359,7 @@ basic_istream<_CharT, _Traits>::~basic_istream()
 }
 
 template <class _Tp, class _CharT, class _Traits>
-_LIBCPP_INLINE_VISIBILITY
+inline _LIBCPP_INLINE_VISIBILITY
 basic_istream<_CharT, _Traits>&
 __input_arithmetic(basic_istream<_CharT, _Traits>& __is, _Tp& __n) {
     ios_base::iostate __state = ios_base::goodbit;
@@ -468,7 +468,7 @@ basic_istream<_CharT, _Traits>::operator>>(void*& __n)
 }
 
 template <class _Tp, class _CharT, class _Traits>
-_LIBCPP_INLINE_VISIBILITY
+inline _LIBCPP_INLINE_VISIBILITY
 basic_istream<_CharT, _Traits>&
 __input_arithmetic_with_numeric_limits(basic_istream<_CharT, _Traits>& __is, _Tp& __n) {
     ios_base::iostate __state = ios_base::goodbit;

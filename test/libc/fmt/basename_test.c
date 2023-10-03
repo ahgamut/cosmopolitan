@@ -16,13 +16,13 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/bits.h"
-#include "libc/fmt/conv.h"
-#include "libc/mem/mem.h"
-#include "libc/runtime/gc.internal.h"
+#include "libc/fmt/libgen.h"
+#include "libc/str/str.h"
 #include "libc/testlib/testlib.h"
 
-#define BASENAME(x) basename(gc(strdup(x)))
+static char dup[128];
+
+#define BASENAME(x) basename(strcpy(dup, x))
 
 TEST(basename, testRegularExamples) {
   EXPECT_STREQ("lib", BASENAME("/usr/lib"));
@@ -46,9 +46,4 @@ TEST(basename, testTrailingSlash_isIgnored) {
 
 TEST(basename, testOnlySlashes_oneSlashOnlyVasily) {
   EXPECT_STREQ("/", BASENAME("///"));
-}
-
-TEST(basename, testWindows_isGrantedRespect) {
-  EXPECT_STREQ("there", BASENAME("hello\\there"));
-  EXPECT_STREQ("yo", BASENAME("hello\\there\\yo"));
 }

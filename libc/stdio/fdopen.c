@@ -17,11 +17,11 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
-#include "libc/mem/mem.h"
 #include "libc/stdio/internal.h"
 #include "libc/stdio/stdio.h"
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/errfuns.h"
+#include "libc/thread/thread.h"
 
 /**
  * Allocates stream object for already-opened file descriptor.
@@ -33,18 +33,16 @@
  */
 FILE *fdopen(int fd, const char *mode) {
   FILE *f;
-  if ((f = calloc(1, sizeof(FILE)))) {
+  if ((f = __stdio_alloc())) {
     f->fd = fd;
     f->bufmode = ischardev(fd) ? _IOLBF : _IOFBF;
     f->iomode = fopenflags(mode);
+    f->buf = f->mem;
     f->size = BUFSIZ;
-    if ((f->buf = malloc(f->size))) {
-      if ((f->iomode & O_ACCMODE) != O_RDONLY) {
-        __fflush_register(f);
-      }
-      return f;
+    if ((f->iomode & O_ACCMODE) != O_RDONLY) {
+      __fflush_register(f);
     }
-    free(f);
+    return f;
   }
   return NULL;
 }

@@ -19,7 +19,6 @@
 #include "libc/calls/internal.h"
 #include "libc/calls/state.internal.h"
 #include "libc/calls/syscall_support-nt.internal.h"
-#include "libc/intrin/spinlock.h"
 #include "libc/nt/createfile.h"
 #include "libc/nt/enum/accessmask.h"
 #include "libc/nt/enum/creationdisposition.h"
@@ -34,8 +33,8 @@
 
 textwindows int sys_socketpair_nt(int family, int type, int proto, int sv[2]) {
   uint32_t mode;
+  int64_t hpipe, h1;
   char16_t pipename[64];
-  int64_t hpipe, h1, h2;
   int rc, reader, writer, oflags;
 
   // Supports only AF_UNIX
@@ -55,7 +54,7 @@ textwindows int sys_socketpair_nt(int family, int type, int proto, int sv[2]) {
     return eopnotsupp();
   }
 
-  CreatePipeName(pipename);
+  __create_pipe_name(pipename);
   __fds_lock();
   reader = __reservefd_unlocked(-1);
   writer = __reservefd_unlocked(-1);
@@ -65,28 +64,28 @@ textwindows int sys_socketpair_nt(int family, int type, int proto, int sv[2]) {
     if (writer != -1) __releasefd(writer);
     return -1;
   }
-  if ((hpipe = CreateNamedPipe(
-           pipename, kNtPipeAccessDuplex | kNtFileFlagOverlapped, mode, 1,
-           65536, 65536, 0, &kNtIsInheritable)) == -1) {
+  if ((hpipe = CreateNamedPipe(pipename,
+                               kNtPipeAccessDuplex | kNtFileFlagOverlapped,
+                               mode, 1, 65536, 65536, 0, 0)) == -1) {
     __releasefd(writer);
     __releasefd(reader);
     return -1;
   }
 
-  h1 = CreateFile(pipename, kNtGenericWrite | kNtGenericRead, 0,
-                  &kNtIsInheritable, kNtOpenExisting, kNtFileFlagOverlapped, 0);
+  h1 = CreateFile(pipename, kNtGenericWrite | kNtGenericRead, 0, 0,
+                  kNtOpenExisting, kNtFileFlagOverlapped, 0);
 
   __fds_lock();
 
   if (h1 != -1) {
 
     g_fds.p[reader].kind = kFdFile;
-    g_fds.p[reader].flags = oflags;
+    g_fds.p[reader].flags = O_RDWR | oflags;
     g_fds.p[reader].mode = 0140444;
     g_fds.p[reader].handle = hpipe;
 
     g_fds.p[writer].kind = kFdFile;
-    g_fds.p[writer].flags = oflags;
+    g_fds.p[writer].flags = O_RDWR | oflags;
     g_fds.p[writer].mode = 0140222;
     g_fds.p[writer].handle = h1;
 
@@ -96,8 +95,8 @@ textwindows int sys_socketpair_nt(int family, int type, int proto, int sv[2]) {
     rc = 0;
   } else {
     CloseHandle(hpipe);
-    __releasefd_unlocked(writer);
-    __releasefd_unlocked(reader);
+    __releasefd(writer);
+    __releasefd(reader);
     rc = -1;
   }
 

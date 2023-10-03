@@ -17,16 +17,19 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
-#include "libc/errno.h"
-#include "libc/fmt/conv.h"
 #include "libc/fmt/fmt.h"
+#include "libc/fmt/libgen.h"
+#include "libc/limits.h"
 #include "libc/log/check.h"
 #include "libc/macros.internal.h"
-#include "libc/runtime/gc.internal.h"
+#include "libc/mem/gc.internal.h"
 #include "libc/testlib/testlib.h"
 #include "libc/x/x.h"
 
-char testlib_enable_tmp_setup_teardown;
+void SetUpOnce(void) {
+  testlib_enable_tmp_setup_teardown();
+  ASSERT_SYS(0, 0, pledge("stdio rpath cpath fattr", 0));
+}
 
 TEST(getcwd, test) {
   char buf[PATH_MAX];

@@ -5,11 +5,19 @@
 │ https://docs.python.org/3/license.html                                       │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
+#include "libc/calls/struct/timespec.h"
+#include "libc/calls/struct/timeval.h"
+#include "libc/errno.h"
+#include "libc/fmt/conv.h"
+#include "libc/thread/thread2.h"
+#include "third_party/python/Include/dynamic_annotations.h"
+#include "third_party/python/Include/pydebug.h"
 #include "third_party/python/Include/pyerrors.h"
 #include "third_party/python/Include/pymacro.h"
 #include "third_party/python/Include/pymem.h"
 #include "third_party/python/Include/pythread.h"
 #include "third_party/python/Include/structseq.h"
+#include "third_party/python/pyconfig.h"
 /* clang-format off */
 
 /* Thread package.
@@ -77,18 +85,18 @@ static size_t _pythread_stacksize = 0;
 
 #ifdef _POSIX_THREADS
 #define PYTHREAD_NAME "pthread"
-#include "thread_pthread.inc"
+#include "third_party/python/Python/thread_pthread.inc"
 #endif
 
 #ifdef NT_THREADS
 #define PYTHREAD_NAME "nt"
-#include "thread_nt.inc"
+ // #include "thread_nt.inc"
 #endif
 
 
 /*
 #ifdef FOOBAR_THREADS
-#include "thread_foobar.inc"
+// #include "thread_foobar.inc"
 #endif
 */
 

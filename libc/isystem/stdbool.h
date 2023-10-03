@@ -1,3 +1,4 @@
-#ifndef LIBC_ISYSTEM_STDBOOL_H_
-#define LIBC_ISYSTEM_STDBOOL_H_
-#endif
+#ifndef _STDBOOL_H
+#define _STDBOOL_H
+#include "libc/stdbool.h"
+#endif /* _STDBOOL_H */

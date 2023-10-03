@@ -16,15 +16,12 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/assert.h"
-#include "libc/bits/popcnt.h"
 #include "libc/calls/calls.h"
-#include "libc/calls/weirdtypes.h"
+#include "libc/calls/sched-sysv.internal.h"
+#include "libc/calls/struct/cpuset.h"
+#include "libc/calls/syscall_support-nt.internal.h"
 #include "libc/dce.h"
-#include "libc/macros.internal.h"
-#include "libc/nt/dll.h"
-#include "libc/nt/struct/systeminfo.h"
-#include "libc/nt/systeminfo.h"
+#include "libc/nt/accounting.h"
 #include "libc/runtime/runtime.h"
 
 #define CTL_HW                6
@@ -33,20 +30,16 @@
 #define HW_NCPUONLINE_NETBSD  16
 #define ALL_PROCESSOR_GROUPS  0xffff
 
-static unsigned GetCpuCountLinux(void) {
-  uint64_t s[16];
-  unsigned i, c, n;
-  if (!sched_getaffinity(0, sizeof(s), s)) {
-    for (c = i = 0; i < ARRAYLEN(s); ++i) {
-      c += popcnt(s[i]);
-    }
-    return c;
+static int __get_cpu_count_linux(void) {
+  cpu_set_t cs = {0};
+  if (sys_sched_getaffinity(0, sizeof(cs), &cs) != -1) {
+    return CPU_COUNT(&cs);
   } else {
-    return 0;
+    return -1;
   }
 }
 
-static unsigned GetCpuCountBsd(void) {
+static int __get_cpu_count_bsd(void) {
   size_t n;
   int c, cmd[2];
   n = sizeof(c);
@@ -58,41 +51,43 @@ static unsigned GetCpuCountBsd(void) {
   } else {
     cmd[1] = HW_NCPU;
   }
-  if (!sysctl(cmd, 2, &c, &n, 0, 0)) {
+  if (!sys_sysctl(cmd, 2, &c, &n, 0, 0)) {
     return c;
   } else {
-    return 0;
+    return -1;
   }
 }
 
-static textwindows unsigned GetCpuCountWindows(void) {
-  struct NtSystemInfo si;
-  uint32_t (*f)(uint16_t);
-  if ((f = GetProcAddress(GetModuleHandle("KERNEL32"),
-                          "GetMaximumProcessorCount"))) {
-    return f(ALL_PROCESSOR_GROUPS);
+static textwindows int __get_cpu_count_nt(void) {
+  uint32_t res;
+  if ((res = GetMaximumProcessorCount(ALL_PROCESSOR_GROUPS))) {
+    return res;
   } else {
-    GetSystemInfo(&si);
-    return si.dwNumberOfProcessors;
+    return __winerr();
   }
 }
 
 /**
  * Returns number of CPUs in system.
  *
- * On Intel systems with HyperThreading this will return the number of
- * cores multiplied by two.
+ * This is the same as the standard interface:
  *
- * @return cpu count or 0 if it couldn't be determined
+ *     sysconf(_SC_NPROCESSORS_ONLN);
+ *
+ * On Intel systems with HyperThreading this will return the number of
+ * cores multiplied by two. On Linux, if you change cpu affinity it'll
+ * change the cpu count, which also gets inherited by child processes.
+ *
+ * @return cpu count, or -1 w/ errno
  */
-unsigned GetCpuCount(void) {
+int __get_cpu_count(void) {
   if (!IsWindows()) {
     if (!IsBsd()) {
-      return GetCpuCountLinux();
+      return __get_cpu_count_linux();
     } else {
-      return GetCpuCountBsd();
+      return __get_cpu_count_bsd();
     }
   } else {
-    return GetCpuCountWindows();
+    return __get_cpu_count_nt();
   }
 }

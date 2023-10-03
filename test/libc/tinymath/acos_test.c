@@ -17,37 +17,36 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/math.h"
-#include "libc/rand/rand.h"
-#include "libc/runtime/gc.internal.h"
+#include "libc/mem/gc.h"
+#include "libc/stdio/rand.h"
 #include "libc/testlib/ezbench.h"
 #include "libc/testlib/testlib.h"
-#include "libc/x/x.h"
+#include "libc/x/xasprintf.h"
 
-double acos_(double) asm("acos");
-#define acos acos_
+double _acos(double) asm("acos");
+float _acosf(float) asm("acosf");
+long double _acosl(long double) asm("acosl");
 
 TEST(acos, test) {
-  EXPECT_STREQ("1.5707963267949", gc(xasprintf("%.15g", acos(0.))));
-  EXPECT_STREQ("1.5707963267949", gc(xasprintf("%.15g", acos(-0.))));
-  EXPECT_STREQ("1.0471975511966", gc(xasprintf("%.15g", acos(.5))));
-  EXPECT_STREQ("2.0943951023932", gc(xasprintf("%.15g", acos(-.5))));
-  EXPECT_STREQ("0", gc(xasprintf("%.15g", acos(1.))));
-  EXPECT_STREQ("3.14159265358979", gc(xasprintf("%.15g", acos(-1.))));
-  EXPECT_TRUE(isnan(acos(1.5)));
-  EXPECT_TRUE(isnan(acos(-1.5)));
-  EXPECT_TRUE(isnan(acos(2.)));
-  EXPECT_TRUE(isnan(acos(NAN)));
-  EXPECT_TRUE(isnan(acos(-NAN)));
-  EXPECT_TRUE(isnan(acos(INFINITY)));
-  EXPECT_TRUE(isnan(acos(-INFINITY)));
-  EXPECT_STREQ("1.5707963267949", gc(xasprintf("%.15g", acos(__DBL_MIN__))));
-  EXPECT_TRUE(isnan(acos(__DBL_MAX__)));
+  EXPECT_STREQ("1.5707963267949", _gc(xasprintf("%.15g", _acos(0.))));
+  EXPECT_STREQ("1.5707963267949", _gc(xasprintf("%.15g", _acos(-0.))));
+  EXPECT_STREQ("1.0471975511966", _gc(xasprintf("%.15g", _acos(.5))));
+  EXPECT_STREQ("2.0943951023932", _gc(xasprintf("%.15g", _acos(-.5))));
+  EXPECT_STREQ("0", _gc(xasprintf("%.15g", _acos(1.))));
+  EXPECT_STREQ("3.14159265358979", _gc(xasprintf("%.15g", _acos(-1.))));
+  EXPECT_TRUE(isnan(_acos(1.5)));
+  EXPECT_TRUE(isnan(_acos(-1.5)));
+  EXPECT_TRUE(isnan(_acos(2.)));
+  EXPECT_TRUE(isnan(_acos(NAN)));
+  EXPECT_TRUE(isnan(_acos(-NAN)));
+  EXPECT_TRUE(isnan(_acos(INFINITY)));
+  EXPECT_TRUE(isnan(_acos(-INFINITY)));
+  EXPECT_STREQ("1.5707963267949", _gc(xasprintf("%.15g", _acos(__DBL_MIN__))));
+  EXPECT_TRUE(isnan(_acos(__DBL_MAX__)));
 }
 
 BENCH(acos, bench) {
-  EZBENCH2("acos(+0)", donothing, acos(0));
-  EZBENCH2("acos(-0)", donothing, acos(-0.));
-  EZBENCH2("acos(NAN)", donothing, acos(NAN));
-  EZBENCH2("acos(INFINITY)", donothing, acos(INFINITY));
-  EZBENCH_C("acos", _real1(vigna()), acos(_real1(vigna())));
+  EZBENCH2("acos", donothing, _acos(.7));   /* ~13ns */
+  EZBENCH2("acosf", donothing, _acosf(.7)); /* ~10ns */
+  EZBENCH2("acosl", donothing, _acosl(.7)); /* ~26ns */
 }

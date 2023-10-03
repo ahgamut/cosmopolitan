@@ -16,6 +16,10 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/intrin/weaken.h"
+#include "libc/mem/mem.h"
+#include "libc/runtime/runtime.h"
+#include "libc/stdio/internal.h"
 #include "libc/stdio/stdio.h"
 #include "libc/sysv/errfuns.h"
 
@@ -33,7 +37,12 @@ int setvbuf(FILE *f, char *buf, int mode, size_t size) {
   flockfile(f);
   if (buf) {
     if (!size) size = BUFSIZ;
-    if (!f->nofree && f->buf != buf) free_s(&f->buf);
+    if (!f->nofree &&        //
+        f->buf != buf &&     //
+        f->buf != f->mem &&  //
+        _weaken(free)) {
+      _weaken(free)(f->buf);
+    }
     f->buf = buf;
     f->size = size;
     f->nofree = true;

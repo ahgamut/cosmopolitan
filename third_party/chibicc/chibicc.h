@@ -1,7 +1,6 @@
 #ifndef COSMOPOLITAN_THIRD_PARTY_CHIBICC_CHIBICC_H_
 #define COSMOPOLITAN_THIRD_PARTY_CHIBICC_CHIBICC_H_
 #include "libc/assert.h"
-#include "libc/bits/popcnt.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/stat.h"
 #include "libc/calls/weirdtypes.h"
@@ -9,21 +8,20 @@
 #include "libc/fmt/conv.h"
 #include "libc/fmt/fmt.h"
 #include "libc/fmt/itoa.h"
+#include "libc/intrin/popcnt.h"
 #include "libc/limits.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
 #include "libc/macros.internal.h"
 #include "libc/mem/mem.h"
-#include "libc/nexgen32e/bsf.h"
-#include "libc/nexgen32e/bsr.h"
 #include "libc/nexgen32e/crc32.h"
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
-#include "libc/stdio/temp.h"
+#include "libc/temp.h"
 #include "libc/str/str.h"
+#include "libc/str/unicode.h"
 #include "libc/time/struct/tm.h"
 #include "libc/time/time.h"
-#include "libc/unicode/unicode.h"
 #include "libc/x/x.h"
 #include "third_party/gdtoa/gdtoa.h"
 #include "tool/build/lib/javadown.h"
@@ -182,7 +180,7 @@ struct AsmOperand {
   uint8_t reg;
   uint8_t type;
   char flow;
-  char x87mask;
+  unsigned char x87mask;
   bool isused;
   int regmask;
   int predicate;
@@ -218,10 +216,10 @@ void gen_addr(Node *);
 void gen_asm(Asm *);
 void gen_expr(Node *);
 void pop(char *);
-void popreg(char *);
+void popreg(const char *);
 void print_loc(int64_t, int64_t);
 void push(void);
-void pushreg(char *);
+void pushreg(const char *);
 
 //
 // fpclassify.c
@@ -412,8 +410,6 @@ struct Node {
   Node *atomic_expr;
   // Variable
   Obj *var;
-  // Arithmetic
-  Node *overflow;
   // Numeric literal
   int64_t val;
   long double fval;

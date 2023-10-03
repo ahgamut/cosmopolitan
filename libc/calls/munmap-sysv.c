@@ -16,10 +16,11 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/strace.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
-#include "libc/runtime/directmap.internal.h"
-#include "libc/runtime/memtrack.internal.h"
+#include "libc/dce.h"
+#include "libc/intrin/describeflags.internal.h"
+#include "libc/intrin/directmap.internal.h"
+#include "libc/intrin/strace.internal.h"
 
 /**
  * Unmaps memory directly with system.
@@ -28,7 +29,6 @@
  * but it works on everything else including bare metal.
  *
  * @asyncsignalsafe
- * @threadsafe
  */
 int sys_munmap(void *p, size_t n) {
   int rc;
@@ -37,7 +37,7 @@ int sys_munmap(void *p, size_t n) {
   } else {
     rc = sys_munmap_metal(p, n);
   }
-  KERNTRACE("sys_munmap(%p%s, %'zu) → %d", p, DescribeFrame((intptr_t)p >> 16),
-            n, rc);
+  KERNTRACE("sys_munmap(%p /* %s */, %'zu) → %d", p,
+            DescribeFrame((intptr_t)p >> 16), n, rc);
   return rc;
 }

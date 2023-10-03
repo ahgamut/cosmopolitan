@@ -17,14 +17,16 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
+#include "libc/calls/struct/stat.h"
 #include "libc/errno.h"
+#include "libc/fmt/magnumstrs.internal.h"
 #include "libc/runtime/runtime.h"
+#include "libc/stdio/ftw.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
-#include "libc/sysv/consts/ex.h"
-#include "libc/sysv/consts/exit.h"
 #include "libc/sysv/consts/ok.h"
-#include "third_party/getopt/getopt.h"
+#include "libc/sysv/consts/s.h"
+#include "third_party/getopt/getopt.internal.h"
 
 #define USAGE \
   " FILE...\n\
@@ -35,68 +37,109 @@ SYNOPSIS\n\
 \n\
 FLAGS\n\
 \n\
-  -?\n\
-  -h      help\n\
-  -f      force\n\
+  -h        help\n\
+  -f        force\n\
+  -f or -R  recursive\n\
+  -d        remove empty dirs\n\
 \n"
 
-bool force;
-const char *prog;
+static bool force;
+static bool recursive;
+static bool doemptydirs;
+static const char *prog;
 
-wontreturn void PrintUsage(int rc, FILE *f) {
-  fputs("usage: ", f);
-  fputs(prog, f);
-  fputs(USAGE, f);
+static wontreturn void PrintUsage(int rc, int fd) {
+  tinyprint(fd, "USAGE\n\n  ", prog, USAGE, NULL);
   exit(rc);
 }
 
-void GetOpts(int argc, char *argv[]) {
+static void GetOpts(int argc, char *argv[]) {
   int opt;
-  while ((opt = getopt(argc, argv, "?hf")) != -1) {
+  while ((opt = getopt(argc, argv, "rRdhf")) != -1) {
     switch (opt) {
       case 'f':
         force = true;
         break;
+      case 'd':
+        doemptydirs = true;
+        break;
+      case 'r':
+      case 'R':
+        recursive = true;
+        break;
       case 'h':
-      case '?':
-        PrintUsage(EXIT_SUCCESS, stdout);
+        PrintUsage(0, 1);
       default:
-        PrintUsage(EX_USAGE, stderr);
+        PrintUsage(1, 2);
     }
   }
 }
 
-void Remove(const char *path) {
-  const char *s;
-  if (!force && access(path, W_OK) == -1) goto OnFail;
-  if (unlink(path) == -1) goto OnFail;
-  return;
-OnFail:
-  if (force && errno == ENOENT) return;
-  s = strerdoc(errno);
-  fputs(prog, stderr);
-  fputs(": cannot remove '", stderr);
-  fputs(path, stderr);
-  fputs("': ", stderr);
-  fputs(s, stderr);
-  fputs("\n", stderr);
-  exit(1);
+static int OnFile(const char *fpath, const struct stat *st, int typeflag,
+                  struct FTW *ftwbuf) {
+  int rc;
+  if (!force && typeflag == FTW_DNR) {
+    rc = -1;
+  } else if (!force && !S_ISLNK(st->st_mode) && access(fpath, W_OK)) {
+    rc = -1;
+  } else if (typeflag == FTW_DNR) {
+    if (!(rc = chmod(fpath, 0700))) {
+      rc = nftw(fpath, OnFile, 128 - ftwbuf->level, FTW_PHYS | FTW_DEPTH);
+    }
+  } else if (typeflag == FTW_DP) {
+    rc = rmdir(fpath);
+  } else {
+    rc = unlink(fpath);
+  }
+  if (rc == -1) {
+    if (force && errno == ENOENT) return 0;
+    perror(fpath);
+    exit(1);
+  }
+  return 0;
+}
+
+static void Remove(const char *path) {
+  int rc;
+  struct stat st;
+  if (path[0] == '/' && !path[1]) {
+    tinyprint(2, prog, ": add a dot if you want\n", NULL);
+    exit(1);
+  }
+  if (recursive) {
+    rc = nftw(path, OnFile, 128, FTW_PHYS | FTW_DEPTH);
+  } else {
+    if (lstat(path, &st)) {
+      if (force && errno == ENOENT) return;
+      perror(path);
+      exit(1);
+    }
+    if (!force && !S_ISLNK(st.st_mode) && access(path, W_OK)) {
+      perror(path);
+      exit(1);
+    }
+    if (S_ISDIR(st.st_mode) && doemptydirs) {
+      rc = rmdir(path);
+    } else {
+      rc = unlink(path);
+    }
+  }
+  if (rc == -1) {
+    if (force && errno == ENOENT) return;
+    perror(path);
+    exit(1);
+  }
 }
 
 int main(int argc, char *argv[]) {
   int i;
-  prog = argc > 0 ? argv[0] : "rm.com";
-
-  if (argc < 2) {
-    fputs(prog, stderr);
-    fputs(": missing operand\n"
-          "Try 'rm -h' for more information.\n",
-          stderr);
+  prog = argv[0];
+  if (!prog) prog = "rm";
+  GetOpts(argc, argv);
+  if (optind == argc) {
+    tinyprint(2, prog, ": missing operand\n", NULL);
     exit(1);
   }
-
-  GetOpts(argc, argv);
-
   for (i = optind; i < argc; ++i) {
     Remove(argv[i]);
   }

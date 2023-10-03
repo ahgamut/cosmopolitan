@@ -27,28 +27,20 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/complex.h"
 #include "libc/math.h"
-#include "libc/tinymath/complex.internal.h"
+#if !(LDBL_MANT_DIG == 53 && LDBL_MAX_EXP == 1024)
 
 asm(".ident\t\"\\n\\n\
 Musl libc (MIT License)\\n\
 Copyright 2005-2014 Rich Felker, et. al.\"");
 asm(".include \"libc/disclaimer.inc\"");
-/* clang-format off */
+// clang-format off
 
-
-
-#if LDBL_MANT_DIG == 53 && LDBL_MAX_EXP == 1024
-long double complex cacoshl(long double complex z)
-{
-	return cacosh(z);
-}
-#else
 long double complex cacoshl(long double complex z)
 {
 	int zineg = signbit(cimagl(z));
-
 	z = cacosl(z);
 	if (zineg) return CMPLXL(cimagl(z), -creall(z));
 	else       return CMPLXL(-cimagl(z), creall(z));
 }
-#endif
+
+#endif /* long double is long */

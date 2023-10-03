@@ -16,6 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/sysv/consts/nrlinux.h"
 #include "libc/macros.internal.h"
 .privileged
 
@@ -23,10 +24,18 @@
 __restore_bt:
 	nop
 	.endfn	__restore_bt,globl,hidden
-	nop	# gap so that __get_symbol(st, addr - 1) fails
-	.align	16
-__restore_rt:				# @see gdb/amd64-linux-tdep.c
-	mov	$0x000f,%rax		# [sic]
+	nop	// gap so that __get_symbol(st, addr - 1) fails
+	.balign	16
+__restore_rt:					// @see gdb/amd64-linux-tdep.c
+#ifdef __x86_64__
+	mov	$__NR_linux_sigreturn,%rax	// [sic]
 	syscall
-	.align	16
+#elif defined(__aarch64__)
+	mov	x8,#139				// __NR_rt_sigreturn
+	svc	#0
+#elif defined(__powerpc64__)
+	li	0,172				// __NR_rt_sigreturn
+	sc
+#endif /* __x86_64__ */
+	.balign	16
 	.endfn	__restore_rt,globl,hidden

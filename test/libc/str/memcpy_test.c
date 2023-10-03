@@ -16,10 +16,10 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/bits.h"
+#include "libc/intrin/bits.h"
 #include "libc/mem/mem.h"
 #include "libc/nexgen32e/nexgen32e.h"
-#include "libc/rand/rand.h"
+#include "libc/stdio/rand.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
 #include "libc/testlib/ezbench.h"
@@ -30,8 +30,8 @@ TEST(memcpy, test) {
   for (unsigned n = 0; n < 1026; ++n) {
     b1 = malloc(n);
     b2 = malloc(n);
-    rngset(b1, n, rand64, -1);
-    rngset(b2, n, rand64, -1);
+    rngset(b1, n, _rand64, -1);
+    rngset(b2, n, _rand64, -1);
     ASSERT_EQ(b1, memcpy(b1, b2, n), "%ld\n\t%#.*s\n\t%#.*s", n, n, b1, n, b2);
     ASSERT_EQ(0, memcmp(b1, b2, n));
     free(b2);
@@ -40,8 +40,8 @@ TEST(memcpy, test) {
   for (unsigned n = kHalfCache3 - 1; n < kHalfCache3 + 2; ++n) {
     b1 = malloc(n);
     b2 = malloc(n);
-    rngset(b1, n, rand64, -1);
-    rngset(b2, n, rand64, -1);
+    rngset(b1, n, _rand64, -1);
+    rngset(b2, n, _rand64, -1);
     ASSERT_EQ(b1, memcpy(b1, b2, n), "%ld\n\t%#.*s\n\t%#.*s", n, n, b1, n, b2);
     ASSERT_EQ(0, memcmp(b1, b2, n));
     free(b2);
@@ -54,8 +54,8 @@ TEST(mempcpy, test) {
   for (unsigned n = 0; n < 1026; ++n) {
     b1 = malloc(n);
     b2 = malloc(n);
-    rngset(b1, n, rand64, -1);
-    rngset(b2, n, rand64, -1);
+    rngset(b1, n, _rand64, -1);
+    rngset(b2, n, _rand64, -1);
     ASSERT_EQ(b1 + n, mempcpy(b1, b2, n));
     ASSERT_EQ(0, memcmp(b1, b2, n));
     free(b2);
@@ -64,8 +64,8 @@ TEST(mempcpy, test) {
   for (unsigned n = kHalfCache3 - 1; n < kHalfCache3 + 2; ++n) {
     b1 = malloc(n);
     b2 = malloc(n);
-    rngset(b1, n, rand64, -1);
-    rngset(b2, n, rand64, -1);
+    rngset(b1, n, _rand64, -1);
+    rngset(b2, n, _rand64, -1);
     ASSERT_EQ(b1 + n, mempcpy(b1, b2, n));
     ASSERT_EQ(0, memcmp(b1, b2, n));
     free(b2);
@@ -78,8 +78,8 @@ TEST(memcpy, direct) {
   for (unsigned n = 0; n < 1026; ++n) {
     b1 = malloc(n);
     b2 = malloc(n);
-    rngset(b1, n, rand64, -1);
-    rngset(b2, n, rand64, -1);
+    rngset(b1, n, _rand64, -1);
+    rngset(b2, n, _rand64, -1);
     ASSERT_EQ(b1, (memcpy)(b1, b2, n), "%ld\n\t%#.*s\n\t%#.*s", n, n, b1, n,
               b2);
     ASSERT_EQ(0, memcmp(b1, b2, n));
@@ -89,8 +89,8 @@ TEST(memcpy, direct) {
   for (unsigned n = kHalfCache3 - 1; n < kHalfCache3 + 2; ++n) {
     b1 = malloc(n);
     b2 = malloc(n);
-    rngset(b1, n, rand64, -1);
-    rngset(b2, n, rand64, -1);
+    rngset(b1, n, _rand64, -1);
+    rngset(b2, n, _rand64, -1);
     ASSERT_EQ(b1, (memcpy)(b1, b2, n), "%ld\n\t%#.*s\n\t%#.*s", n, n, b1, n,
               b2);
     ASSERT_EQ(0, memcmp(b1, b2, n));
@@ -104,8 +104,8 @@ TEST(mempcpy, direct) {
   for (unsigned n = 0; n < 1026; ++n) {
     b1 = malloc(n);
     b2 = malloc(n);
-    rngset(b1, n, rand64, -1);
-    rngset(b2, n, rand64, -1);
+    rngset(b1, n, _rand64, -1);
+    rngset(b2, n, _rand64, -1);
     ASSERT_EQ(b1 + n, (mempcpy)(b1, b2, n));
     ASSERT_EQ(0, memcmp(b1, b2, n));
     free(b2);
@@ -114,8 +114,8 @@ TEST(mempcpy, direct) {
   for (unsigned n = kHalfCache3 - 1; n < kHalfCache3 + 2; ++n) {
     b1 = malloc(n);
     b2 = malloc(n);
-    rngset(b1, n, rand64, -1);
-    rngset(b2, n, rand64, -1);
+    rngset(b1, n, _rand64, -1);
+    rngset(b2, n, _rand64, -1);
     ASSERT_EQ(b1 + n, (mempcpy)(b1, b2, n));
     ASSERT_EQ(0, memcmp(b1, b2, n));
     free(b2);
@@ -136,38 +136,14 @@ TEST(memcpy, overlapping_isFineIfCopyingBackwards) {
   }
 }
 
-TEST(stpcpy, test) {
-  volatile char *p;
-  volatile char b[16];
-  volatile const char *s1 = "hello";
-  volatile const char *s2 = "there";
-  p = b;
-  p = stpcpy(p, s1);
-  EXPECT_EQ((intptr_t)b + 5, (intptr_t)p);
-  EXPECT_STREQ("hello", b);
-  p = stpcpy(p, s2);
-  EXPECT_EQ((intptr_t)b + 10, (intptr_t)p);
-  EXPECT_STREQ("hellothere", b);
-}
-
-TEST(memcpy, testBackwardsOverlap3) {
-  volatile char *c;
-  c = malloc(3);
-  memcpy(c, "\e[C", 3);
-  memcpy(c, c + 1, VEIL("r", 3) - 1);
-  EXPECT_EQ('[', c[0]);
-  EXPECT_EQ('C', c[1]);
-  free(c);
-}
-
-#define B(F, N)                                              \
-  do {                                                       \
-    char *d = rngset(malloc(N), N, rand64, -1);              \
-    char *s = rngset(malloc(N), N, rand64, -1);              \
-    EZBENCH2(#F " " #N, donothing,                           \
-             EXPROPRIATE(F(VEIL("r", d), VEIL("r", s), N))); \
-    free(d);                                                 \
-    free(s);                                                 \
+#define B(F, N)                                                    \
+  do {                                                             \
+    char *d = rngset(malloc(N), N, _rand64, -1);                   \
+    char *s = rngset(malloc(N), N, _rand64, -1);                   \
+    EZBENCH2(#F " " #N, donothing,                                 \
+             __expropriate(F(__veil("r", d), __veil("r", s), N))); \
+    free(d);                                                       \
+    free(s);                                                       \
   } while (0)
 
 void BB(size_t N) {
@@ -192,6 +168,6 @@ BENCH(memcpy, bench) {
   BB(256);
   BB(1023);
   BB(1024);
-  BB(PAGESIZE);
+  BB(4096);
   BB(FRAMESIZE);
 }

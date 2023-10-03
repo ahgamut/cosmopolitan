@@ -16,107 +16,75 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/bits.h"
-#include "libc/bits/pushpop.h"
-#include "libc/bits/weaken.h"
-#include "libc/calls/state.internal.h"
-#include "libc/calls/strace.internal.h"
+#include "libc/assert.h"
+#include "libc/calls/internal.h"
 #include "libc/calls/syscall_support-nt.internal.h"
-#include "libc/dce.h"
-#include "libc/elf/pf2prot.internal.h"
-#include "libc/errno.h"
-#include "libc/fmt/fmt.h"
-#include "libc/intrin/describeflags.internal.h"
-#include "libc/intrin/kprintf.h"
-#include "libc/intrin/nomultics.internal.h"
+#include "libc/intrin/bits.h"
+#include "libc/intrin/weaken.h"
+#include "libc/limits.h"
 #include "libc/log/libfatal.internal.h"
 #include "libc/macros.internal.h"
-#include "libc/nexgen32e/bsr.h"
-#include "libc/nexgen32e/nt2sysv.h"
 #include "libc/nexgen32e/rdtsc.h"
 #include "libc/nt/console.h"
 #include "libc/nt/enum/consolemodeflags.h"
 #include "libc/nt/enum/filemapflags.h"
-#include "libc/nt/enum/filetype.h"
-#include "libc/nt/enum/loadlibrarysearch.h"
 #include "libc/nt/enum/pageflags.h"
-#include "libc/nt/enum/version.h"
 #include "libc/nt/files.h"
 #include "libc/nt/memory.h"
 #include "libc/nt/pedef.internal.h"
 #include "libc/nt/process.h"
 #include "libc/nt/runtime.h"
-#include "libc/nt/signals.h"
-#include "libc/nt/struct/ntexceptionpointers.h"
 #include "libc/nt/struct/teb.h"
-#include "libc/nt/synchronization.h"
 #include "libc/nt/thunk/msabi.h"
-#include "libc/runtime/directmap.internal.h"
 #include "libc/runtime/internal.h"
 #include "libc/runtime/memtrack.internal.h"
 #include "libc/runtime/runtime.h"
+#include "libc/runtime/stack.h"
 #include "libc/runtime/winargs.internal.h"
 #include "libc/sock/internal.h"
 #include "libc/str/str.h"
-#include "libc/str/tpenc.h"
-#include "libc/str/utf16.h"
+#include "libc/sysv/consts/prot.h"
 
-#if IsTiny()
+#ifdef __x86_64__
+
+#define abi __msabi textwindows dontinstrument
+
+// clang-format off
 __msabi extern typeof(CreateFileMapping) *const __imp_CreateFileMappingW;
+__msabi extern typeof(DuplicateHandle) *const __imp_DuplicateHandle;
+__msabi extern typeof(FreeEnvironmentStrings) *const __imp_FreeEnvironmentStringsW;
+__msabi extern typeof(GetConsoleMode) *const __imp_GetConsoleMode;
+__msabi extern typeof(GetCurrentProcessId) *const __imp_GetCurrentProcessId;
+__msabi extern typeof(GetEnvironmentStrings) *const __imp_GetEnvironmentStringsW;
+__msabi extern typeof(GetEnvironmentVariable) *const __imp_GetEnvironmentVariableW;
+__msabi extern typeof(GetFileAttributes) *const __imp_GetFileAttributesW;
+__msabi extern typeof(GetStdHandle) *const __imp_GetStdHandle;
 __msabi extern typeof(MapViewOfFileEx) *const __imp_MapViewOfFileEx;
+__msabi extern typeof(SetConsoleCP) *const __imp_SetConsoleCP;
+__msabi extern typeof(SetConsoleMode) *const __imp_SetConsoleMode;
+__msabi extern typeof(SetConsoleOutputCP) *const __imp_SetConsoleOutputCP;
+__msabi extern typeof(SetEnvironmentVariable) *const __imp_SetEnvironmentVariableW;
+__msabi extern typeof(SetStdHandle) *const __imp_SetStdHandle;
 __msabi extern typeof(VirtualProtect) *const __imp_VirtualProtect;
-#define CreateFileMapping __imp_CreateFileMappingW
-#define MapViewOfFileEx   __imp_MapViewOfFileEx
-#define VirtualProtect    __imp_VirtualProtect
-#endif
+// clang-format on
 
-#define AT_EXECFN     31L
-#define MAP_ANONYMOUS 32
-#define MAP_PRIVATE   2
-#define PROT_EXEC     4
-#define PROT_READ     1
-#define PROT_WRITE    2
+void cosmo(int, char **, char **, long (*)[2]) wontreturn;
+void __stack_call(int, char **, char **, long (*)[2],
+                  void (*)(int, char **, char **, long (*)[2]),
+                  intptr_t) wontreturn;
 
-/*
- * TODO: Why can't we allocate addresses above 4GB on Windows 7 x64?
- * TODO: How can we ensure we never overlap with KERNEL32.DLL?
- */
-
-extern uint32_t __winmainpid;
-extern int64_t __wincrashearly;
-extern const char kConsoleHandles[3];
-
-static const short kConsoleModes[3] = {
-    kNtEnableProcessedInput | kNtEnableLineInput | kNtEnableEchoInput |
-        kNtEnableMouseInput | kNtEnableQuickEditMode | kNtEnableExtendedFlags |
-        kNtEnableAutoPosition | kNtEnableInsertMode |
-        kNtEnableVirtualTerminalInput,
-    kNtEnableProcessedOutput | kNtEnableWrapAtEolOutput |
-        kNtEnableVirtualTerminalProcessing,
-    kNtEnableProcessedOutput | kNtEnableWrapAtEolOutput |
-        kNtEnableVirtualTerminalProcessing,
+static const signed char kNtStdio[3] = {
+    (signed char)kNtStdInputHandle,
+    (signed char)kNtStdOutputHandle,
+    (signed char)kNtStdErrorHandle,
 };
 
-forceinline void MakeLongDoubleLongAgain(void) {
-  /* 8087 FPU Control Word
-      IM: Invalid Operation ───────────────┐
-      DM: Denormal Operand ───────────────┐│
-      ZM: Zero Divide ───────────────────┐││
-      OM: Overflow ─────────────────────┐│││
-      UM: Underflow ───────────────────┐││││
-      PM: Precision ──────────────────┐│││││
-     PC: Precision Control ────────┐  ││││││
-      {float,∅,double,long double} │  ││││││
-     RC: Rounding Control ───────┐ │  ││││││
-      {even, →-∞, →+∞, →0}       │┌┤  ││││││
-                                ┌┤││  ││││││
-                               d││││rr││││││*/
-  int x87cw = 0b0000000000000000001101111111;
-  asm volatile("fldcw\t%0" : /* no outputs */ : "m"(x87cw));
+__funline int IsAlpha(int c) {
+  return ('A' <= c && c <= 'Z') || ('a' <= c && c <= 'z');
 }
 
 // https://nullprogram.com/blog/2022/02/18/
-static inline char16_t *MyCommandLine(void) {
+__funline char16_t *MyCommandLine(void) {
   void *cmd;
   asm("mov\t%%gs:(0x60),%0\n"
       "mov\t0x20(%0),%0\n"
@@ -125,163 +93,167 @@ static inline char16_t *MyCommandLine(void) {
   return cmd;
 }
 
-static inline size_t StrLen16(const char16_t *s) {
-  size_t n;
-  for (n = 0;; ++n) {
-    if (!s[n]) {
-      return n;
+// implements all win32 apis on non-windows hosts
+static abi long __oops_win32(void) {
+  notpossible;
+}
+
+// returns true if utf-8 path is a win32-style path that exists
+static abi bool32 WinFileExists(const char *path) {
+  uint16_t path16[PATH_MAX];
+  size_t z = ARRAYLEN(path16);
+  size_t n = tprecode8to16(path16, z, path).ax;
+  if (n >= z - 1) return false;
+  return __imp_GetFileAttributesW(path16) != -1u;
+}
+
+// this ensures close(1) won't accidentally close(2) for example
+static abi void DeduplicateStdioHandles(void) {
+  for (long i = 0; i < 3; ++i) {
+    int64_t h1 = __imp_GetStdHandle(kNtStdio[i]);
+    for (long j = i + 1; j < 3; ++j) {
+      int64_t h2 = __imp_GetStdHandle(kNtStdio[j]);
+      if (h1 == h2) {
+        int64_t h3;
+        __imp_DuplicateHandle(-1, h2, -1, &h3, 0, false,
+                              kNtDuplicateSameAccess);
+        __imp_SetStdHandle(kNtStdio[j], h3);
+      }
     }
   }
 }
 
-__msabi static textwindows int OnEarlyWinCrash(struct NtExceptionPointers *ep) {
-  uint32_t wrote;
-  char buf[64], *p = buf;
-  *p++ = 'c';
-  *p++ = 'r';
-  *p++ = 'a';
-  *p++ = 's';
-  *p++ = 'h';
-  *p++ = ' ';
-  *p++ = '0';
-  *p++ = 'x';
-  p = __fixcpy(p, ep->ExceptionRecord->ExceptionCode, 32);
-  *p++ = ' ';
-  *p++ = 'r';
-  *p++ = 'i';
-  *p++ = 'p';
-  *p++ = ' ';
-  p = __fixcpy(p, ep->ContextRecord ? ep->ContextRecord->Rip : -1, 32);
-  *p++ = '\r';
-  *p++ = '\n';
-  WriteFile(GetStdHandle(kNtStdErrorHandle), buf, p - buf, &wrote, 0);
-  ExitProcess(200);
-}
-
-__msabi static textwindows wontreturn void WinMainNew(const char16_t *cmdline) {
-  bool32 rc;
-  int64_t h, hand;
-  uint32_t oldprot;
-  struct WinArgs *wa;
-  const char16_t *env16;
-  int i, prot, count, version;
-  intptr_t stackaddr, allocaddr;
-  size_t allocsize, argsize, stacksize;
-  version = NtGetPeb()->OSMajorVersion;
+// main function of windows init process
+// i.e. first process spawned that isn't forked
+static abi wontreturn void WinInit(const char16_t *cmdline) {
   __oldstack = (intptr_t)__builtin_frame_address(0);
-  if ((intptr_t)v_ntsubsystem == kNtImageSubsystemWindowsCui && version >= 10) {
-    __winmainpid = __pid;
-    rc = SetConsoleCP(kNtCpUtf8);
-    NTTRACE("SetConsoleCP(kNtCpUtf8) → %hhhd", rc);
-    rc = SetConsoleOutputCP(kNtCpUtf8);
-    NTTRACE("SetConsoleOutputCP(kNtCpUtf8) → %hhhd", rc);
-    for (i = 0; i < 3; ++i) {
-      hand = GetStdHandle(kConsoleHandles[i]);
-      rc = GetConsoleMode(hand, __ntconsolemode + i);
-      NTTRACE("GetConsoleMode(%p, [%s]) → %hhhd", hand,
-              i ? DescribeNtConsoleModeOutputFlags(__ntconsolemode[i])
-                : DescribeNtConsoleModeInputFlags(__ntconsolemode[i]),
-              rc);
-      rc = SetConsoleMode(hand, kConsoleModes[i]);
-      NTTRACE("SetConsoleMode(%p, %s) → %hhhd", hand,
-              i ? DescribeNtConsoleModeOutputFlags(kConsoleModes[i])
-                : DescribeNtConsoleModeInputFlags(kConsoleModes[i]),
-              rc);
+
+  // make console into utf-8 ansi/xterm style tty
+  if (NtGetPeb()->OSMajorVersion >= 10 &&
+      (intptr_t)v_ntsubsystem == kNtImageSubsystemWindowsCui) {
+    __imp_SetConsoleCP(kNtCpUtf8);
+    __imp_SetConsoleOutputCP(kNtCpUtf8);
+    for (int i = 0; i <= 2; ++i) {
+      uint32_t m;
+      intptr_t h = __imp_GetStdHandle(kNtStdio[i]);
+      __imp_GetConsoleMode(h, &m);
+      if (!i) {
+        m |= kNtEnableMouseInput | kNtEnableWindowInput;
+      } else {
+        m |= kNtEnableVirtualTerminalProcessing;
+      }
+      __imp_SetConsoleMode(h, m);
     }
   }
+
+  // avoid programs like emacs nagging the user to define this
+  char16_t var[8];
+  if (!__imp_GetEnvironmentVariableW(u"TERM", var, 8)) {
+    __imp_SetEnvironmentVariableW(u"TERM", u"xterm-256color");
+  }
+
+  // allocate memory for stack and argument block
+  _Static_assert(sizeof(struct WinArgs) % FRAMESIZE == 0, "");
   _mmi.p = _mmi.s;
   _mmi.n = ARRAYLEN(_mmi.s);
-  argsize = ROUNDUP(sizeof(struct WinArgs), FRAMESIZE);
-  stackaddr = (intptr_t)GetStaticStackAddr(0);
-  stacksize = GetStackSize();
-  allocsize = argsize + stacksize;
-  allocaddr = stackaddr - argsize;
-  NTTRACE("WinMainNew() mapping %'zu byte arg block + stack at %p", allocsize,
-          allocaddr);
-  MapViewOfFileEx(
-      (_mmi.p[0].h =
-           CreateFileMapping(-1, &kNtIsInheritable, kNtPageExecuteReadwrite,
-                             allocsize >> 32, allocsize, NULL)),
-      kNtFileMapWrite | kNtFileMapExecute, 0, 0, allocsize, (void *)allocaddr);
-  prot = (intptr_t)ape_stack_prot;
+  uintptr_t stackaddr = GetStaticStackAddr(0);
+  size_t stacksize = GetStaticStackSize();
+  __imp_MapViewOfFileEx(
+      (_mmi.p[0].h = __imp_CreateFileMappingW(
+           -1, 0, kNtPageExecuteReadwrite, stacksize >> 32, stacksize, NULL)),
+      kNtFileMapWrite | kNtFileMapExecute, 0, 0, stacksize, (void *)stackaddr);
+  int prot = (intptr_t)ape_stack_prot;
   if (~prot & PROT_EXEC) {
-    VirtualProtect((void *)allocaddr, allocsize, kNtPageReadwrite, &oldprot);
+    uint32_t old;
+    __imp_VirtualProtect((void *)stackaddr, stacksize, kNtPageReadwrite, &old);
   }
-  _mmi.p[0].x = allocaddr >> 16;
-  _mmi.p[0].y = (allocaddr >> 16) + ((allocsize >> 16) - 1);
+  _mmi.p[0].x = stackaddr >> 16;
+  _mmi.p[0].y = (stackaddr >> 16) + ((stacksize - 1) >> 16);
   _mmi.p[0].prot = prot;
   _mmi.p[0].flags = 0x00000026;  // stack+anonymous
-  _mmi.p[0].size = allocsize;
+  _mmi.p[0].size = stacksize;
   _mmi.i = 1;
-  wa = (struct WinArgs *)allocaddr;
-  NTTRACE("WinMainNew() loading arg block");
-  count = GetDosArgv(cmdline, wa->argblock, ARRAYLEN(wa->argblock), wa->argv,
-                     ARRAYLEN(wa->argv));
-  for (i = 0; wa->argv[0][i]; ++i) {
-    if (wa->argv[0][i] == '\\') {
-      wa->argv[0][i] = '/';
+  struct WinArgs *wa =
+      (struct WinArgs *)(stackaddr + (stacksize - sizeof(struct WinArgs)));
+
+  // parse utf-16 command into utf-8 argv array in argument block
+  int count = GetDosArgv(cmdline, wa->argblock, ARRAYLEN(wa->argblock),
+                         wa->argv, ARRAYLEN(wa->argv));
+
+  // normalize executable path
+  if (wa->argv[0] && !WinFileExists(wa->argv[0])) {
+    unsigned i, n = 0;
+    while (wa->argv[0][n]) ++n;
+    if (n + 4 < sizeof(wa->argv0buf)) {
+      for (i = 0; i < n; ++i) {
+        wa->argv0buf[i] = wa->argv[0][i];
+      }
+      WRITE32LE(wa->argv0buf + i, READ32LE(".com"));
+      if (WinFileExists(wa->argv0buf)) {
+        wa->argv[0] = wa->argv0buf;
+      }
     }
   }
-  env16 = GetEnvironmentStrings();
-  NTTRACE("WinMainNew() loading environment");
+
+  // munge argv so dos paths become cosmo paths
+  for (int i = 0; wa->argv[i]; ++i) {
+    if (wa->argv[i][0] == '\\' &&  //
+        wa->argv[i][1] == '\\') {
+      // don't munge new technology style paths
+      continue;
+    }
+    if (!WinFileExists(wa->argv[i])) {
+      // don't munge if we're not certain it's a file
+      continue;
+    }
+    // use forward slashes
+    for (int j = 0; wa->argv[i][j]; ++j) {
+      if (wa->argv[i][j] == '\\') {
+        wa->argv[i][j] = '/';
+      }
+    }
+    // turn c:/... into /c/...
+    if (IsAlpha(wa->argv[i][0]) &&  //
+        wa->argv[i][1] == ':' &&    //
+        wa->argv[i][2] == '/') {
+      wa->argv[i][1] = wa->argv[i][0];
+      wa->argv[i][0] = '/';
+    }
+  }
+
+  // translate utf-16 win32 environment into utf-8 environment variables
+  char16_t *env16 = __imp_GetEnvironmentStringsW();
   GetDosEnviron(env16, wa->envblock, ARRAYLEN(wa->envblock) - 8, wa->envp,
                 ARRAYLEN(wa->envp) - 1);
-  FreeEnvironmentStrings(env16);
-  NTTRACE("WinMainNew() switching stacks");
-  _jmpstack((char *)(stackaddr + stacksize - (intptr_t)ape_stack_align), cosmo,
-            count, wa->argv, wa->envp, wa->auxv);
+  __imp_FreeEnvironmentStringsW(env16);
+  __envp = &wa->envp[0];
+
+  // handover control to cosmopolitan runtime
+  __stack_call(count, wa->argv, wa->envp, wa->auxv, cosmo,
+               stackaddr + (stacksize - sizeof(struct WinArgs)));
 }
 
-/**
- * Main function on Windows NT.
- *
- * The Cosmopolitan Runtime provides the following services, which aim
- * to bring Windows NT behavior closer in harmony with System Five:
- *
- * 1. We configure CMD.EXE for UTF-8 and enable ANSI colors on Win10.
- *
- * 2. Command line arguments are passed as a blob of UTF-16 text. We
- *    chop them up into an char *argv[] UTF-8 data structure, in
- *    accordance with the DOS conventions for argument quoting.
- *
- * 3. Environment variables are passed to us as a sorted UTF-16 double
- *    NUL terminated list. We translate this to char ** using UTF-8.
- *
- * 4. Allocates new stack at a high address. NT likes to choose a
- *    stack address that's beneath the program image. We want to be
- *    able to assume that stack addresses are located at higher
- *    addresses than heap and program memory.
- *
- * 5. Reconfigure x87 FPU so long double is actually long (80 bits).
- *
- * 6. Finally, we need fork. Since disagreeing with fork is axiomatic to
- *    Microsoft's engineering culture, we need to go to great lengths to
- *    have it anyway without breaking Microsoft's rules: using the WIN32
- *    API (i.e. not NTDLL) to copy MAP_PRIVATE pages via a pipe. It'd go
- *    faster if the COW pages CreateFileMappingNuma claims to have turns
- *    out to be true. Until then we have a "PC Scale" and entirely legal
- *    workaround that they hopefully won't block using Windows Defender.
- *
- * @param hInstance call GetModuleHandle(NULL) from main if you need it
- */
-__msabi textwindows int64_t WinMain(int64_t hInstance, int64_t hPrevInstance,
-                                    const char *lpCmdLine, int64_t nCmdShow) {
+abi int64_t WinMain(int64_t hInstance, int64_t hPrevInstance,
+                    const char *lpCmdLine, int64_t nCmdShow) {
   const char16_t *cmdline;
   extern char os asm("__hostos");
-  os = WINDOWS; /* madness https://news.ycombinator.com/item?id=21019722 */
+  os = _HOSTWINDOWS;  // madness https://news.ycombinator.com/item?id=21019722
   kStartTsc = rdtsc();
-  __pid = GetCurrentProcessId();
-#if !IsTiny()
-  __wincrashearly = AddVectoredExceptionHandler(1, (void *)OnEarlyWinCrash);
-#endif
+  __umask = 077;
+  __pid = __imp_GetCurrentProcessId();
   cmdline = MyCommandLine();
 #ifdef SYSDEBUG
-  /* sloppy flag-only check for early initialization */
+  // sloppy flag-only check for early initialization
   if (__strstr16(cmdline, u"--strace")) ++__strace;
 #endif
-  NTTRACE("WinMain()");
-  MakeLongDoubleLongAgain();
-  if (weaken(WinSockInit)) weaken(WinSockInit)();
-  if (weaken(WinMainForked)) weaken(WinMainForked)();
-  WinMainNew(cmdline);
+  if (_weaken(WinSockInit)) {
+    _weaken(WinSockInit)();
+  }
+  DeduplicateStdioHandles();
+  if (_weaken(WinMainForked)) {
+    _weaken(WinMainForked)();
+  }
+  WinInit(cmdline);
 }
+
+#endif /* __x86_64__ */

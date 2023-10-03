@@ -20,16 +20,48 @@
 #include "libc/calls/struct/iovec.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
+#include "libc/limits.h"
 #include "libc/macros.internal.h"
+#include "libc/mem/gc.h"
+#include "libc/mem/gc.internal.h"
 #include "libc/mem/mem.h"
-#include "libc/runtime/gc.internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/sock/sock.h"
 #include "libc/sysv/consts/auxv.h"
+#include "libc/sysv/consts/iov.h"
 #include "libc/sysv/consts/o.h"
 #include "libc/testlib/testlib.h"
 
-char testlib_enable_tmp_setup_teardown;
+void SetUpOnce(void) {
+  testlib_enable_tmp_setup_teardown();
+  ASSERT_SYS(0, 0, pledge("stdio rpath wpath cpath fattr", 0));
+}
+
+TEST(writev, negativeFd_ebadf) {
+  ASSERT_SYS(EBADF, -1, writev(-1, 0, 0));
+}
+
+TEST(writev, negativeCount_einval) {
+  ASSERT_SYS(EINVAL, -1, writev(1, 0, -1));
+}
+
+TEST(writev, negative_einvalOrEfault) {
+  struct iovec v[] = {{"", -1}};
+  ASSERT_EQ(-1, writev(1, v, 1));
+  ASSERT_TRUE(errno == EINVAL || errno == EFAULT);
+  errno = 0;
+}
+
+TEST(writev, exceedsIovMax_einval) {
+  if (IsWindows()) return;  // it's complicated
+  int i, n = IOV_MAX + 1;
+  struct iovec *v = _gc(malloc(sizeof(struct iovec) * n));
+  for (i = 0; i < n; ++i) {
+    v[i].iov_base = "x";
+    v[i].iov_len = 1;
+  }
+  ASSERT_SYS(EINVAL, -1, writev(1, v, n));
+}
 
 TEST(writev, test) {
   int fd;
@@ -49,18 +81,18 @@ TEST(writev, test) {
 
 TEST(writev, big_fullCompletion) {
   int fd;
-  char *ba = gc(malloc(2 * 1024 * 1024));
-  char *bb = gc(malloc(2 * 1024 * 1024));
-  char *bc = gc(malloc(2 * 1024 * 1024));
+  char *ba = gc(malloc(1024 * 1024));
+  char *bb = gc(malloc(1024 * 1024));
+  char *bc = gc(malloc(1024 * 1024));
   struct iovec iov[] = {
-      {"", 0},                //
-      {ba, 2 * 1024 * 1024},  //
-      {NULL, 0},              //
-      {bb, 2 * 1024 * 1024},  //
-      {bc, 2 * 1024 * 1024},  //
+      {"", 0},            //
+      {ba, 1024 * 1024},  //
+      {NULL, 0},          //
+      {bb, 1024 * 1024},  //
+      {bc, 1024 * 1024},  //
   };
   ASSERT_NE(-1, (fd = open("file", O_RDWR | O_CREAT | O_TRUNC, 0644)));
-  EXPECT_EQ(6 * 1024 * 1024, writev(fd, iov, ARRAYLEN(iov)));
+  EXPECT_EQ(3 * 1024 * 1024, writev(fd, iov, ARRAYLEN(iov)));
   EXPECT_NE(-1, close(fd));
 }
 
@@ -92,7 +124,11 @@ TEST(writev, empty_stillPerformsIoOperation) {
   struct iovec iov[] = {{"", 0}, {NULL, 0}};
   ASSERT_NE(-1, touch("file", 0644));
   ASSERT_NE(-1, (fd = open("file", O_RDONLY)));
-  EXPECT_EQ(-1, writev(fd, iov, ARRAYLEN(iov)));
+  errno = 0;
+  EXPECT_SYS(EBADF, -1, writev(fd, iov, ARRAYLEN(iov)));
+#ifndef __aarch64__
+  // Can't test this due to qemu-aarch64 bug
   EXPECT_EQ(-1, writev(fd, NULL, 0));
+#endif
   EXPECT_NE(-1, close(fd));
 }

@@ -19,16 +19,13 @@ THIRD_PARTY_ARGON2_A_DIRECTDEPS =				\
 	LIBC_CALLS						\
 	LIBC_FMT						\
 	LIBC_INTRIN						\
-	LIBC_BITS						\
 	LIBC_NEXGEN32E						\
 	LIBC_MEM						\
 	LIBC_SYSV						\
 	LIBC_STDIO						\
 	LIBC_RUNTIME						\
 	LIBC_SYSV_CALLS						\
-	LIBC_STR						\
-	LIBC_UNICODE						\
-	LIBC_STUBS
+	LIBC_STR
 
 THIRD_PARTY_ARGON2_A_DEPS :=					\
 	$(call uniq,$(foreach x,$(THIRD_PARTY_ARGON2_A_DIRECTDEPS),$($(x))))
@@ -44,8 +41,8 @@ $(THIRD_PARTY_ARGON2_A).pkg:					\
 
 # we can't use ubsan because:
 #   it's just too slow to be practical (like 6s vs. 13s)
-$(THIRD_PARTY_ARGON2_A_OBJS):					\
-		OVERRIDE_CFLAGS +=				\
+$(THIRD_PARTY_ARGON2_A_OBJS): private				\
+		CFLAGS +=					\
 			-ffunction-sections			\
 			-fdata-sections				\
 			-fno-sanitize=undefined

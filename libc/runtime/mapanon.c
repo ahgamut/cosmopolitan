@@ -16,10 +16,9 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/weaken.h"
 #include "libc/calls/calls.h"
 #include "libc/errno.h"
-#include "libc/nexgen32e/bsr.h"
+#include "libc/intrin/weaken.h"
 #include "libc/runtime/runtime.h"
 #include "libc/sysv/consts/map.h"
 #include "libc/sysv/consts/prot.h"
@@ -54,13 +53,17 @@
  *     }
  *
  * That is performed automatically for unit test executables.
+ *
+ * @return memory map address on success, or null w/ errno
  */
-noasan void *mapanon(size_t size) {
-  /* asan runtime depends on this function */
+void *_mapanon(size_t size) {
   void *m;
   m = mmap(0, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-  if (m == MAP_FAILED && weaken(__oom_hook)) {
-    weaken(__oom_hook)(size);
+  if (m != MAP_FAILED) {
+    return m;
   }
-  return m;
+  if (errno == ENOMEM && _weaken(__oom_hook)) {
+    _weaken(__oom_hook)(size);
+  }
+  return 0;
 }

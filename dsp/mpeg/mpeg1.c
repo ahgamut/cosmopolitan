@@ -32,7 +32,7 @@
 #include "dsp/mpeg/idct.h"
 #include "dsp/mpeg/mpeg.h"
 #include "dsp/mpeg/video.h"
-#include "libc/bits/initializer.internal.h"
+#include "libc/calls/struct/timespec.h"
 #include "libc/fmt/conv.h"
 #include "libc/log/log.h"
 #include "libc/macros.internal.h"
@@ -1081,12 +1081,12 @@ static plm_frame_t *plm_video_decode_impl(plm_video_t *self) {
 }
 
 plm_frame_t *plm_video_decode(plm_video_t *self) {
-  long double tsc;
   plm_frame_t *res;
+  struct timespec tsc;
   INFOF("plm_video_decode");
-  tsc = nowl();
+  tsc = timespec_real();
   res = plm_video_decode_impl(self);
-  plmpegdecode_latency_ = lroundl((nowl() - tsc) * 1e6l);
+  plmpegdecode_latency_ = timespec_tomicros(timespec_sub(timespec_real(), tsc));
   return res;
 }
 
@@ -1106,12 +1106,12 @@ plm_video_t *plm_video_create_with_buffer(plm_buffer_t *buffer,
 
 static textstartup void plm_video_init(void) {
   PLM_VIDEO_MACROBLOCK_TYPE[0] = NULL;
-  PLM_VIDEO_MACROBLOCK_TYPE[1] = PLM_VIDEO_MACROBLOCK_TYPE_INTRA;
-  PLM_VIDEO_MACROBLOCK_TYPE[2] = PLM_VIDEO_MACROBLOCK_TYPE_PREDICTIVE,
-  PLM_VIDEO_MACROBLOCK_TYPE[3] = PLM_VIDEO_MACROBLOCK_TYPE_B;
-  PLM_VIDEO_DCT_SIZE[0] = PLM_VIDEO_DCT_SIZE_LUMINANCE;
-  PLM_VIDEO_DCT_SIZE[1] = PLM_VIDEO_DCT_SIZE_CHROMINANCE;
-  PLM_VIDEO_DCT_SIZE[2] = PLM_VIDEO_DCT_SIZE_CHROMINANCE;
+  PLM_VIDEO_MACROBLOCK_TYPE[1] = (void *)PLM_VIDEO_MACROBLOCK_TYPE_INTRA;
+  PLM_VIDEO_MACROBLOCK_TYPE[2] = (void *)PLM_VIDEO_MACROBLOCK_TYPE_PREDICTIVE;
+  PLM_VIDEO_MACROBLOCK_TYPE[3] = (void *)PLM_VIDEO_MACROBLOCK_TYPE_B;
+  PLM_VIDEO_DCT_SIZE[0] = (void *)PLM_VIDEO_DCT_SIZE_LUMINANCE;
+  PLM_VIDEO_DCT_SIZE[1] = (void *)PLM_VIDEO_DCT_SIZE_CHROMINANCE;
+  PLM_VIDEO_DCT_SIZE[2] = (void *)PLM_VIDEO_DCT_SIZE_CHROMINANCE;
 }
 
 const void *const plm_video_init_ctor[] initarray = {plm_video_init};

@@ -8,11 +8,10 @@
 ╚─────────────────────────────────────────────────────────────────*/
 #endif
 #include "libc/calls/calls.h"
-#include "libc/calls/strace.internal.h"
+#include "libc/intrin/strace.internal.h"
 #include "libc/calls/struct/rlimit.h"
 #include "libc/errno.h"
 #include "libc/intrin/describeflags.internal.h"
-#include "libc/intrin/kprintf.h"
 #include "libc/log/color.internal.h"
 #include "libc/macros.internal.h"
 #include "libc/stdio/stdio.h"
@@ -35,7 +34,7 @@ static void SetLimit(int resource, uint64_t soft, uint64_t hard) {
   if (setrlimit(resource, &lim) == -1) {
     if (!getrlimit(resource, &old)) {
       lim.rlim_max = MIN(hard, old.rlim_max);
-      lim.rlim_cur = MIN(soft, lim.rlim_max);
+      lim.rlim_cur = MIN(soft, old.rlim_max);
       if (!setrlimit(resource, &lim)) {
         fprintf(stderr, "%sNOTE: SETRLIMIT(%s) DOWNGRADED TO {%,ld, %,ld}\n",
                 DescribeRlimitName(resource), lim.rlim_cur, lim.rlim_max);
@@ -50,6 +49,7 @@ static void SetLimit(int resource, uint64_t soft, uint64_t hard) {
 
 int main(int argc, char *argv[]) {
   int i, rc;
+  char rlnbuf[20];
   struct rlimit rlim;
 
   // // example of how you might change the limits
@@ -64,8 +64,9 @@ int main(int argc, char *argv[]) {
 
   for (i = 0; i < RLIM_NLIMITS; ++i) {
     rc = getrlimit(i, &rlim);
-    printf("SETRLIMIT(%-20s, %,16ld, %,16ld) → %d %s\n", DescribeRlimitName(i),
-           rlim.rlim_cur, rlim.rlim_max, rc, !rc ? "" : strerror(errno));
+    printf("SETRLIMIT(%-20s, %,16ld, %,16ld) → %d %s\n",
+           (DescribeRlimitName)(rlnbuf, i), rlim.rlim_cur, rlim.rlim_max, rc,
+           !rc ? "" : strerror(errno));
   }
 
   return 0;

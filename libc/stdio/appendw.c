@@ -17,10 +17,12 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
-#include "libc/bits/bits.h"
+#include "libc/dce.h"
+#include "libc/intrin/bits.h"
+#include "libc/intrin/bsr.h"
 #include "libc/macros.internal.h"
-#include "libc/nexgen32e/bsr.h"
-#include "libc/stdio/append.internal.h"
+#include "libc/mem/mem.h"
+#include "libc/stdio/append.h"
 
 #define W sizeof(size_t)
 
@@ -57,7 +59,7 @@ ssize_t appendw(char **b, uint64_t w) {
   char *p, *q;
   struct appendz z;
   z = appendz((p = *b));
-  l = w ? (bsrl(w) >> 3) + 1 : 1;
+  l = w ? (_bsrl(w) >> 3) + 1 : 1;
   n = ROUNDUP(z.i + 8 + 1, 8) + W;
   if (n > z.n) {
     if (!z.n) z.n = W * 2;
@@ -65,7 +67,7 @@ ssize_t appendw(char **b, uint64_t w) {
     z.n = ROUNDUP(z.n, W);
     if ((p = realloc(p, z.n))) {
       z.n = malloc_usable_size(p);
-      assert(!(z.n & (W - 1)));
+      unassert(!(z.n & (W - 1)));
       *b = p;
     } else {
       return -1;

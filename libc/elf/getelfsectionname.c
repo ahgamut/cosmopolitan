@@ -18,9 +18,9 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/elf/elf.h"
 
-const char *GetElfSectionName(const Elf64_Ehdr *elf, size_t mapsize,
-                              Elf64_Shdr *shdr) {
-  if (!elf || !shdr) return NULL;
+char *GetElfSectionName(const Elf64_Ehdr *elf, size_t mapsize,
+                        const Elf64_Shdr *shdr) {
+  if (!shdr) return 0;
   return GetElfString(elf, mapsize, GetElfSectionNameStringTable(elf, mapsize),
                       shdr->sh_name);
 }

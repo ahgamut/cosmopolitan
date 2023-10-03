@@ -16,10 +16,10 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/safemacros.internal.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
 #include "libc/dce.h"
+#include "libc/intrin/safemacros.internal.h"
 #include "libc/log/log.h"
 #include "libc/nt/dll.h"
 #include "libc/nt/enum/filetype.h"
@@ -41,8 +41,9 @@
 #include "libc/time/time.h"
 #include "tool/decode/lib/flagger.h"
 #include "tool/decode/lib/idname.h"
+#if defined(__x86_64__) && SupportsWindows()
 
-char *GetString(struct NtUnicodeString *s) {
+char *GetString(const struct NtUnicodeString *s) {
   static char buf[1024];
   unsigned len = min(sizeof(buf) - 1, s->Length);
   for (unsigned i = 0; i < len; ++i) {
@@ -56,7 +57,7 @@ int NextBestThing(void) {
   int64_t fd = open("/proc/self/maps", O_RDONLY);
   posix_fadvise(fd, 0, 0, MADV_SEQUENTIAL);
   ssize_t wrote;
-  while ((wrote = copyfd(fd, NULL, 1, NULL, 1024 * 64, 0)) != -1) {
+  while ((wrote = copyfd(fd, 1, -1)) != -1) {
     if (wrote == 0) break;
   }
   close(fd);
@@ -81,7 +82,7 @@ const struct IdName kNtStartfFlagNames[] = {
     {0, 0},
 };
 
-noasan void PrintStartupInfo(void) {
+dontasan void PrintStartupInfo(void) {
 #if 0
   printf("\n\
 ╔──────────────────────────────────────────────────────────────────────────────╗\n\
@@ -160,7 +161,7 @@ void PrintStdioInfo(void) {
          ft2str(GetFileType(g_fds.p[2].handle)));
 }
 
-noasan void PrintTeb(void) {
+dontasan void PrintTeb(void) {
   GetCurrentProcessId();
   SetLastError(0x1234);
   printf("\n\
@@ -536,3 +537,10 @@ int main(int argc, char *argv[]) {
   PrintModulesMemoryOrder();
   return 0;
 }
+
+#else
+int main(int argc, char *argv[]) {
+  fprintf(stderr, "printpeb not supported on this cpu arch or build config\n");
+  return 1;
+}
+#endif /* __x86_64__ && SupportsWindows() */

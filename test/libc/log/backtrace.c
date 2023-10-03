@@ -19,9 +19,12 @@
 #include "libc/fmt/conv.h"
 #include "libc/limits.h"
 #include "libc/log/log.h"
+#include "libc/mem/mem.h"
+#include "libc/runtime/internal.h"
 #include "libc/runtime/symbols.internal.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
+#ifdef __x86_64__
 
 int StackOverflow(int f(), int n) {
   if (n < INT_MAX) {
@@ -111,13 +114,12 @@ int main(int argc, char *argv[]) {
         pDataOverrunCrash(10 + 1);
         exit(0);
       case 5:
-        exit((intptr_t)pStackOverrunCrash(10 + 1));
+        exit((intptr_t)pStackOverrunCrash(10 + 10000));
       case 6:
         exit((intptr_t)pMemoryLeakCrash());
       case 7:
         exit(pNpeCrash(0));
       case 8:
-        __cxa_finalize(0);
         exit(pNpeCrash(0));
       case 9:
         exit(pStackOverflow(pStackOverflow, 0));
@@ -130,3 +132,10 @@ int main(int argc, char *argv[]) {
     exit(1);
   }
 }
+
+#else
+
+int main(int argc, char *argv[]) {
+}
+
+#endif /* __x86_64__ */

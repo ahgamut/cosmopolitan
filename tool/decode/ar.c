@@ -16,11 +16,10 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/bits.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/stat.h"
 #include "libc/fmt/conv.h"
-#include "libc/intrin/kprintf.h"
+#include "libc/intrin/bits.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
 #include "libc/mem/mem.h"
@@ -95,8 +94,8 @@ static void PrintHeader(uint8_t *p) {
 
 static void Print(void) {
   int arsize;
+  uint8_t *b, *p;
   uint64_t offset;
-  uint8_t *b, *p, *e;
   uint32_t i, n, o, table, entries, symbols, symbolslen;
   arsize = atoi((char *)(data + 8 + 48));
   CHECK_LE(4, arsize);

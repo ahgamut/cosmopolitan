@@ -17,11 +17,12 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
-#include "libc/calls/internal.h"
-#include "libc/calls/strace.internal.h"
+#include "libc/calls/struct/rlimit.internal.h"
 #include "libc/dce.h"
 #include "libc/intrin/asan.internal.h"
 #include "libc/intrin/describeflags.internal.h"
+#include "libc/intrin/strace.internal.h"
+#include "libc/runtime/stack.h"
 #include "libc/sysv/consts/rlimit.h"
 #include "libc/sysv/errfuns.h"
 
@@ -35,13 +36,16 @@
  */
 int getrlimit(int resource, struct rlimit *rlim) {
   int rc;
-  char buf[64];
   if (resource == 127) {
     rc = einval();
   } else if (!rlim || (IsAsan() && !__asan_is_valid(rlim, sizeof(*rlim)))) {
     rc = efault();
   } else if (!IsWindows()) {
     rc = sys_getrlimit(resource, rlim);
+  } else if (resource == RLIMIT_STACK) {
+    rlim->rlim_cur = GetStaticStackSize();
+    rlim->rlim_max = GetStaticStackSize();
+    rc = 0;
   } else if (resource == RLIMIT_AS) {
     rlim->rlim_cur = __virtualmax;
     rlim->rlim_max = __virtualmax;
@@ -50,6 +54,8 @@ int getrlimit(int resource, struct rlimit *rlim) {
     rc = einval();
   }
   STRACE("getrlimit(%s, [%s]) → %d% m", DescribeRlimitName(resource),
-         DescribeRlimit(buf, sizeof(buf), rc, rlim), rc);
+         DescribeRlimit(rc, rlim), rc);
   return rc;
 }
+
+__weak_reference(getrlimit, getrlimit64);

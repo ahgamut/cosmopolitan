@@ -24,7 +24,6 @@
  * @param f is non-null file object stream pointer
  * @return byte in range 0..255, or -1 w/ errno
  * @see fgetc_unlocked()
- * @threadsafe
  */
 int fgetc(FILE *f) {
   int rc;
@@ -33,3 +32,5 @@ int fgetc(FILE *f) {
   funlockfile(f);
   return rc;
 }
+
+__strong_reference(fgetc, getc);

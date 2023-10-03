@@ -16,8 +16,9 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/rand/rand.h"
+#include "libc/stdio/rand.h"
 #include "libc/stdio/stdio.h"
+#include "libc/str/str.h"
 #include "libc/testlib/ezbench.h"
 #include "libc/testlib/testlib.h"
 #include "third_party/mbedtls/config.h"
@@ -46,8 +47,8 @@ TEST(everest, tinierVersionBehavesTheSame) {
   size_t i;
   uint8_t secret[32], bpoint[32], public[2][32];
   for (i = 0; i < 500; ++i) {
-    rngset(secret, sizeof(secret), rand64, -1);
-    rngset(bpoint, sizeof(bpoint), rand64, -1);
+    rngset(secret, sizeof(secret), _rand64, -1);
+    rngset(bpoint, sizeof(bpoint), _rand64, -1);
     Hacl_Curve25519_crypto_scalarmult(public[0], secret, bpoint);
     curve25519(public[1], secret, bpoint);
     ASSERT_EQ(0, memcmp(public[0], public[1], sizeof(public[0])));
@@ -69,8 +70,8 @@ TEST(everest, tinierVersionBehavesTheSame) {
 
 BENCH(everest, bench) {
   uint8_t secret[32], bpoint[32], public[32];
-  rngset(secret, sizeof(secret), rand64, -1);
-  rngset(bpoint, sizeof(bpoint), rand64, -1);
+  rngset(secret, sizeof(secret), _rand64, -1);
+  rngset(bpoint, sizeof(bpoint), _rand64, -1);
   EZBENCH2("everest", donothing,
            Hacl_Curve25519_crypto_scalarmult(public, secret, bpoint));
   EZBENCH2("mariana", donothing, curve25519(public, secret, bpoint));

@@ -21,14 +21,14 @@
 
 	.macro	.e e
 	.long	\e - kErrnoNames
-	.long	1f - kErrnoNames
+	.long	.L\@ - kErrnoNames
 	.rodata.str1.1
-1:	.string	"\e"
+.L\@:	.string	"\e"
 	.previous
 	.endm
 
 	.section .rodata
-	.align	4
+	.balign	4
 	.underrun
 kErrnoNames:
 	.e	EINVAL
@@ -74,7 +74,6 @@ kErrnoNames:
 	.e	ELOOP
 	.e	ENOMSG
 	.e	EIDRM
-	.e	ETIME
 	.e	EPROTO
 	.e	EOVERFLOW
 	.e	EILSEQ
@@ -103,6 +102,7 @@ kErrnoNames:
 	.e	ESHUTDOWN
 	.e	ETOOMANYREFS
 	.e	ETIMEDOUT
+	.e	ETIME
 	.e	ECONNREFUSED
 	.e	EHOSTDOWN
 	.e	EHOSTUNREACH
@@ -117,6 +117,7 @@ kErrnoNames:
 	.e	ENONET
 	.e	ERESTART
 	.e	ENODATA
+	.e	EBADFD
 	.long	MAGNUM_TERMINATOR
 	.endobj	kErrnoNames,globl,hidden
 	.overrun

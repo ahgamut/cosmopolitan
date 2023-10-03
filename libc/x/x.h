@@ -1,135 +1,101 @@
 #ifndef COSMOPOLITAN_LIBC_X_H_
 #define COSMOPOLITAN_LIBC_X_H_
-#include "libc/calls/struct/rusage.h"
-#include "libc/calls/struct/sigaction.h"
-#include "libc/calls/struct/timespec.h"
-#include "libc/calls/struct/timeval.h"
-#include "libc/fmt/pflink.h"
-#include "libc/stdio/stdio.h"
+
+#ifdef _COSMO_SOURCE
+#define xwrite        __xwrite
+#define xdie          __xdie
+#define xmalloc       __xmalloc
+#define xrealloc      __xrealloc
+#define xcalloc       __xcalloc
+#define xvalloc       __xvalloc
+#define xmemalign     __xmemalign
+#define xmemalignzero __xmemalignzero
+#define xstrdup       __xstrdup
+#define xstrndup      __xstrndup
+#define xstrmul       __xstrmul
+#define xinet_ntop    __xinet_ntop
+#define xunbinga      __xunbinga
+#define xunbing       __xunbing
+#define utf8to16      __utf8to16
+#define utf16to8      __utf16to8
+#define utf8to32      __utf8to32
+#define utf16to32     __utf16to32
+#define utf32to8      __utf32to8
+#define xhomedir      __xhomedir
+#define xstripext     __xstripext
+#define xstripexts    __xstripexts
+#define xload         __xload
+#define rmrf          __rmrf
+#define xbasename     __xbasename
+#define xdirname      __xdirname
+#define xjoinpaths    __xjoinpaths
+#define xfixpath      __xfixpath
+#define xslurp        __xslurp
+#define xbarf         __xbarf
+#endif /* _COSMO_SOURCE */
+
 #if !(__ASSEMBLER__ + __LINKER__ + 0)
+#ifdef _COSMO_SOURCE
 COSMOPOLITAN_C_START_
-/*───────────────────────────────────────────────────────────────────────────│─╗
-│ cosmopolitan § eXtended apis                                             ─╬─│┼
-╚────────────────────────────────────────────────────────────────────────────│─╝
-  Standard Library veneers for folks not building embedded RTOS */
 
-#define _XPNN   paramsnonnull()
-#define _XRET   dontthrow nocallback dontdiscard returnsnonnull
-#define _XMAL   returnspointerwithnoaliases _XRET
-#define _XMALPG returnsaligned((PAGESIZE)) _XMAL
-
-/*───────────────────────────────────────────────────────────────────────────│─╗
-│ cosmopolitan § eXtended apis » system calls                              ─╬─│┼
-╚────────────────────────────────────────────────────────────────────────────│*/
-
-int xsigaction(int, void *, uint64_t, uint64_t, struct sigaction *);
 int xwrite(int, const void *, uint64_t);
-
-/*───────────────────────────────────────────────────────────────────────────│─╗
-│ cosmopolitan § eXtended apis » memory                                    ─╬─│┼
-╚────────────────────────────────────────────────────────────────────────────│*/
-
 void xdie(void) wontreturn;
-char *xdtoa(double) _XMAL;
-char *xdtoaf(float) _XMAL;
-char *xdtoal(long double) _XMAL;
-char *xasprintf(const char *, ...) printfesque(1) paramsnonnull((1)) _XMAL;
-char *xvasprintf(const char *, va_list) _XPNN _XMAL;
-char *xgetline(struct FILE *) _XPNN mallocesque;
-void *xmalloc(size_t) attributeallocsize((1)) _XMAL;
+char *xdtoa(double)
+    returnspointerwithnoaliases dontthrow nocallback __wur returnsnonnull;
+char *xdtoaf(float)
+    returnspointerwithnoaliases dontthrow nocallback __wur returnsnonnull;
+char *xdtoal(long double)
+    returnspointerwithnoaliases dontthrow nocallback __wur returnsnonnull;
+void *xmalloc(size_t) attributeallocsize((1))
+    returnspointerwithnoaliases dontthrow nocallback __wur returnsnonnull;
 void *xrealloc(void *, size_t)
-    attributeallocsize((2)) dontthrow nocallback dontdiscard;
-void *xcalloc(size_t, size_t) attributeallocsize((1, 2)) _XMAL;
-void *xvalloc(size_t) attributeallocsize((1)) _XMALPG;
-void *xmemalign(size_t, size_t) attributeallocalign((1))
-    attributeallocsize((2)) _XMAL;
-void *xmemalignzero(size_t, size_t) attributeallocalign((1))
-    attributeallocsize((2)) _XMAL;
-char *xstrdup(const char *) _XPNN _XMAL;
-char *xstrndup(const char *, size_t) _XPNN _XMAL;
-char *xstrcat(const char *, ...) paramsnonnull((1)) nullterminated() _XMAL;
-char *xstrmul(const char *, size_t) paramsnonnull((1)) _XMAL;
-char *xinet_ntop(int, const void *) _XPNN _XMAL;
-void *xunbinga(size_t, const char16_t *) attributeallocalign((1)) _XMAL _XRET;
-void *xunbing(const char16_t *) _XMAL _XRET;
-char16_t *utf8toutf16(const char *, size_t, size_t *) dontdiscard;
-char *utf16toutf8(const char16_t *, size_t, size_t *) dontdiscard;
-wchar_t *utf8toutf32(const char *, size_t, size_t *) dontdiscard;
-wchar_t *utf16to32(const char16_t *, size_t, size_t *) dontdiscard;
-char *xhomedir(void) dontdiscard;
-char *xstripext(const char *) dontdiscard;
-char *xstripexts(const char *) dontdiscard;
-void *xload(bool *, void **, const void *, size_t, size_t);
-void *xloadzd(bool *, void **, const void *, size_t, size_t, size_t, size_t,
-              uint32_t);
-
-/*───────────────────────────────────────────────────────────────────────────│─╗
-│ cosmopolitan § eXtended apis » files                                     ─╬─│┼
-╚────────────────────────────────────────────────────────────────────────────│*/
-
+    attributeallocsize((2)) dontthrow nocallback __wur;
+void *xcalloc(size_t, size_t) attributeallocsize((1, 2))
+    returnspointerwithnoaliases dontthrow nocallback __wur returnsnonnull;
+void *xvalloc(size_t) attributeallocsize((1)) returnsaligned((65536))
+    returnspointerwithnoaliases dontthrow nocallback __wur returnsnonnull;
+void *xmemalign(size_t, size_t) attributeallocalign((1)) attributeallocsize((2))
+    returnspointerwithnoaliases dontthrow nocallback __wur returnsnonnull;
+void *xmemalignzero(size_t, size_t) attributeallocalign((1)) attributeallocsize(
+    (2)) returnspointerwithnoaliases dontthrow nocallback __wur returnsnonnull;
+char *xstrdup(const char *) paramsnonnull()
+    returnspointerwithnoaliases dontthrow nocallback __wur returnsnonnull;
+char *xstrndup(const char *, size_t) paramsnonnull()
+    returnspointerwithnoaliases dontthrow nocallback __wur returnsnonnull;
+char *xstrcat(const char *, ...) paramsnonnull((1)) nullterminated()
+    returnspointerwithnoaliases dontthrow nocallback __wur returnsnonnull;
+#define xstrcat(...) (xstrcat)(__VA_ARGS__, NULL)
+char *xstrmul(const char *, size_t) paramsnonnull((1))
+    returnspointerwithnoaliases dontthrow nocallback __wur returnsnonnull;
+char *xinet_ntop(int, const void *) paramsnonnull()
+    returnspointerwithnoaliases dontthrow nocallback __wur returnsnonnull;
+void *xunbinga(size_t, const char16_t *)
+    attributeallocalign((1)) returnspointerwithnoaliases dontthrow
+    nocallback __wur returnsnonnull dontthrow nocallback __wur returnsnonnull;
+void *xunbing(const char16_t *) returnspointerwithnoaliases dontthrow
+    nocallback __wur returnsnonnull dontthrow nocallback __wur returnsnonnull;
+char16_t *utf8to16(const char *, size_t, size_t *) __wur;
+char *utf16to8(const char16_t *, size_t, size_t *) __wur;
+wchar_t *utf8to32(const char *, size_t, size_t *) __wur;
+wchar_t *utf16to32(const char16_t *, size_t, size_t *) __wur;
+char *utf32to8(const wchar_t *, size_t, size_t *) __wur;
+char *xhomedir(void) __wur;
+char *xstripext(const char *) __wur;
+char *xstripexts(const char *) __wur;
+void *xload(_Atomic(void *) *, const void *, size_t, size_t);
 int rmrf(const char *);
-int makedirs(const char *, unsigned);
-char *xdirname(const char *) paramsnonnull() _XMAL;
-char *xjoinpaths(const char *, const char *) paramsnonnull() _XMAL;
-char *xreadlink(const char *) paramsnonnull() _XMAL;
-char *xreadlinkat(int, const char *) paramsnonnull() _XMAL;
+char *xbasename(const char *) paramsnonnull()
+    returnspointerwithnoaliases dontthrow nocallback __wur returnsnonnull;
+char *xdirname(const char *) paramsnonnull()
+    returnspointerwithnoaliases dontthrow nocallback __wur returnsnonnull;
+char *xjoinpaths(const char *, const char *) paramsnonnull()
+    returnspointerwithnoaliases dontthrow nocallback __wur returnsnonnull;
 void xfixpath(void);
-
-/*───────────────────────────────────────────────────────────────────────────│─╗
-│ cosmopolitan § eXtended apis » time                                      ─╬─│┼
-╚────────────────────────────────────────────────────────────────────────────│*/
-
-char *xiso8601i(int) mallocesque;
-char *xiso8601tv(struct timeval *) mallocesque;
-char *xiso8601ts(struct timespec *) mallocesque;
-
-/*───────────────────────────────────────────────────────────────────────────│─╗
-│ cosmopolitan § eXtended apis » input / output                            ─╬─│┼
-╚────────────────────────────────────────────────────────────────────────────│*/
-
 void *xslurp(const char *, size_t *)
-    paramsnonnull((1)) returnspointerwithnoaliases
-    returnsaligned((PAGESIZE)) dontdiscard;
+    paramsnonnull((1)) returnspointerwithnoaliases returnsaligned((4096)) __wur;
 int xbarf(const char *, const void *, size_t);
 
-/*───────────────────────────────────────────────────────────────────────────│─╗
-│ cosmopolitan § eXtended apis » safety                                    ─╬─│┼
-╚────────────────────────────────────────────────────────────────────────────│*/
-
-#define xstrcat(...) (xstrcat)(__VA_ARGS__, NULL)
-
-/*───────────────────────────────────────────────────────────────────────────│─╗
-│ cosmopolitan § eXtended apis » processes                                 ─╬─│┼
-╚────────────────────────────────────────────────────────────────────────────│*/
-
-int xspawn(struct rusage *);
-int xvspawn(void (*)(void *), void *, struct rusage *);
-
-/*───────────────────────────────────────────────────────────────────────────│─╗
-│ cosmopolitan § eXtended apis » generic typing                            ─╬─│┼
-╚────────────────────────────────────────────────────────────────────────────│*/
-
-#if __STDC_VERSION__ + 0 >= 201112
-
-#define xiso8601(TS) \
-  _Generic(*(TS), struct timeval : xiso8601tv, default : xiso8601ts)(TS)
-
-#endif /* C11 */
-
-/*───────────────────────────────────────────────────────────────────────────│─╗
-│ cosmopolitan § eXtended apis » link-time optimizations                   ─╬─│┼
-╚────────────────────────────────────────────────────────────────────────────│*/
-
-#if defined(__GNUC__) && !defined(__STRICT_ANSI__)
-#define xasprintf(FMT, ...) (xasprintf)(PFLINK(FMT), ##__VA_ARGS__)
-#define xvasprintf(FMT, VA) (xvasprintf)(PFLINK(FMT), VA)
-#define xsigaction(SIG, HANDLER, FLAGS, MASK, OLD) \
-  ({                                               \
-    __SIGACTION_YOINK(SIG);                        \
-    xsigaction(SIG, HANDLER, FLAGS, MASK, OLD);    \
-  })
-#endif
-
 COSMOPOLITAN_C_END_
+#endif /* _COSMO_SOURCE */
 #endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
 #endif /* COSMOPOLITAN_LIBC_X_H_ */

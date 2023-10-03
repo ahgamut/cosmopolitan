@@ -16,13 +16,13 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/intrin/nomultics.internal.h"
 
-/**
- * Controls ANSI prefix for log emissions.
- *
- * This should be true in raw tty mode repls.
- *
- * @see kprintf(), vflogf(), linenoise()
- */
-char __replmode;
-char __replstderr;
+unsigned char __replmode;
+unsigned char __replstderr;
+unsigned char __ttymagic;
+unsigned char __veof;
+unsigned char __vintr;
+unsigned char __vquit;
+unsigned char __vtime;
+unsigned char __mousebuttons;

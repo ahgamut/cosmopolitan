@@ -1,51 +1,49 @@
 #ifndef COSMOPOLITAN_LIBC_SYSV_CONSTS_RLIMIT_H_
 #define COSMOPOLITAN_LIBC_SYSV_CONSTS_RLIMIT_H_
-#include "libc/runtime/symbolic.h"
-
-#define RLIMIT_AS         SYMBOLIC(RLIMIT_AS)
-#define RLIMIT_CORE       SYMBOLIC(RLIMIT_CORE)
-#define RLIMIT_CPU        SYMBOLIC(RLIMIT_CPU)
-#define RLIMIT_DATA       SYMBOLIC(RLIMIT_DATA)
-#define RLIMIT_FSIZE      SYMBOLIC(RLIMIT_FSIZE)
-#define RLIMIT_LOCKS      SYMBOLIC(RLIMIT_LOCKS)
-#define RLIMIT_MEMLOCK    SYMBOLIC(RLIMIT_MEMLOCK)
-#define RLIMIT_MSGQUEUE   SYMBOLIC(RLIMIT_MSGQUEUE)
-#define RLIMIT_NICE       SYMBOLIC(RLIMIT_NICE)
-#define RLIMIT_NOFILE     SYMBOLIC(RLIMIT_NOFILE)
-#define RLIMIT_NPROC      SYMBOLIC(RLIMIT_NPROC)
-#define RLIMIT_NPTS       SYMBOLIC(RLIMIT_NPTS)
-#define RLIMIT_RSS        SYMBOLIC(RLIMIT_RSS)
-#define RLIMIT_RTPRIO     SYMBOLIC(RLIMIT_RTPRIO)
-#define RLIMIT_RTTIME     SYMBOLIC(RLIMIT_RTTIME)
-#define RLIMIT_SBSIZE     SYMBOLIC(RLIMIT_SBSIZE)
-#define RLIMIT_SIGPENDING SYMBOLIC(RLIMIT_SIGPENDING)
-#define RLIMIT_STACK      SYMBOLIC(RLIMIT_STACK)
-#define RLIMIT_SWAP       SYMBOLIC(RLIMIT_SWAP)
-#define RLIMIT_VMEM       SYMBOLIC(RLIMIT_VMEM)
-
 #if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 
-extern const long RLIMIT_AS;
-extern const long RLIMIT_CORE;
-extern const long RLIMIT_CPU;
-extern const long RLIMIT_DATA;
-extern const long RLIMIT_FSIZE;
-extern const long RLIMIT_LOCKS;
-extern const long RLIMIT_MEMLOCK;
-extern const long RLIMIT_MSGQUEUE;
-extern const long RLIMIT_NICE;
-extern const long RLIMIT_NOFILE;
-extern const long RLIMIT_NPROC;
-extern const long RLIMIT_NPTS;
-extern const long RLIMIT_RSS;
-extern const long RLIMIT_RTPRIO;
-extern const long RLIMIT_RTTIME;
-extern const long RLIMIT_SBSIZE;
-extern const long RLIMIT_SIGPENDING;
-extern const long RLIMIT_STACK;
-extern const long RLIMIT_SWAP;
-extern const long RLIMIT_VMEM;
+extern const unsigned RLIMIT_AS;
+extern const unsigned RLIMIT_CORE;
+extern const unsigned RLIMIT_CPU;
+extern const unsigned RLIMIT_DATA;
+extern const unsigned RLIMIT_FSIZE;
+extern const unsigned RLIMIT_LOCKS;
+extern const unsigned RLIMIT_MEMLOCK;
+extern const unsigned RLIMIT_MSGQUEUE;
+extern const unsigned RLIMIT_NICE;
+extern const unsigned RLIMIT_NOFILE;
+extern const unsigned RLIMIT_NPROC;
+extern const unsigned RLIMIT_NPTS;
+extern const unsigned RLIMIT_RSS;
+extern const unsigned RLIMIT_RTPRIO;
+extern const unsigned RLIMIT_RTTIME;
+extern const unsigned RLIMIT_SBSIZE;
+extern const unsigned RLIMIT_SIGPENDING;
+extern const unsigned RLIMIT_STACK;
+extern const unsigned RLIMIT_SWAP;
+extern const unsigned RLIMIT_VMEM;
+
+#define RLIMIT_AS         RLIMIT_AS
+#define RLIMIT_CORE       RLIMIT_CORE
+#define RLIMIT_CPU        RLIMIT_CPU
+#define RLIMIT_DATA       RLIMIT_DATA
+#define RLIMIT_FSIZE      RLIMIT_FSIZE
+#define RLIMIT_LOCKS      RLIMIT_LOCKS
+#define RLIMIT_MEMLOCK    RLIMIT_MEMLOCK
+#define RLIMIT_MSGQUEUE   RLIMIT_MSGQUEUE
+#define RLIMIT_NICE       RLIMIT_NICE
+#define RLIMIT_NOFILE     RLIMIT_NOFILE
+#define RLIMIT_NPROC      RLIMIT_NPROC
+#define RLIMIT_NPTS       RLIMIT_NPTS
+#define RLIMIT_RSS        RLIMIT_RSS
+#define RLIMIT_RTPRIO     RLIMIT_RTPRIO
+#define RLIMIT_RTTIME     RLIMIT_RTTIME
+#define RLIMIT_SBSIZE     RLIMIT_SBSIZE
+#define RLIMIT_SIGPENDING RLIMIT_SIGPENDING
+#define RLIMIT_STACK      RLIMIT_STACK
+#define RLIMIT_SWAP       RLIMIT_SWAP
+#define RLIMIT_VMEM       RLIMIT_VMEM
 
 COSMOPOLITAN_C_END_
 #endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */

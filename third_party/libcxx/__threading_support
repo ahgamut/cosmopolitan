@@ -13,6 +13,8 @@
 #include "third_party/libcxx/__config"
 #include "third_party/libcxx/chrono"
 #include "third_party/libcxx/iosfwd"
+#include "libc/thread/thread2.h"
+#include "libc/thread/thread.h"
 #include "third_party/libcxx/errno.h"
 
 #ifndef _LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER
@@ -24,8 +26,10 @@
 #elif !defined(_LIBCPP_HAS_NO_THREADS)
 
 #if defined(_LIBCPP_HAS_THREAD_API_PTHREAD)
-# include "third_party/libcxx/pthread.h"
-# include "third_party/libcxx/sched.h"
+#include "libc/thread/thread.h"
+#include "libc/calls/calls.h"
+#include "libc/calls/struct/sched_param.h"
+#include "libc/sysv/consts/sched.h"
 #endif
 
 #if defined(_LIBCPP_HAS_THREAD_LIBRARY_EXTERNAL) || \
@@ -358,7 +362,7 @@ int __libcpp_thread_detach(__libcpp_thread_t *__t)
 
 void __libcpp_thread_yield()
 {
-  sched_yield();
+  pthread_yield();
 }
 
 void __libcpp_thread_sleep_for(const chrono::nanoseconds& __ns)

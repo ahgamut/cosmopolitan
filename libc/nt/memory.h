@@ -66,6 +66,8 @@ void *VirtualAlloc(void *opt_lpAddress, uint64_t dwSize,
 bool32 VirtualFree(void *lpAddress, uint64_t dwSize, uint32_t dwFreeType);
 bool32 VirtualProtect(void *lpAddress, uint64_t dwSize, uint32_t flNewProtect,
                       uint32_t *lpflOldProtect) paramsnonnull();
+bool32 VirtualLock(const void *lpAddress, size_t dwSize);
+bool32 VirtualUnlock(const void *lpAddress, size_t dwSize);
 uint64_t VirtualQuery(const void *lpAddress,
                       struct NtMemoryBasicInformation *lpBuffer,
                       uint64_t dwLength);
@@ -79,12 +81,12 @@ bool32 OfferVirtualMemory(void *inout_VirtualAddress, size_t Size,
                           int Priority);
 
 int64_t GetProcessHeap(void);
-void *HeapAlloc(int64_t hHeap, uint32_t dwFlags, size_t dwBytes) dontdiscard;
+void *HeapAlloc(int64_t hHeap, uint32_t dwFlags, size_t dwBytes) __wur;
 bool32 HeapFree(int64_t hHeap, uint32_t dwFlags, void *opt_lpMem);
 void *HeapReAlloc(int64_t hHeap, uint32_t dwFlags, void *lpMem,
-                  size_t dwBytes) dontdiscard;
+                  size_t dwBytes) __wur;
 
-void *GlobalAlloc(uint32_t uFlags, uint64_t dwBytes) dontdiscard;
+void *GlobalAlloc(uint32_t uFlags, uint64_t dwBytes) __wur;
 void *GlobalFree(void *hMem);
 
 #if ShouldUseMsabiAttribute()

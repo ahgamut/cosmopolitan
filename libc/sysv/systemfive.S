@@ -16,11 +16,15 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/strace.internal.h"
+#include "libc/intrin/strace.internal.h"
 #include "libc/dce.h"
 #include "libc/macros.internal.h"
 #include "libc/nexgen32e/macros.h"
+#include "libc/sysv/consts/sig.h"
+#include "libc/thread/posixthread.internal.h"
 #include "libc/sysv/consts/nr.h"
+
+#define SIG_IGN 1
 
 /*                                           ▄▄▄
                        ▄▄▄                    ▀▓▓▒▄
@@ -63,9 +67,6 @@
 ╚────────────────────────────────────────────────────────────────────────────│*/
 
 	.initbss 300,_init_systemfive
-__hostos:
-	.quad	0
-	.endobj	__hostos,globl,hidden
 
 //	Performs System Five System Call.
 //
@@ -104,20 +105,83 @@ __pid:	.quad	0
 	.endobj	__pid,globl,hidden
 	.previous
 
-	.privileged
+systemfive_cp:
+	push	%rbp
+	mov	%rsp,%rbp		// so backtraces work
+systemfive_cancellable:			// our pthread_cancel() miracle code
+	cmpb	$0,__tls_enabled(%rip)	// inspired by the musl libc design!
+	je	1f			// we handle linux and bsd together!
+	mov	%fs:0,%r10		// CosmoTib::tib_self
+	mov	0x28(%r10),%r10		// CosmoTib::tib_pthread
+	test	%r10,%r10		// is it a posix thread?
+	jz	1f			// it's spawn() probably
+	testb	$PT_NOCANCEL,0x00(%r10)	// PosixThread::flags
+	jnz	1f			// canceler no cancelling
+#if IsModeDbg()
+	testb	$PT_INCANCEL,0x00(%r10)
+	jz	5f
+#endif
+	cmpl	$0,0x04(%r10)		// PosixThread::cancelled
+	jne	systemfive_cancel	// we will tail call below
+1:	mov	%rcx,%r10		// move the fourth argument
+	clc				// no cancellable system calls exist
+	syscall				// that have 7+ args on the bsd OSes
+systemfive_cancellable_end:		// i/o calls park here for long time
+	pop	%rbp
+	jnc	2f
+	neg	%rax			// turns bsd errno to system v errno
+2:	cmp	$-4095,%rax		// but we still check again on eintr
+	jae	3f			// branch because system call failed
+	ret				// done if the system call succeeded
+3:	neg	%eax			// now examine the nature of failure
+	cmp	EINTR(%rip),%eax	// did the SIGTHR cancel our IO call
+	jne	systemfive_errno	// werent interrupted by OnSigCancel
+	cmpb	$0,__tls_enabled(%rip)	// make sure it's safe to grab %fs:0
+	je	systemfive_errno	// tls is disabled we can't continue
+	mov	%fs:0,%rcx		// CosmoTib::tib_self
+	mov	0x28(%rcx),%rcx		// CosmoTib::tib_pthread
+	test	%rcx,%rcx		// is it a posix thread?
+	jz	systemfive_errno	// it's spawn() probably
+	testb	$PT_NOCANCEL,0x00(%rcx)	// PosixThread::flags
+	jnz	systemfive_errno	// cancellation is disabled
+	cmpl	$0,0x04(%rcx)		// PosixThread::cancelled
+	je	systemfive_errno	// we aren't actually cancelled
+	jmp	4f			// now we are in fact cancelled
+systemfive_cancel:			// SIGTHR will jump here too
+	pop	%rbp
+4:	jmp	_pthread_cancel_ack	// tail call
+	.weak	_pthread_cancel_ack	// must be linked if we're cancelled
+#if IsModeDbg()
+not_a_cancellation_point:		// need BEGIN/END_CANCELLATION_POINT
+	nop
+	.weak	report_cancellation_point
+5:	ezlea	report_cancellation_point,cx
+	test	%rcx,%rcx
+	jz	6f
+	call	*%rcx
+6:	ud2
+	nop
+#endif
+	.globl	systemfive_cancellable_end
+	.globl	systemfive_cancellable
+	.globl	systemfive_cancel
+	.endfn	systemfive_cp
+
 .Lanchorpoint:
 #if SupportsLinux() || SupportsMetal()
 systemfive_linux:
-	and	$0xfff,%eax
-	cmp	$0xfff,%eax
-	je	systemfive_enosys	# never taken branches cost nothing
-	mov	%rcx,%r10		# syscall instruction clobbers %rcx
-	push	%rbp			# linux never reads args from stack
-	mov	%rsp,%rbp		# having frame will help backtraces
-	syscall				# this is known as a context switch
-	pop	%rbp			# next we check to see if it failed
-	cmp	$-4095,%rax		# system five nexgen32e abi § a.2.1
-	jae	systemfive_error	# encodes errno as neg return value
+	and	$0xfff,%eax		// remove nonlinux bits from ordinal
+	cmp	$0xfff,%eax		// checks if unsupported by platform
+	je	systemfive_enosys	// never taken branches cost nothing
+	btr	$11,%eax		// 0x800 means a call is cancellable
+	jc	systemfive_cp		// it is handled by the holiest code
+	mov	%rcx,%r10		// syscall instruction clobbers %rcx
+	push	%rbp			// linux never reads args from stack
+	mov	%rsp,%rbp		// having frame will help backtraces
+	syscall				// this is known as a context switch
+	pop	%rbp			// next we check to see if it failed
+	cmp	$-4095,%rax		// system five nexgen32e abi § a.2.1
+	jae	systemfive_error	// encodes errno as neg return value
 	ret
 	.endfn	systemfive_linux,globl,hidden
 systemfive_error:
@@ -128,9 +192,9 @@ systemfive_error:
 systemfive_errno:
 	xchg	%eax,%ecx
 	.errno
-	mov	%ecx,(%rax)		# normalize to c library convention
-	push	$-1			# negative one is only error result
-	pop	%rax			# the push pop is to save code size
+	mov	%ecx,(%rax)		// normalize to c library convention
+	push	$-1			// negative one is only error result
+	pop	%rax			// the push pop is to save code size
 	ret
 	.endfn	systemfive_errno,globl,hidden
 systemfive_enosys:
@@ -164,27 +228,20 @@ systemfive_bsdscrub:
 systemfive_bsd:
 	cmp	$0xfff,%ax
 	je	systemfive_enosys
+	btr	$11,%eax		// checks/reset the 800 cancellable bit
+	jc	systemfive_cp
 	mov	%rcx,%r10
-	push	%rbx
-	push	32(%rsp)
-	push	24(%rsp)
-	push	16(%rsp)
-	mov	%rax,%rbx		# save ordinal for SIGSYS crash report
-	syscall				# bsd will need arg on stack sometimes
-	pop	%rbx
-	pop	%rbx
-	pop	%rbx
-	pop	%rbx
-	jc	systemfive_errno	# bsd sets carry flag if %rax is errno
+	syscall				// bsd will need arg on stack sometimes
+	jc	systemfive_errno	// bsd sets carry flag if %rax is errno
 	ret
 	.endfn	systemfive_bsd
 #endif
 #if SupportsXnu()
 systemfive_xnu:
-//	0x?????????2153???		# how syscalls.sh encodes xnu ordinals
+//	0x?????????2153???		// how syscalls.sh encodes xnu ordinals
 //	           │└┴┴┐
 //	           │   ├┬┐
-//	0x0000000002000153		# how xnu wants ordinals to be encoded
+//	0x0000000002000153		// how xnu wants ordinals to be encoded
 	mov	%eax,%r11d
 	and	$0x0f000000,%r11d
 	shl	$8,%eax
@@ -208,35 +265,35 @@ systemfive_xnu:
 	push	%rbx
 	push	%rsi
 //	Detect the operating system.
-	mov	(%rdi),%eax			# __hostos
+	mov	__hostos(%rip),%eax
 #if SupportsWindows() || SupportsXnu() || SupportsFreebsd()
 //	set by	libc/ape.S		for XNU
 //	set by	libc/crt/crt.S		for XNU/FreeBSD
 //	set by	libc/nt/winmain.greg.c	for New Technology
 	test	%eax,%eax
-	jnz	_init_systemfive_detected	# os is already known
+	jnz	_init_systemfive_detected	// os is already known
 #endif
 #if SupportsOpenbsd()
-	cmpq	$0,(%r15)			# OpenBSD has no auxv
+	cmpq	$0,(%r15)			// OpenBSD has no auxv
 	jnz	0f
-	mov	$OPENBSD,%al
+	mov	$_HOSTOPENBSD,%al
 	jmp	_init_systemfive_detected
 0:
 #endif
 #if SupportsNetbsd()
 	xor	%ecx,%ecx
-0:	cmpq	$2014,(%r15,%rcx,8)		# NetBSD's AT_EXECFN
+0:	cmpq	$2014,(%r15,%rcx,8)		// NetBSD's AT_EXECFN
 	jne	1f
-	mov	$NETBSD,%al
+	mov	$_HOSTNETBSD,%al
 	jmp	_init_systemfive_detected
 1:	cmpq	$0,(%r15,%rcx,8)
 	lea	2(%ecx),%ecx
 	jnz	0b
 2:
 #endif
-	mov	$LINUX,%al
+	mov	$_HOSTLINUX,%al
 _init_systemfive_detected:
-	stosq	#→ __hostos
+	mov	%eax,__hostos(%rip)
 	bsr	%eax,%eax
 	mov	$_init_systemfive_jmptab,%ebx
 	movzbl	(%rbx,%rax),%eax
@@ -314,7 +371,7 @@ _init_systemfive_magnums:
 	xor	%ebx,%ebx
 	xor	%ecx,%ecx
 	xor	%edx,%edx
-3:	lodsb						# decodes uleb128
+3:	lodsb						// decodes uleb128
 	movzbl	%al,%edx
 	and	$127,%dl
 	shl	%cl,%rdx
@@ -356,106 +413,41 @@ _init_systemfive_pid:
 	ezlea	__hostos,cx
 	mov	(%rcx),%al
 	mov	(%rdi),%eax
-	testb	$WINDOWS|METAL,(%rcx)
+	testb	$_HOSTWINDOWS|_HOSTMETAL,(%rcx)
 	jnz	1f
-	mov	__NR_getpid,%eax
+	mov	__NR_getpid(%rip),%eax
 	syscall
 1:	stosq
 	.endfn	_init_systemfive_pid
 #endif
-#if SupportsSystemv() && !defined(TINY)
-_init_systemfive_syscall:
-	mov	__NR_msyscall,%eax			# syscall origin protect
-	cmp	$0xfff,%ax				# openbsd is pretty cool
-	jae	_init_systemfive_done
-	push	%rdi
-	push	%rsi
-	.weak	__privileged_addr
-	.weak	__privileged_size
-	mov	$__privileged_addr,%edi
-	mov	$__privileged_size,%esi
+#if SupportsBsd() && !defined(TINY)
+_init_systemfive_sigsys:
+	testb	IsBsd()					// BSDs will trap SIGSYS!
+	jz	1f					// We want ENOSYS instead
+	push	%rdi					// XNU removed some calls
+	push	%rsi					// in past, so this makes
+	xor	%eax,%eax				// troubleshooting easier
+	push	%rax					// but it's non-essential
+	push	%rax
+	push	%rax
+	push	%rax
+	push	%rax
+	push	$SIG_IGN				// sigaction_meta size 48
+	mov	__NR_sigaction(%rip),%eax		// mag
+	mov	SIGSYS,%edi				// sig
+	mov	%rsp,%rsi				// new
+	xor	%edx,%edx				// old
+	mov	$8,%r10d				// for linux
+	xor	%r8d,%r8d				// for netbsd
 	syscall
+	add	$6*8,%rsp
 	pop	%rsi
 	pop	%rdi
-//	𝑠𝑙𝑖𝑑𝑒
-#endif /* TINY */
+1:	.endfn	_init_systemfive_sigsys
+#endif
 _init_systemfive_done:
 	nop
 	.init.end 300,_init_systemfive,globl,hidden
-
-//	Sections for varint encoded magic numbers.
-//
-//	These sections are all ordered by (group_name, constant_name).
-//	They're populated by modules simply referencing the symbols.
-//
-//	@see libc/sysv/consts.sh
-//	@see libc/sysv/consts/syscon_h
-	.section .piro.bss.sort.syscon.1,"aw",@nobits
-	.align	8
-syscon_start:/*
-	...decentralized quadwords...
-	*/.previous
-	.section .piro.bss.sort.syscon.3,"aw",@nobits
-syscon_end:
-	.previous
-	.type	syscon_start,@object
-	.type	syscon_end,@object
-	.globl	syscon_start
-	.globl	syscon_end
-#if SupportsLinux() || SupportsMetal()
-	.section .sort.rodata.syscon.linux.1,"a",@progbits
-	.align	1
-syscon_linux:/*
-	...decentralized leb128...
-	*/.previous
-	.type	syscon_linux,@object
-	.globl	syscon_linux
-#endif
-#if SupportsXnu()
-	.section .sort.rodata.syscon.xnu.1,"a",@progbits
-	.align	1
-syscon_xnu:/*
-	...decentralized leb128...
-	*/.previous
-	.type	syscon_xnu,@object
-	.globl	syscon_xnu
-#endif
-#if SupportsFreebsd()
-	.section .sort.rodata.syscon.freebsd.1,"a",@progbits
-	.align	1
-syscon_freebsd:/*
-	...decentralized leb128...
-	*/.previous
-	.type	syscon_freebsd,@object
-	.globl	syscon_freebsd
-#endif
-#if SupportsOpenbsd()
-	.section .sort.rodata.syscon.openbsd.1,"a",@progbits
-	.align	1
-syscon_openbsd:/*
-	...decentralized leb128...
-	*/.previous
-	.type	syscon_openbsd,@object
-	.globl	syscon_openbsd
-#endif
-#if SupportsNetbsd()
-	.section .sort.rodata.syscon.netbsd.1,"a",@progbits
-	.align	1
-syscon_netbsd:/*
-	...decentralized leb128...
-	*/.previous
-	.type	syscon_netbsd,@object
-	.globl	syscon_netbsd
-#endif
-#if SupportsWindows()
-	.section .sort.rodata.syscon.windows.1,"a",@progbits
-	.align	1
-syscon_windows:/*
-	...decentralized leb128...
-	*/.previous
-	.type	syscon_windows,@object
-	.globl	syscon_windows
-#endif
 
 #ifdef SYSDEBUG
 	.rodata.str1.1

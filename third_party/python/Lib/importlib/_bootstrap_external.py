@@ -1346,10 +1346,10 @@ def _get_supported_file_loaders():
 
     Each item is a tuple (loader, suffixes).
     """
-    extensions = ExtensionFileLoader, _imp.extension_suffixes()
+    # extensions = ExtensionFileLoader, _imp.extension_suffixes()
     source = SourceFileLoader, SOURCE_SUFFIXES
     bytecode = SourcelessFileLoader, BYTECODE_SUFFIXES
-    return [bytecode, extensions, source]
+    return [source, bytecode] #, extensions]
 
 def _setup(_bootstrap_module):
     """Setup the path-based importers for importlib by importing needed
@@ -1388,6 +1388,7 @@ def _setup(_bootstrap_module):
         "builtins",
         "marshal",
         "posix",
+        "_thread",
         "_weakref",
     ):
         self_mod_dict[name] = sys.modules.get(
@@ -1400,7 +1401,6 @@ def _setup(_bootstrap_module):
     self_mod_dict["_os"] = sys.modules.get(builtin_os, builtin_from_name(builtin_os))
     self_mod_dict["path_sep"] =  path_separators[0]
     self_mod_dict["path_separators"] = "".join(path_separators)
-    self_mod_dict["_thread"] = None
     # Constants
     EXTENSION_SUFFIXES.extend(_imp.extension_suffixes())
 

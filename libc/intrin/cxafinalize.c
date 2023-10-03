@@ -16,12 +16,11 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/assert.h"
-#include "libc/bits/weaken.h"
-#include "libc/calls/strace.internal.h"
+#include "libc/intrin/bsf.h"
+#include "libc/intrin/cxaatexit.internal.h"
+#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/weaken.h"
 #include "libc/mem/mem.h"
-#include "libc/nexgen32e/bsf.h"
-#include "libc/runtime/cxaatexit.internal.h"
 #include "libc/runtime/runtime.h"
 
 /**
@@ -44,7 +43,7 @@ StartOverLocked:
     for (;;) {
       mask = b->mask;
       while (mask) {
-        i = bsf(mask);
+        i = _bsf(mask);
         mask &= ~(1u << i);
         if (!pred || pred == b->p[i].pred) {
           b->mask &= ~(1u << i);
@@ -60,9 +59,8 @@ StartOverLocked:
       if (!pred) {
         b2 = b->next;
         if (b2) {
-          assert(b != &__cxa_blocks.root);
-          if (weaken(free)) {
-            weaken(free)(b);
+          if (_weaken(free)) {
+            _weaken(free)(b);
           }
         }
         __cxa_blocks.p = b2;

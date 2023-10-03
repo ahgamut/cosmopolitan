@@ -6,7 +6,6 @@
 
 #define M_E        2.7182818284590452354 /* 𝑒 */
 #define M_LOG2_10  0xd.49a784bcd1b8afep-2 /* log₂10 ≈ 3.3219280948873623478 */
-#define M_LOG10_2  0x9.a209a84fbcff799p-5 /* log₁₀2 ≈ 0.301029995663981195 */
 #define M_LOG2E    0xb.8aa3b295c17f0bcp-3 /* log₂𝑒 ≈ 1.4426950408889634074 */
 #define M_LOG10E   0.43429448190325182765  /* log₁₀𝑒 */
 #define M_LN2      0xb.17217f7d1cf79acp-4  /* logₑ2 ≈ */
@@ -64,6 +63,8 @@
 #define FP_ZERO      2
 #define FP_SUBNORMAL 3
 #define FP_NORMAL    4
+#define FP_ILOGB0    (-2147483647 - 1)
+#define FP_ILOGBNAN  (-2147483647 - 1)
 
 #if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
@@ -86,7 +87,6 @@ typedef double double_t;
 #define isnan(x)             __builtin_isnan(x)
 #define isfinite(x)          __builtin_isfinite(x)
 #define isnormal(x)          __builtin_isnormal(x)
-#define signbit(x)           __builtin_signbit(x)
 #define isgreater(x, y)      __builtin_isgreater(x, y)
 #define isgreaterequal(x, y) __builtin_isgreaterequal(x, y)
 #define isless(x, y)         __builtin_isless(x, y)
@@ -96,6 +96,13 @@ typedef double double_t;
 
 #define fpclassify(x) \
   __builtin_fpclassify(FP_NAN, FP_INFINITE, FP_NORMAL, FP_SUBNORMAL, FP_ZERO, x)
+
+#define signbit(x)                                      \
+  (sizeof(x) == sizeof(double)  ? __builtin_signbit(x)  \
+   : sizeof(x) == sizeof(float) ? __builtin_signbitf(x) \
+                                : __builtin_signbitl(x))
+
+extern int signgam;
 
 double acos(double);
 double acosh(double);
@@ -251,7 +258,6 @@ long double nearbyintl(long double);
 long double nextafterl(long double, long double);
 long double nexttowardl(long double, long double);
 long double pow10l(long double);
-long double powil(long double, int);
 long double powl(long double, long double);
 long double remainderl(long double, long double);
 long double rintl(long double);
@@ -302,8 +308,22 @@ void sincos(double, double *, double *);
 void sincosf(float, float *, float *);
 void sincosl(long double, long double *, long double *);
 
-float fsumf(const float *, size_t);
+double fsumf(const float *, size_t);
 double fsum(const double *, size_t);
+
+double j0(double);
+double j1(double);
+double jn(int, double);
+float j0f(float);
+float j1f(float);
+float jnf(int, float);
+
+double y0(double);
+double y1(double);
+double yn(int, double);
+float y0f(float);
+float y1f(float);
+float ynf(int, float);
 
 COSMOPOLITAN_C_END_
 #endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */

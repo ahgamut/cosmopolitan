@@ -20,7 +20,6 @@ TOOL_VIZ_DIRECTDEPS =				\
 	DSP_MPEG				\
 	DSP_SCALE				\
 	DSP_TTY					\
-	LIBC_BITS				\
 	LIBC_CALLS				\
 	LIBC_DNS				\
 	LIBC_FMT				\
@@ -32,26 +31,25 @@ TOOL_VIZ_DIRECTDEPS =				\
 	LIBC_NT_GDI32				\
 	LIBC_NT_KERNEL32			\
 	LIBC_NT_USER32				\
-	LIBC_RAND				\
+	LIBC_PROC				\
 	LIBC_RUNTIME				\
 	LIBC_SOCK				\
 	LIBC_STDIO				\
 	LIBC_STR				\
-	LIBC_STUBS				\
 	LIBC_SYSV				\
 	LIBC_SYSV_CALLS				\
-	LIBC_TESTLIB				\
+	LIBC_THREAD				\
 	LIBC_TIME				\
 	LIBC_TINYMATH				\
-	LIBC_UNICODE				\
 	LIBC_X					\
-	LIBC_ZIPOS				\
 	NET_HTTP				\
+	THIRD_PARTY_COMPILER_RT			\
 	THIRD_PARTY_DLMALLOC			\
 	THIRD_PARTY_GDTOA			\
 	THIRD_PARTY_GETOPT			\
-	THIRD_PARTY_STB				\
+	THIRD_PARTY_MAXMIND			\
 	THIRD_PARTY_MUSL			\
+	THIRD_PARTY_STB				\
 	THIRD_PARTY_XED				\
 	THIRD_PARTY_ZLIB			\
 	TOOL_DECODE_LIB				\
@@ -81,33 +79,29 @@ o/$(MODE)/tool/viz/printimage.com.dbg:		\
 		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
 
-o/$(MODE)/tool/viz/printimage.com:						\
-		o/$(MODE)/tool/viz/printimage.com.dbg				\
-		o/$(MODE)/third_party/zip/zip.com				\
+o/$(MODE)/tool/viz/printimage.com:			\
+		o/$(MODE)/tool/viz/printimage.com.dbg	\
+		o/$(MODE)/third_party/zip/zip.com	\
 		o/$(MODE)/tool/build/symtab.com
-	@$(COMPILE) -AOBJCOPY -T$@ $(OBJCOPY) -S -O binary $< $@
-	@$(COMPILE) -ASYMTAB o/$(MODE)/tool/build/symtab.com			\
-		-o o/$(MODE)/tool/viz/.printimage/.symtab $<
-	@$(COMPILE) -AZIP -T$@ o/$(MODE)/third_party/zip/zip.com -9qj $@	\
-		o/$(MODE)/tool/viz/.printimage/.symtab
+	@$(MAKE_OBJCOPY)
+	@$(MAKE_SYMTAB_CREATE)
+	@$(MAKE_SYMTAB_ZIP)
 
-o/$(MODE)/tool/viz/printvideo.com:						\
-		o/$(MODE)/tool/viz/printvideo.com.dbg				\
-		o/$(MODE)/third_party/zip/zip.com				\
+o/$(MODE)/tool/viz/printvideo.com:			\
+		o/$(MODE)/tool/viz/printvideo.com.dbg	\
+		o/$(MODE)/third_party/zip/zip.com	\
 		o/$(MODE)/tool/build/symtab.com
-	@$(COMPILE) -AOBJCOPY -T$@ $(OBJCOPY) -S -O binary $< $@
-	@$(COMPILE) -ASYMTAB o/$(MODE)/tool/build/symtab.com			\
-		-o o/$(MODE)/tool/viz/.printvideo/.symtab $<
-	@$(COMPILE) -AZIP -T$@ o/$(MODE)/third_party/zip/zip.com -9qj $@	\
-		o/$(MODE)/tool/viz/.printvideo/.symtab
+	@$(MAKE_OBJCOPY)
+	@$(MAKE_SYMTAB_CREATE)
+	@$(MAKE_SYMTAB_ZIP)
 
-o/$(MODE)/tool/viz/derasterize.o:		\
-		OVERRIDE_CFLAGS +=		\
+o/$(MODE)/tool/viz/derasterize.o: private	\
+		CFLAGS +=			\
 			-DSTACK_FRAME_UNLIMITED	\
 			$(MATHEMATICAL)
 
-o/$(MODE)/tool/viz/magikarp.o:			\
-		OVERRIDE_CFLAGS +=		\
+o/$(MODE)/tool/viz/magikarp.o: private		\
+		CFLAGS +=			\
 			$(MATHEMATICAL)
 
 $(TOOL_VIZ_OBJS):				\

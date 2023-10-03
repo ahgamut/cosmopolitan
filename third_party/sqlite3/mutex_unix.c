@@ -11,8 +11,7 @@
 *************************************************************************
 ** This file contains the C functions that implement mutexes for pthreads
 */
-#include "third_party/sqlite3/sqliteInt.inc"
-/* clang-format off */
+#include "third_party/sqlite3/sqliteInt.h"
 
 /*
 ** The code in this file is only used if we are compiling threadsafe
@@ -23,7 +22,7 @@
 */
 #ifdef SQLITE_MUTEX_PTHREADS
 
-#include <pthread.h>
+#include "libc/thread/thread.h"
 
 /*
 ** The sqlite3_mutex.id, sqlite3_mutex.nRef, and sqlite3_mutex.owner fields

@@ -24,18 +24,16 @@ LIBC_STDIO_A_CHECKS =					\
 	$(LIBC_STDIO_A_HDRS:%=o/$(MODE)/%.ok)
 
 LIBC_STDIO_A_DIRECTDEPS =				\
-	LIBC_ALG					\
-	LIBC_BITS					\
 	LIBC_CALLS					\
 	LIBC_FMT					\
 	LIBC_INTRIN					\
 	LIBC_MEM					\
 	LIBC_NEXGEN32E					\
+	LIBC_NT_ADVAPI32				\
 	LIBC_NT_KERNEL32				\
-	LIBC_RAND					\
 	LIBC_RUNTIME					\
+	LIBC_PROC					\
 	LIBC_STR					\
-	LIBC_STUBS					\
 	LIBC_SYSV					\
 	LIBC_SYSV_CALLS					\
 	THIRD_PARTY_GDTOA
@@ -51,13 +49,21 @@ $(LIBC_STDIO_A).pkg:					\
 		$(LIBC_STDIO_A_OBJS)			\
 		$(foreach x,$(LIBC_STDIO_A_DIRECTDEPS),$($(x)_A).pkg)
 
-o/$(MODE)/libc/stdio/fputc.o:				\
-		OVERRIDE_CFLAGS +=			\
+# offer assurances about the stack safety of cosmo libc
+$(LIBC_STDIO_A_OBJS): private COPTS += -Wframe-larger-than=4096 -Walloca-larger-than=4096
+
+o/$(MODE)/libc/stdio/fputc.o: private			\
+		CFLAGS +=				\
 			-O3
 
-o//libc/stdio/appendw.o:				\
-		OVERRIDE_CFLAGS +=			\
+o//libc/stdio/appendw.o: private			\
+		CFLAGS +=				\
 			-Os
+
+o/$(MODE)/libc/stdio/dirstream.o			\
+o/$(MODE)/libc/stdio/mt19937.o: private			\
+		CFLAGS +=				\
+			-ffunction-sections
 
 LIBC_STDIO_LIBS = $(foreach x,$(LIBC_STDIO_ARTIFACTS),$($(x)))
 LIBC_STDIO_SRCS = $(foreach x,$(LIBC_STDIO_ARTIFACTS),$($(x)_SRCS))

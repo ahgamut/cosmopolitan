@@ -8,6 +8,7 @@
 #include "libc/calls/calls.h"
 #include "libc/calls/weirdtypes.h"
 #include "libc/mem/mem.h"
+#include "libc/runtime/runtime.h"
 #include "libc/runtime/sysconf.h"
 #include "libc/sysv/consts/map.h"
 #include "libc/sysv/consts/msync.h"
@@ -1494,7 +1495,12 @@ PyInit_mmap(void)
     return module;
 }
 
-_Section(".rodata.pytab.1") const struct _inittab _PyImport_Inittab_mmap = {
+#ifdef __aarch64__
+_Section(".rodata.pytab.1 //")
+#else
+_Section(".rodata.pytab.1")
+#endif
+ const struct _inittab _PyImport_Inittab_mmap = {
     "mmap",
     PyInit_mmap,
 };

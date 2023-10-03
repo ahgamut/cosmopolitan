@@ -16,15 +16,14 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/weaken.h"
 #include "libc/dce.h"
-#include "libc/log/backtrace.internal.h"
+#include "libc/intrin/weaken.h"
 #include "libc/log/log.h"
 #include "libc/runtime/runtime.h"
 #include "libc/runtime/symbols.internal.h"
 
 void __init_symbols(void) {
-  if (__strace || (IsAsan() && weaken(__die))) {
+  if (__strace > 0 || (IsAsan() && _weaken(__die))) {
     GetSymbolTable();
   }
 }

@@ -24,7 +24,6 @@
 │ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR        │
 │ OTHER DEALINGS IN THE SOFTWARE.                                              │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/safemacros.internal.h"
 #include "libc/calls/calls.h"
 #include "libc/dns/consts.h"
 #include "libc/dns/dns.h"
@@ -34,8 +33,8 @@
 #include "libc/fmt/conv.h"
 #include "libc/fmt/fmt.h"
 #include "libc/fmt/itoa.h"
+#include "libc/intrin/safemacros.internal.h"
 #include "libc/mem/mem.h"
-#include "libc/sock/sock.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/af.h"
 #include "libc/sysv/consts/inaddr.h"
@@ -54,12 +53,12 @@
  *
  * @return 0 on success or EAI_xxx value
  */
-int getnameinfo(const struct sockaddr *addr, socklen_t addrlen, char *name,
-                socklen_t namelen, char *service, socklen_t servicelen,
+int getnameinfo(const struct sockaddr *addr, uint32_t addrlen, char *name,
+                uint32_t namelen, char *service, uint32_t servicelen,
                 int flags) {
   char *p, rdomain[1 + sizeof "255.255.255.255.in-addr.arpa"];
   char info[NI_MAXHOST + 1];
-  int rc, port;
+  int port;
   uint8_t *ip;
   unsigned int valid_flags;
 
@@ -104,9 +103,12 @@ int getnameinfo(const struct sockaddr *addr, socklen_t addrlen, char *name,
   if (service != NULL && servicelen != 0) {
     if ((flags & NI_NUMERICSERV) ||
         LookupServicesByPort(port, ((flags & NI_DGRAM) ? "udp" : "tcp"), 4,
-                             info, sizeof(info), NULL) == -1)
-      itoa(port, info, 10);
-    if (strlen(info) + 1 > servicelen) return EAI_OVERFLOW;
+                             info, sizeof(info), NULL) == -1) {
+      FormatInt32(info, port);
+    }
+    if (strlen(info) + 1 > servicelen) {
+      return EAI_OVERFLOW;
+    }
     strcpy(service, info);
   }
 

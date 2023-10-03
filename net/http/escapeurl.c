@@ -16,6 +16,8 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/mem/mem.h"
+#include "libc/str/str.h"
 #include "libc/x/x.h"
 #include "net/http/escape.h"
 #include "net/http/url.h"
@@ -43,7 +45,7 @@ char *EscapeUrl(const char *p, size_t n, size_t *z, const char T[256]) {
   if (n == -1) n = p ? strlen(p) : 0;
   if (z) *z = 0;
   if ((q = r = malloc(n * 6 + 1))) {
-    v.p = p, v.n = n;
+    v.p = (char *)p, v.n = n;
     q = EscapeUrlView(r, &v, T);
     if (z) *z = q - r;
     *q++ = '\0';

@@ -26,15 +26,19 @@
 │                                                                              │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/math.h"
+#if !(LDBL_MANT_DIG == 53 && LDBL_MAX_EXP == 1024)
 
 asm(".ident\t\"\\n\\n\
 Musl libc (MIT License)\\n\
 Copyright 2005-2014 Rich Felker, et. al.\"");
 asm(".include \"libc/disclaimer.inc\"");
-/* clang-format off */
+// clang-format off
 
 static const long double toint = 1/LDBL_EPSILON;
 
+/**
+ * Returns fractional part of 𝑥.
+ */
 long double modfl(long double x, long double *iptr)
 {
 	union {
@@ -77,3 +81,5 @@ long double modfl(long double x, long double *iptr)
 	*iptr = x + y;
 	return -y;
 }
+
+#endif /* long double is long */

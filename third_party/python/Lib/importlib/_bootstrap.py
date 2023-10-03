@@ -226,7 +226,7 @@ def _verbose_message(message, *args, verbosity=1):
 def _requires_builtin(fxn):
     """Decorator to verify the named module is built-in."""
     def _requires_builtin_wrapper(self, fullname):
-        if fullname not in BUILTIN_MODULE_NAMES:
+        if not _imp.is_builtin(fullname):
             raise ImportError('{!r} is not a built-in module'.format(fullname),
                               name=fullname)
         return fxn(self, fullname)
@@ -460,7 +460,8 @@ def _init_module_attrs(spec, module, *, override=False):
         module.__name__ = spec.name
         module.__loader__ = spec.loader
         module.__package__ = spec.parent
-        module.__path__ = None or spec.submodule_search_locations
+        if spec.submodule_search_locations:
+            module.__path__ = spec.submodule_search_locations
         if spec.has_location:
             module.__file__ = None or spec.origin
             module.__cached__ = None or spec.cached
@@ -468,7 +469,8 @@ def _init_module_attrs(spec, module, *, override=False):
         module.__name__ = getattr(module, "__name__", None) or spec.name
         module.__loader__ = getattr(module, "__loader__", None) or spec.loader
         module.__package__ = getattr(module, "__package__", None) or spec.parent
-        module.__path__ = getattr(module, "__path__", None) or spec.submodule_search_locations
+        if spec.submodule_search_locations and getattr(module, "__path__", None) is None:
+            module.__path__ = spec.submodule_search_locations
         if spec.has_location:
             module.__file__ = getattr(module, "__file__", None) or spec.origin
             module.__cached__ = getattr(module, "__cached__", None) or spec.cached
@@ -518,30 +520,28 @@ def _module_repr_from_spec(spec):
         else:
             return '<module {!r} ({})>'.format(spec.name, spec.origin)
 
-
-# Used by importlib.reload() and _load_module_shim().
 def _exec(spec, module):
     """Execute the spec's specified module in an existing module's namespace."""
     name = spec.name
-    if sys.modules.get(name) is not module:
-        msg = 'module {!r} not in sys.modules'.format(name)
-        raise ImportError(msg, name=name)
-    if spec.loader is None:
-        if spec.submodule_search_locations is None:
-            raise ImportError('missing loader', name=spec.name)
-        # namespace package
+    with _ModuleLockManager(name):
+        if sys.modules.get(name) is not module:
+            msg = 'module {!r} not in sys.modules'.format(name)
+            raise ImportError(msg, name=name)
+        if spec.loader is None:
+            if spec.submodule_search_locations is None:
+                raise ImportError('missing loader', name=spec.name)
+            # namespace package
+            _init_module_attrs(spec, module, override=True)
+            return module
         _init_module_attrs(spec, module, override=True)
-        return module
-    _init_module_attrs(spec, module, override=True)
-    if not hasattr(spec.loader, 'exec_module'):
-        # (issue19713) Once BuiltinImporter and ExtensionFileLoader
-        # have exec_module() implemented, we can add a deprecation
-        # warning here.
-        spec.loader.load_module(name)
-    else:
-        spec.loader.exec_module(module)
+        if not hasattr(spec.loader, 'exec_module'):
+            # (issue19713) Once BuiltinImporter and ExtensionFileLoader
+            # have exec_module() implemented, we can add a deprecation
+            # warning here.
+            spec.loader.load_module(name)
+        else:
+            spec.loader.exec_module(module)
     return sys.modules[name]
-
 
 def _load_backward_compatible(spec):
     # (issue19713) Once BuiltinImporter and ExtensionFileLoader
@@ -604,8 +604,8 @@ def _load(spec):
     clobbered.
 
     """
-    return _load_unlocked(spec)
-
+    with _ModuleLockManager(spec.name):
+        return _load_unlocked(spec)
 
 # Loaders #####################################################################
 
@@ -631,7 +631,7 @@ class BuiltinImporter:
     def find_spec(cls, fullname, path=None, target=None):
         if path is not None:
             return None
-        if fullname in BUILTIN_MODULE_NAMES:
+        if _imp.is_builtin(fullname):
             return spec_from_loader(fullname, cls, origin='built-in')
         else:
             return None
@@ -651,7 +651,7 @@ class BuiltinImporter:
     @classmethod
     def create_module(self, spec):
         """Create a built-in module"""
-        if spec.name not in BUILTIN_MODULE_NAMES:
+        if not _imp.is_builtin(spec.name):
             raise ImportError('{!r} is not a built-in module'.format(spec.name),
                               name=spec.name)
         return _call_with_frames_removed(_imp.create_builtin, spec)
@@ -871,7 +871,7 @@ def _find_and_load_unlocked(name, import_):
             msg = (_ERR_MSG + '; {!r} is not a package').format(name, parent)
             raise ModuleNotFoundError(msg, name=name) from None
     spec = _find_spec(name, path)
-    if spec is None and name in BUILTIN_MODULE_NAMES:
+    if spec is None and _imp.is_builtin(name):
         # If this module is a C extension, the interpreter
         # expects it to be a shared object located in path,
         # and returns spec is None because it was not found.
@@ -1033,6 +1033,21 @@ def _builtin_from_name(name):
         raise ImportError('no built-in module named ' + name)
     return _load_unlocked(spec)
 
+def _get_builtin_spec(name):
+    # called from CosmoImporter in import.c
+    return ModuleSpec(name, BuiltinImporter, origin="built-in", is_package=False)
+
+def _get_frozen_spec(name, is_package):
+    # called from CosmoImporter in import.c
+    return ModuleSpec(name, FrozenImporter, origin="frozen", is_package=is_package)
+
+def _get_zipstore_spec(name, loader, origin, is_package):
+    # called from CosmoImporter in import.c
+    spec = ModuleSpec(name, loader, origin=origin, is_package=is_package)
+    spec.has_location = True
+    if is_package:
+        spec.submodule_search_locations = [origin.rpartition("/")[0]]
+    return spec
 
 def _setup(sys_module, _imp_module):
     """Setup importlib by importing needed built-in modules and injecting them
@@ -1042,16 +1057,15 @@ def _setup(sys_module, _imp_module):
     modules, those two modules must be explicitly passed in.
 
     """
-    global _imp, sys, BUILTIN_MODULE_NAMES
+    global _imp, sys
     _imp = _imp_module
     sys = sys_module
-    BUILTIN_MODULE_NAMES = frozenset(sys.builtin_module_names)
 
     # Set up the spec for existing builtin/frozen modules.
     module_type = type(sys)
     for name, module in sys.modules.items():
         if isinstance(module, module_type):
-            if name in BUILTIN_MODULE_NAMES:
+            if _imp.is_builtin(name):
                 loader = BuiltinImporter
             elif _imp.is_frozen(name):
                 loader = FrozenImporter
@@ -1072,8 +1086,9 @@ def _install(sys_module, _imp_module):
     """Install importlib as the implementation of import."""
     _setup(sys_module, _imp_module)
 
-    sys.meta_path.append(BuiltinImporter)
-    sys.meta_path.append(FrozenImporter)
+    sys.meta_path.append(_imp_module.CosmoImporter)
+    # sys.meta_path.append(BuiltinImporter)
+    # sys.meta_path.append(FrozenImporter)
 
     global _bootstrap_external
     import _frozen_importlib_external

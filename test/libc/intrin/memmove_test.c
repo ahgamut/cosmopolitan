@@ -17,12 +17,16 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/macros.internal.h"
+#include "libc/mem/gc.internal.h"
 #include "libc/mem/mem.h"
 #include "libc/nexgen32e/nexgen32e.h"
-#include "libc/rand/rand.h"
-#include "libc/runtime/gc.internal.h"
+#include "libc/runtime/runtime.h"
+#include "libc/runtime/sysconf.h"
+#include "libc/stdio/rand.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
+#include "libc/sysv/consts/map.h"
+#include "libc/sysv/consts/prot.h"
 #include "libc/testlib/ezbench.h"
 #include "libc/testlib/testlib.h"
 
@@ -43,7 +47,7 @@ static void *golden(void *a, const void *b, size_t n) {
 }
 
 TEST(memmove, hug) {
-  char *a, *b, *c;
+  char *a, *b;
   int i, o1, o2;
   int N[] = {0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12,   13,   14,
              15, 16, 17, 18, 31, 32, 33, 63, 64, 65, 80, 81, 1000, 1024, 1025};
@@ -63,7 +67,7 @@ TEST(memmove, hug) {
 }
 
 TEST(memmove, bighug) {
-  char *a, *b, *c;
+  char *a, *b;
   int i, o1, o2;
   int N[] = {5 * 1024 * 1024};
   a = gc(malloc(6291456));
@@ -81,20 +85,34 @@ TEST(memmove, bighug) {
   }
 }
 
+TEST(memmove, pageOverlapTorture) {
+  long pagesz = sysconf(_SC_PAGESIZE);
+  char *map = mmap(0, pagesz * 2, PROT_READ | PROT_WRITE,
+                   MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+  char *map2 = mmap(0, pagesz * 2, PROT_READ | PROT_WRITE,
+                    MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+  ASSERT_SYS(0, 0, mprotect(map + pagesz, pagesz, PROT_NONE));
+  ASSERT_SYS(0, 0, mprotect(map2 + pagesz, pagesz, PROT_NONE));
+  strcpy(map + pagesz - 9, "12345678");
+  strcpy(map2 + pagesz - 9, "12345679");
+  __expropriate(memmove(map + pagesz - 9, map2 + pagesz - 9, 9));
+  EXPECT_SYS(0, 0, munmap(map2, pagesz * 2));
+  EXPECT_SYS(0, 0, munmap(map, pagesz * 2));
+}
+
 BENCH(memmove, bench) {
-  volatile char *r;
-  int n, max = 8 * 1024 * 1024;
+  int n, max = 128 * 1024 * 1024;
   char *volatile p = gc(calloc(max, 1));
   char *volatile q = gc(calloc(max, 1));
   EZBENCH_N("memmove", 0, memmove(p, q, 0));
   for (n = 0; n < 127; ++n) {
-    EZBENCH_N("memmove", n, r = memmove(p, q, n));
+    EZBENCH_N("memmove", n, memmove(p, q, n));
   }
   for (n = 128; n <= max; n *= 2) {
-    EZBENCH_N("memmove", n - 1, r = memmove(p, q, n - 1));
-    EZBENCH_N("memmove", n, r = memmove(p, q, n));
+    EZBENCH_N("memmove", n - 1, memmove(p, q, n - 1));
+    EZBENCH_N("memmove", n, memmove(p, q, n));
   }
   for (n = 500; n <= 1000; n += 100) {
-    EZBENCH_N("memmove", n, r = memmove(p, q, n));
+    EZBENCH_N("memmove", n, memmove(p, q, n));
   }
 }

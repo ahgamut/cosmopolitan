@@ -16,17 +16,25 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/strace.internal.h"
+#include "libc/assert.h"
 #include "libc/calls/syscall-nt.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
+#include "libc/dce.h"
+#include "libc/intrin/strace.internal.h"
 
 /**
  * Returns parent process id.
+ *
+ * @return parent process id (always successful)
+ * @note slow on Windows; needs to iterate process tree
  * @asyncsignalsafe
+ * @vforksafe
  */
 int getppid(void) {
   int rc;
-  if (!IsWindows()) {
+  if (IsMetal()) {
+    rc = 1;
+  } else if (!IsWindows()) {
     if (!IsNetbsd()) {
       rc = sys_getppid();
     } else {
@@ -35,6 +43,7 @@ int getppid(void) {
   } else {
     rc = sys_getppid_nt();
   }
-  STRACE("getppid() → %d% m", rc);
+  npassert(rc >= 0);
+  STRACE("%s() → %d", "getppid", rc);
   return rc;
 }

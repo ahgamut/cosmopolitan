@@ -25,7 +25,6 @@ DSP_TTY_A_CHECKS =				\
 
 DSP_TTY_A_DIRECTDEPS =				\
 	DSP_CORE				\
-	LIBC_ALG				\
 	LIBC_CALLS				\
 	LIBC_FMT				\
 	LIBC_INTRIN				\
@@ -36,13 +35,11 @@ DSP_TTY_A_DIRECTDEPS =				\
 	LIBC_NT_KERNEL32			\
 	LIBC_STR				\
 	LIBC_STDIO				\
-	LIBC_STUBS				\
 	LIBC_SOCK				\
 	LIBC_SYSV				\
 	LIBC_TINYMATH				\
 	LIBC_TIME				\
-	LIBC_X					\
-	LIBC_UNICODE
+	LIBC_X
 
 DSP_TTY_A_DEPS :=				\
 	$(call uniq,$(foreach x,$(DSP_TTY_A_DIRECTDEPS),$($(x))))
@@ -55,9 +52,15 @@ $(DSP_TTY_A).pkg:				\
 		$(DSP_TTY_A_OBJS)		\
 		$(foreach x,$(DSP_TTY_A_DIRECTDEPS),$($(x)_A).pkg)
 
-o/$(MODE)/dsp/tty/ttyraster.o:			\
-		OVERRIDE_CFLAGS +=		\
+o/$(MODE)/dsp/tty/ttyraster.o: private		\
+		CFLAGS +=			\
 			$(MATHEMATICAL)
+
+ifeq ($(ARCH), aarch64)
+# takes 14 seconds to compile with aarch64 gcc
+o/$(MODE)/dsp/tty/ttyraster.o: private CFLAGS += -O1
+o/$(MODE)/dsp/tty/ttyraster.o: private QUOTA += -C128
+endif
 
 DSP_TTY_LIBS = $(foreach x,$(DSP_TTY_ARTIFACTS),$($(x)))
 DSP_TTY_SRCS = $(foreach x,$(DSP_TTY_ARTIFACTS),$($(x)_SRCS))

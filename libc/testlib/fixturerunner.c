@@ -16,13 +16,13 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/fmt/fmt.h"
 #include "libc/runtime/internal.h"
+#include "libc/str/str.h"
 #include "libc/sysv/consts/prot.h"
 #include "libc/testlib/testlib.h"
 
-testonly int testlib_countfixtures(const struct TestFixture *start,
-                                   const struct TestFixture *end) {
+int testlib_countfixtures(const struct TestFixture *start,
+                          const struct TestFixture *end) {
   return ((intptr_t)end - (intptr_t)start) / sizeof(struct TestFixture);
 }
 
@@ -31,14 +31,15 @@ testonly int testlib_countfixtures(const struct TestFixture *start,
  * @see ape/ape.lds
  * @see libc/testlib/testlib.h
  */
-testonly void testlib_runfixtures(testfn_t *test_start, testfn_t *test_end,
-                                  const struct TestFixture *fixture_start,
-                                  const struct TestFixture *fixture_end) {
+void testlib_runfixtures(const testfn_t *test_start, const testfn_t *test_end,
+                         const struct TestFixture *fixture_start,
+                         const struct TestFixture *fixture_end) {
   unsigned i, count;
   count = testlib_countfixtures(fixture_start, fixture_end);
   for (i = 0; i < count && !g_testlib_failed; ++i) {
-    (snprintf)(g_fixturename, sizeof(g_fixturename), "%s_%s",
-               fixture_start[i].group, fixture_start[i].name);
+    strlcpy(g_fixturename, fixture_start[i].group, sizeof(g_fixturename));
+    strlcat(g_fixturename, "_", sizeof(g_fixturename));
+    strlcat(g_fixturename, fixture_start[i].name, sizeof(g_fixturename));
     fixture_start[i].fn();
     testlib_runtestcases(test_start, test_end, NULL);
   }

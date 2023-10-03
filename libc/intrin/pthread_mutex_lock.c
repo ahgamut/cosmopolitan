@@ -16,77 +16,98 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/asmflag.h"
-#include "libc/bits/atomic.h"
 #include "libc/calls/calls.h"
-#include "libc/dce.h"
+#include "libc/calls/state.internal.h"
 #include "libc/errno.h"
-#include "libc/intrin/futex.internal.h"
-#include "libc/intrin/pthread.h"
-#include "libc/intrin/spinlock.h"
-#include "libc/linux/futex.h"
-#include "libc/nexgen32e/threaded.h"
-#include "libc/sysv/consts/futex.h"
-#include "libc/sysv/consts/nr.h"
-
-static int pthread_mutex_lock_spin(pthread_mutex_t *mutex, int tries) {
-  volatile int i;
-  if (tries < 7) {
-    for (i = 0; i != 1 << tries; i++) {
-    }
-    tries++;
-  } else if (IsLinux() || IsOpenbsd()) {
-    atomic_fetch_add(&mutex->waits, 1);
-    _futex_wait(&mutex->lock, 1, &(struct timespec){1});
-    atomic_fetch_sub(&mutex->waits, 1);
-  } else {
-    sched_yield();
-  }
-  return tries;
-}
+#include "libc/intrin/atomic.h"
+#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/weaken.h"
+#include "libc/runtime/internal.h"
+#include "libc/thread/thread.h"
+#include "libc/thread/tls.h"
+#include "third_party/nsync/mu.h"
 
 /**
  * Locks mutex.
  *
- *     _spinlock()         l:   181,570c    58,646ns
- *     mutex normal        l:   297,965c    96,241ns
- *     mutex recursive     l: 1,112,166c   359,223ns
- *     mutex errorcheck    l: 1,449,723c   468,252ns
+ * Here's an example of using a normal mutex:
+ *
+ *     pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+ *     pthread_mutex_lock(&lock);
+ *     // do work...
+ *     pthread_mutex_unlock(&lock);
+ *     pthread_mutex_destroy(&lock);
+ *
+ * Cosmopolitan permits succinct notation for normal mutexes:
+ *
+ *     pthread_mutex_t lock = {0};
+ *     pthread_mutex_lock(&lock);
+ *     // do work...
+ *     pthread_mutex_unlock(&lock);
+ *
+ * Here's an example of the proper way to do recursive mutexes:
+ *
+ *     pthread_mutex_t lock;
+ *     pthread_mutexattr_t attr;
+ *     pthread_mutexattr_init(&attr);
+ *     pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+ *     pthread_mutex_init(&lock, &attr);
+ *     pthread_mutexattr_destroy(&attr);
+ *     pthread_mutex_lock(&lock);
+ *     // do work...
+ *     pthread_mutex_unlock(&lock);
+ *     pthread_mutex_destroy(&lock);
+ *
+ * This function does nothing in vfork() children.
  *
  * @return 0 on success, or error number on failure
+ * @see pthread_spin_lock()
+ * @vforksafe
  */
-int(pthread_mutex_lock)(pthread_mutex_t *mutex) {
-  int me, owner, tries;
-  switch (mutex->attr) {
-    case PTHREAD_MUTEX_NORMAL:
-      for (tries = 0;;) {
-        if (!atomic_load_explicit(&mutex->lock, memory_order_relaxed) &&
-            !atomic_exchange_explicit(&mutex->lock, 1, memory_order_acquire)) {
-          break;
-        }
-        tries = pthread_mutex_lock_spin(mutex, tries);
-      }
-      return 0;
-    case PTHREAD_MUTEX_RECURSIVE:
-    case PTHREAD_MUTEX_ERRORCHECK:
-      for (tries = 0, me = gettid();;) {
-        owner = atomic_load_explicit(&mutex->lock, memory_order_relaxed);
-        if (!owner && atomic_compare_exchange_weak_explicit(
-                          &mutex->lock, &owner, me, memory_order_acquire,
-                          memory_order_relaxed)) {
-          break;
-        } else if (owner == me) {
-          if (mutex->attr != PTHREAD_MUTEX_ERRORCHECK) {
-            break;
-          } else {
-            return EDEADLK;
-          }
-        }
-        tries = pthread_mutex_lock_spin(mutex, tries);
-      }
-      ++mutex->reent;
-      return 0;
-    default:
-      return EINVAL;
+int pthread_mutex_lock(pthread_mutex_t *mutex) {
+  int t;
+
+  LOCKTRACE("pthread_mutex_lock(%t)", mutex);
+
+  if (__vforked) {
+    return 0;
   }
+
+  if (mutex->_type == PTHREAD_MUTEX_NORMAL &&        //
+      mutex->_pshared == PTHREAD_PROCESS_PRIVATE &&  //
+      _weaken(nsync_mu_lock)) {
+    _weaken(nsync_mu_lock)((nsync_mu *)mutex);
+    return 0;
+  }
+
+  if (mutex->_type == PTHREAD_MUTEX_NORMAL) {
+    while (atomic_exchange_explicit(&mutex->_lock, 1, memory_order_acquire)) {
+      pthread_yield();
+    }
+    return 0;
+  }
+
+  t = gettid();
+  if (mutex->_owner == t) {
+    if (mutex->_type != PTHREAD_MUTEX_ERRORCHECK) {
+      if (mutex->_depth < 63) {
+        ++mutex->_depth;
+        return 0;
+      } else {
+        return EAGAIN;
+      }
+    } else {
+      return EDEADLK;
+    }
+  }
+
+  while (atomic_exchange_explicit(&mutex->_lock, 1, memory_order_acquire)) {
+    pthread_yield();
+  }
+
+  mutex->_depth = 0;
+  mutex->_owner = t;
+  mutex->_pid = __pid;
+
+  return 0;
 }

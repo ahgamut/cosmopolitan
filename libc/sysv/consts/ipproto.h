@@ -1,79 +1,13 @@
 #ifndef COSMOPOLITAN_LIBC_SYSV_CONSTS_IPPROTO_H_
 #define COSMOPOLITAN_LIBC_SYSV_CONSTS_IPPROTO_H_
-#include "libc/runtime/symbolic.h"
-#if !(__ASSEMBLER__ + __LINKER__ + 0)
-COSMOPOLITAN_C_START_
 
-extern const long IPPROTO_AH;
-extern const long IPPROTO_BEETPH;
-extern const long IPPROTO_COMP;
-extern const long IPPROTO_DCCP;
-extern const long IPPROTO_DSTOPTS;
-extern const long IPPROTO_EGP;
-extern const long IPPROTO_ENCAP;
-extern const long IPPROTO_ESP;
-extern const long IPPROTO_FRAGMENT;
-extern const long IPPROTO_GRE;
-extern const long IPPROTO_HOPOPTS;
-extern const long IPPROTO_ICMP;
-extern const long IPPROTO_ICMPV6;
-extern const long IPPROTO_IDP;
-extern const long IPPROTO_IGMP;
-extern const long IPPROTO_IP;
-extern const long IPPROTO_IPIP;
-extern const long IPPROTO_IPV6;
-extern const long IPPROTO_MAX;
-extern const long IPPROTO_MH;
-extern const long IPPROTO_MPLS;
-extern const long IPPROTO_MTP;
-extern const long IPPROTO_NONE;
-extern const long IPPROTO_PIM;
-extern const long IPPROTO_PUP;
-extern const long IPPROTO_RAW;
-extern const long IPPROTO_ROUTING;
-extern const long IPPROTO_RSVP;
-extern const long IPPROTO_SCTP;
-extern const long IPPROTO_TCP;
-extern const long IPPROTO_TP;
-extern const long IPPROTO_UDP;
-extern const long IPPROTO_UDPLITE;
-
-COSMOPOLITAN_C_END_
-#endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
-
-#define IPPROTO_IP   LITERALLY(0)
-#define IPPROTO_ICMP LITERALLY(1)
-#define IPPROTO_TCP  LITERALLY(6)
-#define IPPROTO_UDP  LITERALLY(17)
-#define IPPROTO_RAW  LITERALLY(255)
-
-#define IPPROTO_AH       SYMBOLIC(IPPROTO_AH)
-#define IPPROTO_BEETPH   SYMBOLIC(IPPROTO_BEETPH)
-#define IPPROTO_COMP     SYMBOLIC(IPPROTO_COMP)
-#define IPPROTO_DCCP     SYMBOLIC(IPPROTO_DCCP)
-#define IPPROTO_DSTOPTS  SYMBOLIC(IPPROTO_DSTOPTS)
-#define IPPROTO_EGP      SYMBOLIC(IPPROTO_EGP)
-#define IPPROTO_ENCAP    SYMBOLIC(IPPROTO_ENCAP)
-#define IPPROTO_ESP      SYMBOLIC(IPPROTO_ESP)
-#define IPPROTO_FRAGMENT SYMBOLIC(IPPROTO_FRAGMENT)
-#define IPPROTO_GRE      SYMBOLIC(IPPROTO_GRE)
-#define IPPROTO_HOPOPTS  SYMBOLIC(IPPROTO_HOPOPTS)
-#define IPPROTO_ICMPV6   SYMBOLIC(IPPROTO_ICMPV6)
-#define IPPROTO_IDP      SYMBOLIC(IPPROTO_IDP)
-#define IPPROTO_IGMP     SYMBOLIC(IPPROTO_IGMP)
-#define IPPROTO_IPIP     SYMBOLIC(IPPROTO_IPIP)
-#define IPPROTO_IPV6     SYMBOLIC(IPPROTO_IPV6)
-#define IPPROTO_MAX      SYMBOLIC(IPPROTO_MAX)
-#define IPPROTO_MH       SYMBOLIC(IPPROTO_MH)
-#define IPPROTO_MPLS     SYMBOLIC(IPPROTO_MPLS)
-#define IPPROTO_MTP      SYMBOLIC(IPPROTO_MTP)
-#define IPPROTO_NONE     SYMBOLIC(IPPROTO_NONE)
-#define IPPROTO_PIM      SYMBOLIC(IPPROTO_PIM)
-#define IPPROTO_PUP      SYMBOLIC(IPPROTO_PUP)
-#define IPPROTO_ROUTING  SYMBOLIC(IPPROTO_ROUTING)
-#define IPPROTO_RSVP     SYMBOLIC(IPPROTO_RSVP)
-#define IPPROTO_SCTP     SYMBOLIC(IPPROTO_SCTP)
-#define IPPROTO_TP       SYMBOLIC(IPPROTO_TP)
-#define IPPROTO_UDPLITE  SYMBOLIC(IPPROTO_UDPLITE)
+#define IPPROTO_IP     0
+#define IPPROTO_ICMP   1
+#define IPPROTO_TCP    6
+#define IPPROTO_UDP    17
+#define IPPROTO_IPV6   41
+#define IPPROTO_ICMPV6 58
+#define IPPROTO_RAW    255
+#define IPPROTO_MAX    263 /* xxx */
 
 #endif /* COSMOPOLITAN_LIBC_SYSV_CONSTS_IPPROTO_H_ */

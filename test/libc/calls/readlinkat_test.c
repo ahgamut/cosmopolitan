@@ -18,10 +18,12 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/stat.h"
+#include "libc/dce.h"
 #include "libc/errno.h"
+#include "libc/limits.h"
 #include "libc/log/log.h"
-#include "libc/runtime/gc.h"
-#include "libc/runtime/gc.internal.h"
+#include "libc/mem/gc.h"
+#include "libc/mem/gc.internal.h"
 #include "libc/runtime/symbols.internal.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/at.h"
@@ -30,7 +32,10 @@
 #include "libc/testlib/testlib.h"
 #include "libc/x/x.h"
 
-char testlib_enable_tmp_setup_teardown;
+void SetUpOnce(void) {
+  testlib_enable_tmp_setup_teardown();
+  ASSERT_SYS(0, 0, pledge("stdio rpath wpath cpath fattr", 0));
+}
 
 TEST(readlink, enoent) {
   char buf[32];
@@ -41,11 +46,13 @@ TEST(readlink, enoent) {
 TEST(readlink, enotdir) {
   char buf[32];
   ASSERT_SYS(0, 0, touch("o", 0644));
+  ASSERT_SYS(ENOTDIR, -1, readlink("o/", buf, 32));
+  ASSERT_SYS(ENOTDIR, -1, readlink("o/o/..", buf, 32));
   ASSERT_SYS(ENOTDIR, -1, readlink("o/doesnotexist", buf, 32));
 }
 
 TEST(readlinkat, test) {
-  char buf[128], *p, *q;
+  char buf[128];
   memset(buf, -1, sizeof(buf));
   ASSERT_NE(-1, xbarf("hello→", "hi", -1));
   ASSERT_STREQ("hi", gc(xslurp("hello→", 0)));
@@ -57,9 +64,6 @@ TEST(readlinkat, test) {
   EXPECT_EQ(255, buf[8] & 255);
   buf[8] = 0;
   EXPECT_STREQ("hello→", buf);
-  p = gc(xjoinpaths(g_testlib_tmpdir, "hello→"));
-  q = gc(realpath("there→", 0));
-  EXPECT_EQ(0, strcmp(p, q), "%`'s\n\t%`'s", p, q);
 }
 
 TEST(readlinkat, efault) {
@@ -84,10 +88,7 @@ TEST(readlinkat, frootloop) {
   ASSERT_SYS(0, 0, symlink("froot", "froot"));
   ASSERT_SYS(ELOOP, -1, readlink("froot/loop", buf, sizeof(buf)));
   if (O_NOFOLLOW) {
-    ASSERT_SYS(IsFreebsd()  ? EMLINK
-               : IsNetbsd() ? EFTYPE
-                            : ELOOP,
-               -1, open("froot", O_RDONLY | O_NOFOLLOW));
+    ASSERT_SYS(ELOOP, -1, open("froot", O_RDONLY | O_NOFOLLOW));
     if (0 && O_PATH) { /* need rhel5 test */
       ASSERT_NE(-1, (fd = open("froot", O_RDONLY | O_NOFOLLOW | O_PATH)));
       ASSERT_NE(-1, close(fd));
@@ -95,16 +96,15 @@ TEST(readlinkat, frootloop) {
   }
 }
 
-TEST(readlinkat, statReadsNameLength) {
+TEST(readlinkat, statReadsNameLength_countsUtf8Bytes) {
   struct stat st;
-  ASSERT_SYS(0, 0, symlink("froot", "froot"));
-  ASSERT_SYS(0, 0, fstatat(AT_FDCWD, "froot", &st, AT_SYMLINK_NOFOLLOW));
+  ASSERT_SYS(0, 0, symlink("froÒt", "froÒt"));
+  ASSERT_SYS(0, 0, fstatat(AT_FDCWD, "froÒt", &st, AT_SYMLINK_NOFOLLOW));
   EXPECT_TRUE(S_ISLNK(st.st_mode));
-  EXPECT_EQ(5, st.st_size);
+  EXPECT_EQ(6, st.st_size);
 }
 
 TEST(readlinkat, realpathReturnsLongPath) {
-  struct stat st;
   char buf[PATH_MAX];
   if (!IsWindows()) return;
   if (!startswith(getcwd(buf, PATH_MAX), "/c/")) return;

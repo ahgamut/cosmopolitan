@@ -16,19 +16,21 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/likely.h"
-#include "libc/bits/weaken.h"
 #include "libc/calls/calls.h"
+#include "libc/calls/cp.internal.h"
 #include "libc/calls/internal.h"
-#include "libc/calls/strace.internal.h"
 #include "libc/calls/struct/iovec.h"
+#include "libc/calls/struct/iovec.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
+#include "libc/errno.h"
 #include "libc/intrin/asan.internal.h"
 #include "libc/intrin/describeflags.internal.h"
-#include "libc/intrin/kprintf.h"
+#include "libc/intrin/likely.h"
+#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/weaken.h"
+#include "libc/runtime/zipos.internal.h"
 #include "libc/sock/internal.h"
 #include "libc/sysv/errfuns.h"
-#include "libc/zipos/zipos.internal.h"
 
 /**
  * Reads data to multiple buffers.
@@ -41,43 +43,40 @@
  * performance boost in the case of a single small iovec.
  *
  * @return number of bytes actually read, or -1 w/ errno
+ * @cancellationpoint
  * @restartable
  */
 ssize_t readv(int fd, const struct iovec *iov, int iovlen) {
-  int i;
   ssize_t rc;
-  if (fd >= 0 && iovlen >= 0) {
-    if (IsAsan() && !__asan_is_valid_iov(iov, iovlen)) {
-      rc = efault();
-    } else if (fd < g_fds.n && g_fds.p[fd].kind == kFdZip) {
-      rc = weaken(__zipos_read)(
-          (struct ZiposHandle *)(intptr_t)g_fds.p[fd].handle, iov, iovlen, -1);
-    } else if (!IsWindows() && !IsMetal()) {
-      if (iovlen == 1) {
-        rc = sys_read(fd, iov[0].iov_base, iov[0].iov_len);
-      } else {
-        rc = sys_readv(fd, iov, iovlen);
-      }
-    } else if (fd >= g_fds.n) {
-      rc = ebadf();
-    } else if (IsMetal()) {
-      rc = sys_readv_metal(g_fds.p + fd, iov, iovlen);
-    } else {
-      rc = sys_readv_nt(g_fds.p + fd, iov, iovlen);
-    }
-  } else {
+  BEGIN_CANCELLATION_POINT;
+
+  if (fd < 0) {
+    rc = ebadf();
+  } else if (iovlen < 0) {
     rc = einval();
-  }
-#if defined(SYSDEBUG) && _DATATRACE
-  if (UNLIKELY(__strace > 0)) {
-    if (rc == -1 && errno == EFAULT) {
-      STRACE("readv(%d, %p, %d) → %'zd% m", fd, iov, iovlen, rc);
+  } else if (IsAsan() && !__asan_is_valid_iov(iov, iovlen)) {
+    rc = efault();
+  } else if (fd < g_fds.n && g_fds.p[fd].kind == kFdZip) {
+    rc = _weaken(__zipos_read)(
+        (struct ZiposHandle *)(intptr_t)g_fds.p[fd].handle, iov, iovlen, -1);
+  } else if (IsLinux() || IsXnu() || IsFreebsd() || IsOpenbsd() || IsNetbsd()) {
+    if (iovlen == 1) {
+      rc = sys_read(fd, iov[0].iov_base, iov[0].iov_len);
     } else {
-      kprintf(STRACE_PROLOGUE "readv(%d, [", fd);
-      DescribeIov(iov, iovlen, rc != -1 ? rc : 0);
-      kprintf("], %d) → %'ld% m\n", iovlen, rc);
+      rc = sys_readv(fd, iov, iovlen);
     }
+  } else if (fd >= g_fds.n) {
+    rc = ebadf();
+  } else if (IsMetal()) {
+    rc = sys_readv_metal(fd, iov, iovlen);
+  } else if (IsWindows()) {
+    rc = sys_readv_nt(fd, iov, iovlen);
+  } else {
+    rc = enosys();
   }
-#endif
+
+  END_CANCELLATION_POINT;
+  STRACE("readv(%d, [%s], %d) → %'ld% m", fd, DescribeIovec(rc, iov, iovlen),
+         iovlen, rc);
   return rc;
 }

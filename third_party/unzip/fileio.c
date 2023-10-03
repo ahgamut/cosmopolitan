@@ -81,6 +81,7 @@
 #  endif
 #endif
 #include "third_party/unzip/ebcdic.h"   /* definition/initialization of ebcdic[] */
+#include "third_party/unzip/globals.h"
 
 
 /*
@@ -182,8 +183,6 @@ static ZCONST char Far ExtraFieldTooLong[] =
 #else
    static ZCONST char Far DiskFullQuery[] =
      "%s:  write error (disk full?).  Continue? (y/n/^C) ";
-   static ZCONST char Far ZipfileCorrupt[] =
-     "error:  zipfile probably corrupt (%s)\n";
 #  ifdef SYMLINKS
      static ZCONST char Far FileIsSymLink[] =
        "%s exists and is a symbolic link%s.\n";
@@ -2395,13 +2394,13 @@ int do_string(__G__ length, option)   /* return PK-type error code */
             p = G.outbuf - 1;
             q = slide;
             while (*++p) {
-                int pause = FALSE;
+                int pause_ = FALSE;
 
                 if (*p == 0x1B) {          /* ASCII escape char */
                     *q++ = '^';
                     *q++ = '[';
                 } else if (*p == 0x13) {   /* ASCII ^S (pause) */
-                    pause = TRUE;
+                    pause_ = TRUE;
                     if (p[1] == LF)        /* ASCII LF */
                         *q++ = *++p;
                     else if (p[1] == CR && p[2] == LF) {  /* ASCII CR LF */
@@ -2410,10 +2409,10 @@ int do_string(__G__ length, option)   /* return PK-type error code */
                     }
                 } else
                     *q++ = *p;
-                if ((unsigned)(q-slide) > WSIZE-3 || pause) {   /* flush */
+                if ((unsigned)(q-slide) > WSIZE-3 || pause_) {   /* flush */
                     (*G.message)((zvoid *)&G, slide, (ulg)(q-slide), 0);
                     q = slide;
-                    if (pause && G.extract_flag) /* don't pause for list/test */
+                    if (pause_ && G.extract_flag) /* don't pause for list/test */
                         (*G.mpause)((zvoid *)&G, LoadFarString(QuitPrompt), 0);
                 }
             }
@@ -2867,7 +2866,7 @@ char *str2oem(dst, src)
 /* Function memset() */
 /*********************/
 
-zvoid *memset(buf, init, len)
+zvoid *memset_(buf, init, len)
     register zvoid *buf;        /* buffer location */
     register int init;          /* initializer character */
     register unsigned int len;  /* length of the buffer */
@@ -2886,7 +2885,7 @@ zvoid *memset(buf, init, len)
 /* Function memcmp() */
 /*********************/
 
-int memcmp(b1, b2, len)
+int memcmp_(b1, b2, len)
     register ZCONST zvoid *b1;
     register ZCONST zvoid *b2;
     register unsigned int len;
@@ -2907,7 +2906,7 @@ int memcmp(b1, b2, len)
 /* Function memcpy() */
 /*********************/
 
-zvoid *memcpy(dst, src, len)
+zvoid *memcpy_(dst, src, len)
     register zvoid *dst;
     register ZCONST zvoid *src;
     register unsigned int len;

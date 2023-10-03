@@ -14,54 +14,43 @@ LIBC_TESTLIB_A_CHECKS = $(LIBC_TESTLIB_A).pkg
 
 LIBC_TESTLIB_A_ASSETS =						\
 	libc/testlib/blocktronics.txt				\
+	libc/testlib/viewables.txt				\
 	libc/testlib/hyperion.txt				\
 	libc/testlib/moby.txt
 
 LIBC_TESTLIB_A_HDRS =						\
+	libc/testlib/aspect.internal.h				\
 	libc/testlib/bench.h					\
 	libc/testlib/blocktronics.h				\
 	libc/testlib/ezbench.h					\
 	libc/testlib/fastrandomstring.h				\
 	libc/testlib/hyperion.h					\
 	libc/testlib/moby.h					\
-	libc/testlib/testlib.h
+	libc/testlib/subprocess.h				\
+	libc/testlib/testlib.h					\
+	libc/testlib/viewables.h
 
 LIBC_TESTLIB_A_SRCS_S =						\
 	libc/testlib/bench.S					\
 	libc/testlib/blocktronics.S				\
-	libc/testlib/combo.S					\
 	libc/testlib/fixture.S					\
 	libc/testlib/hyperion.S					\
 	libc/testlib/moby.S					\
-	libc/testlib/testcase.S					\
-	libc/testlib/thrashcodecache.S				\
 	libc/testlib/polluteregisters.S				\
-	libc/testlib/thunks/assert_eq.S				\
-	libc/testlib/thunks/assert_false.S			\
-	libc/testlib/thunks/assert_ne.S				\
-	libc/testlib/thunks/assert_true.S			\
-	libc/testlib/thunks/expect_eq.S				\
-	libc/testlib/thunks/expect_false.S			\
-	libc/testlib/thunks/expect_ne.S				\
-	libc/testlib/thunks/expect_true.S			\
-	libc/testlib/thunks/free.S				\
-	libc/testlib/thunks/jump.S
+	libc/testlib/testcase.S					\
+	libc/testlib/viewables.S
 
 LIBC_TESTLIB_A_SRCS_C =						\
 	libc/testlib/almostequallongdouble.c			\
 	libc/testlib/benchrunner.c				\
-	libc/testlib/getcore.c					\
-	libc/testlib/getinterrupts.c				\
-	libc/testlib/ezbenchwarn.c				\
 	libc/testlib/binequals.c				\
-	libc/testlib/quota.c					\
 	libc/testlib/clearxmmregisters.c			\
-	libc/testlib/comborunner.c				\
 	libc/testlib/contains.c					\
 	libc/testlib/endswith.c					\
-	libc/testlib/yield.c					\
+	libc/testlib/extract.c					\
 	libc/testlib/ezbenchcontrol.c				\
 	libc/testlib/ezbenchreport.c				\
+	libc/testlib/ezbenchwarn.c				\
 	libc/testlib/fixturerunner.c				\
 	libc/testlib/formatbinaryasglyphs.c			\
 	libc/testlib/formatbinaryashex.c			\
@@ -70,15 +59,26 @@ LIBC_TESTLIB_A_SRCS_C =						\
 	libc/testlib/formatint.c				\
 	libc/testlib/formatrange.c				\
 	libc/testlib/formatstr.c				\
+	libc/testlib/getcore.c					\
+	libc/testlib/geterrno.c					\
+	libc/testlib/getinterrupts.c				\
 	libc/testlib/globals.c					\
 	libc/testlib/hexequals.c				\
 	libc/testlib/incrementfailed.c				\
+	libc/testlib/memoryexists.c				\
+	libc/testlib/seterrno.c					\
 	libc/testlib/shoulddebugbreak.c				\
 	libc/testlib/showerror.c				\
 	libc/testlib/startswith.c				\
 	libc/testlib/strcaseequals.c				\
 	libc/testlib/strequals.c				\
-	libc/testlib/testrunner.c
+	libc/testlib/strerror.c					\
+	libc/testlib/testrunner.c				\
+	libc/testlib/thunks.c					\
+	libc/testlib/tmptest.c					\
+	libc/testlib/waitforexit.c				\
+	libc/testlib/waitforterm.c				\
+	libc/testlib/yield.c
 
 LIBC_TESTLIB_A_SRCS =						\
 	$(LIBC_TESTLIB_A_SRCS_S)				\
@@ -87,11 +87,10 @@ LIBC_TESTLIB_A_SRCS =						\
 LIBC_TESTLIB_A_OBJS =						\
 	$(LIBC_TESTLIB_A_SRCS_C:%.c=o/$(MODE)/%.o)		\
 	$(LIBC_TESTLIB_A_SRCS_S:%.S=o/$(MODE)/%.o)		\
-	$(LIBC_TESTLIB_A_ASSETS:%=o/$(MODE)/%.zip.o)
+	$(LIBC_TESTLIB_A_ASSETS:%=o/$(MODE)/%.zip.o)		\
+	o/$(MODE)/libc/testlib-test.txt.zip.o
 
 LIBC_TESTLIB_A_DIRECTDEPS =					\
-	LIBC_ALG						\
-	LIBC_BITS						\
 	LIBC_CALLS						\
 	LIBC_FMT						\
 	LIBC_INTRIN						\
@@ -99,20 +98,19 @@ LIBC_TESTLIB_A_DIRECTDEPS =					\
 	LIBC_MEM						\
 	LIBC_NEXGEN32E						\
 	LIBC_NT_KERNEL32					\
-	LIBC_RAND						\
+	LIBC_PROC						\
 	LIBC_RUNTIME						\
 	LIBC_STDIO						\
 	LIBC_STR						\
-	LIBC_STUBS						\
 	LIBC_SYSV						\
 	LIBC_SYSV_CALLS						\
 	LIBC_TIME						\
 	LIBC_TINYMATH						\
-	LIBC_UNICODE						\
 	LIBC_X							\
-	LIBC_ZIPOS						\
+	THIRD_PARTY_COMPILER_RT					\
 	THIRD_PARTY_DLMALLOC					\
-	THIRD_PARTY_GDTOA
+	THIRD_PARTY_GDTOA					\
+	THIRD_PARTY_XED
 
 LIBC_TESTLIB_A_DEPS :=						\
 	$(call uniq,$(foreach x,$(LIBC_TESTLIB_A_DIRECTDEPS),$($(x))))
@@ -125,6 +123,29 @@ $(LIBC_TESTLIB_A):						\
 $(LIBC_TESTLIB_A).pkg:						\
 		$(LIBC_TESTLIB_A_OBJS)				\
 		$(foreach x,$(LIBC_TESTLIB_A_DIRECTDEPS),$($(x)_A).pkg)
+
+o/$(MODE)/libc/testlib/blocktronics.o: libc/testlib/blocktronics.txt
+o/$(MODE)/libc/testlib/viewables.o: libc/testlib/viewables.txt
+o/$(MODE)/libc/testlib/hyperion.o: libc/testlib/hyperion.txt
+o/$(MODE)/libc/testlib/moby.o: libc/testlib/moby.txt
+
+# these assembly files are safe to build on aarch64
+o/$(MODE)/libc/testlib/bench.o: libc/testlib/bench.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/testlib/blocktronics.o: libc/testlib/blocktronics.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/testlib/fixture.o: libc/testlib/fixture.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/testlib/hyperion.o: libc/testlib/hyperion.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/testlib/moby.o: libc/testlib/moby.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/testlib/polluteregisters.o: libc/testlib/polluteregisters.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/testlib/testcase.o: libc/testlib/testcase.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/testlib/viewables.o: libc/testlib/viewables.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
 
 #───────────────────────────────────────────────────────────────────────────────
 
@@ -144,7 +165,6 @@ LIBC_TESTLIB_RUNNER_A_DIRECTDEPS =				\
 	LIBC_RUNTIME						\
 	LIBC_STDIO						\
 	LIBC_STR						\
-	LIBC_STUBS						\
 	LIBC_TESTLIB
 
 LIBC_TESTLIB_RUNNER_A_DEPS :=					\
@@ -184,7 +204,6 @@ LIBC_TESTMAIN_DIRECTDEPS =					\
 	LIBC_NEXGEN32E						\
 	LIBC_RUNTIME						\
 	LIBC_STDIO						\
-	LIBC_STUBS						\
 	LIBC_SYSV						\
 	LIBC_SYSV_CALLS						\
 	LIBC_TESTLIB						\

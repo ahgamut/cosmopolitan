@@ -15,17 +15,18 @@
 │ See the License for the specific language governing permissions and          │
 │ limitations under the License.                                               │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/strace.internal.h"
+#include "third_party/mbedtls/ecp.h"
+#include "libc/intrin/strace.internal.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
+#include "libc/str/str.h"
 #include "third_party/mbedtls/bignum.h"
 #include "third_party/mbedtls/bignum_internal.h"
 #include "third_party/mbedtls/common.h"
 #include "third_party/mbedtls/config.h"
 #include "third_party/mbedtls/ctr_drbg.h"
-#include "third_party/mbedtls/ecp.h"
 #include "third_party/mbedtls/ecp_internal.h"
 #include "third_party/mbedtls/error.h"
 #include "third_party/mbedtls/hmac_drbg.h"
@@ -1736,9 +1737,9 @@ static int ecp_add_mixed( const mbedtls_ecp_group *grp, mbedtls_ecp_point *R,
     /*
      * Trivial cases: P == 0 or Q == 0 (case 1)
      */
-    if( mbedtls_ecp_is_zero( P ) )
+    if( mbedtls_ecp_is_zero( (void *)P ) )
         return( mbedtls_ecp_copy( R, Q ) );
-    if( Q->Z.p && mbedtls_ecp_is_zero( Q ) )
+    if( Q->Z.p && mbedtls_ecp_is_zero( (void *)Q ) )
         return( mbedtls_ecp_copy( R, P ) );
     /*
      * Make sure Q coordinates are normalized

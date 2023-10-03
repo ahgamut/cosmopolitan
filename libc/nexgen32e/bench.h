@@ -10,6 +10,7 @@
  * @see libc/testlib/bench.h
  */
 
+#ifdef __x86__
 #define __startbench()                            \
   ({                                              \
     uint64_t Ticks;                               \
@@ -25,7 +26,6 @@
                  : "rcx", "rdx", "memory", "cc"); \
     Ticks;                                        \
   })
-
 #define __endbench()                                     \
   ({                                                     \
     uint64_t Ticks;                                      \
@@ -42,6 +42,24 @@
                  : "rax", "rcx", "rdx", "memory", "cc"); \
     Ticks;                                               \
   })
+#else
+#define __startbench()                \
+  ({                                  \
+    uint64_t _ts;                     \
+    asm volatile("isb" ::: "memory"); \
+    _ts = rdtsc();                    \
+    asm volatile("isb" ::: "memory"); \
+    _ts;                              \
+  })
+#define __endbench()                  \
+  ({                                  \
+    uint64_t _ts;                     \
+    asm volatile("isb" ::: "memory"); \
+    _ts = rdtsc();                    \
+    asm volatile("isb" ::: "memory"); \
+    _ts;                              \
+  })
+#endif
 
 #define __startbench_m() mfence_lfence_rdtsc_lfence()
 #define __endbench_m()   __startbench_m()

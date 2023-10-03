@@ -15,8 +15,9 @@
 │ See the License for the specific language governing permissions and          │
 │ limitations under the License.                                               │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/bits.h"
-#include "libc/bits/likely.h"
+#include "third_party/mbedtls/gcm.h"
+#include "libc/intrin/bits.h"
+#include "libc/intrin/likely.h"
 #include "libc/log/log.h"
 #include "libc/nexgen32e/x86feature.h"
 #include "libc/runtime/runtime.h"
@@ -27,7 +28,6 @@
 #include "third_party/mbedtls/common.h"
 #include "third_party/mbedtls/endian.h"
 #include "third_party/mbedtls/error.h"
-#include "third_party/mbedtls/gcm.h"
 #include "third_party/mbedtls/platform.h"
 
 asm(".ident\t\"\\n\\n\
@@ -102,7 +102,6 @@ void mbedtls_gcm_init( mbedtls_gcm_context *ctx )
 static int gcm_gen_table( mbedtls_gcm_context *ctx )
 {
     int ret, i, j;
-    uint64_t hi, lo;
     uint64_t vl, vh;
     unsigned char h[16];
     size_t olen = 0;

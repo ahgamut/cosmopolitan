@@ -1,3 +1,4 @@
-#ifndef LIBC_ISYSTEM_STDARG_H_
-#define LIBC_ISYSTEM_STDARG_H_
-#endif
+#ifndef _STDARG_H
+#define _STDARG_H
+#include "libc/stdio/stdio.h"
+#endif /* _STDARG_H */

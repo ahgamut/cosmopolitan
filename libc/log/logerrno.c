@@ -22,6 +22,6 @@
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
 
-void __logerrno(const char *file, int line, const char *form) {
-  flogf(kLogWarn, file, line, NULL, PFLINK("%s → %s"), form, strerror(errno));
+dontinstrument void _log_errno(const char *file, int line, const char *form) {
+  flogf(kLogWarn, file, line, NULL, "%s → %s", form, strerror(errno));
 }

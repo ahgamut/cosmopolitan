@@ -16,25 +16,21 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/alg/arraylist2.internal.h"
+#include "tool/build/lib/elfwriter.h"
 #include "libc/assert.h"
 #include "libc/calls/calls.h"
+#include "libc/elf/def.h"
 #include "libc/log/check.h"
-#include "libc/macros.internal.h"
-#include "libc/mem/fmt.h"
-#include "libc/mem/mem.h"
-#include "libc/runtime/gc.internal.h"
+#include "libc/mem/arraylist2.internal.h"
+#include "libc/mem/gc.h"
 #include "libc/runtime/memtrack.internal.h"
-#include "libc/runtime/runtime.h"
+#include "libc/stdalign.internal.h"
+#include "libc/str/str.h"
 #include "libc/sysv/consts/map.h"
-#include "libc/sysv/consts/mremap.h"
 #include "libc/sysv/consts/msync.h"
 #include "libc/sysv/consts/o.h"
-#include "libc/sysv/consts/ok.h"
 #include "libc/sysv/consts/prot.h"
-#include "libc/x/x.h"
-#include "tool/build/lib/elfwriter.h"
-#include "tool/build/lib/interner.h"
+#include "libc/x/xasprintf.h"
 
 static const Elf64_Ehdr kObjHeader = {
     .e_ident = {ELFMAG0, ELFMAG1, ELFMAG2, ELFMAG3, ELFCLASS64, ELFDATA2LSB, 1,
@@ -90,8 +86,8 @@ static void MakeRelaSection(struct ElfWriter *elf, size_t section) {
   elfwriter_align(elf, alignof(Elf64_Rela), sizeof(Elf64_Rela));
   shdr = elfwriter_startsection(
       elf,
-      gc(xasprintf("%s%s", ".rela",
-                   &elf->shstrtab->p[elf->shdrs->p[section].sh_name])),
+      _gc(xasprintf("%s%s", ".rela",
+                    &elf->shstrtab->p[elf->shdrs->p[section].sh_name])),
       SHT_RELA, SHF_INFO_LINK);
   elf->shdrs->p[shdr].sh_info = section;
   elfwriter_reserve(elf, size);
@@ -170,6 +166,15 @@ struct ElfWriter *elfwriter_open(const char *path, int mode) {
                                         elf->mapsize, PROT_READ | PROT_WRITE,
                                         MAP_SHARED | MAP_FIXED, elf->fd, 0)));
   elf->ehdr = memcpy(elf->map, &kObjHeader, (elf->wrote = sizeof(kObjHeader)));
+  if (strstr(path, "/aarch64")) {
+    elf->ehdr->e_machine = EM_AARCH64;
+  } else if (strstr(path, "/powerpc64")) {
+    elf->ehdr->e_machine = EM_PPC64;
+  } else if (strstr(path, "/riscv")) {
+    elf->ehdr->e_machine = EM_RISCV;
+  } else if (strstr(path, "/s390")) {
+    elf->ehdr->e_machine = EM_S390;
+  }
   elf->strtab = newinterner();
   elf->shstrtab = newinterner();
   intern(elf->strtab, "");
@@ -277,4 +282,38 @@ void elfwriter_appendrela(struct ElfWriter *elf, uint64_t r_offset,
                                                .symkey = symkey,
                                                .offset = r_offset,
                                                .addend = r_addend})));
+}
+
+uint32_t elfwriter_relatype_abs32(const struct ElfWriter *elf) {
+  switch (elf->ehdr->e_machine) {
+    case EM_NEXGEN32E:
+      return R_X86_64_32;
+    case EM_AARCH64:
+      return R_AARCH64_ABS32;
+    case EM_PPC64:
+      return R_PPC64_ADDR32;
+    case EM_RISCV:
+      return R_RISCV_32;
+    case EM_S390:
+      return R_390_32;
+    default:
+      notpossible;
+  }
+}
+
+uint32_t elfwriter_relatype_pc32(const struct ElfWriter *elf) {
+  switch (elf->ehdr->e_machine) {
+    case EM_NEXGEN32E:
+      return R_X86_64_PC32;
+    case EM_AARCH64:
+      return R_AARCH64_PREL32;
+    case EM_PPC64:
+      return R_PPC64_REL32;
+    case EM_RISCV:
+      return R_RISCV_RELATIVE;
+    case EM_S390:
+      return R_390_PC32;
+    default:
+      notpossible;
+  }
 }

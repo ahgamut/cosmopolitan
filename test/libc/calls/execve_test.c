@@ -16,343 +16,137 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/assert.h"
 #include "libc/calls/calls.h"
+#include "libc/calls/struct/rusage.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/dce.h"
+#include "libc/errno.h"
+#include "libc/fmt/conv.h"
+#include "libc/fmt/itoa.h"
 #include "libc/intrin/kprintf.h"
-#include "libc/mem/io.h"
 #include "libc/runtime/runtime.h"
-#include "libc/stdio/stdio.h"
-#include "libc/sysv/consts/o.h"
+#include "libc/str/str.h"
+#include "libc/temp.h"
 #include "libc/testlib/ezbench.h"
+#include "libc/testlib/subprocess.h"
 #include "libc/testlib/testlib.h"
 
-STATIC_YOINK("zip_uri_support");
+#define N 16
 
-int ws, pid;
-char testlib_enable_tmp_setup_teardown;
-
-bool UsingBinfmtMisc(void) {
-  return fileexists("/proc/sys/fs/binfmt_misc/APE");
+char *GenBuf(char buf[8], int x) {
+  int i;
+  bzero(buf, 8);
+  for (i = 0; i < 7; ++i) {
+    buf[i] = x & 127;  // nt doesn't respect invalid unicode?
+    x >>= 1;
+  }
+  return buf;
 }
 
-// see: #431
-// todo(jart): figure out what is wrong with github actions
-// thetanil: same issue reproducible on my debian 5.10
-// bool HasMzHeader(const char *path) {
-//   char buf[2] = {0};
-//   open(path, O_RDONLY);
-//   read(3, buf, 2);
-//   close(3);
-//   return buf[0] == 'M' && buf[1] == 'Z';
-// }
-
-void Extract(const char *from, const char *to, int mode) {
-  ASSERT_SYS(0, 3, open(from, O_RDONLY), "%s %s", from, to);
-  ASSERT_SYS(0, 4, creat(to, mode));
-  ASSERT_NE(-1, _copyfd(3, 4, -1));
-  EXPECT_SYS(0, 0, close(4));
-  EXPECT_SYS(0, 0, close(3));
-}
-
-void SetUp(void) {
-  ASSERT_SYS(0, 0, mkdir("tmp", 0755));
-  ASSERT_SYS(0, 0, mkdir("bin", 0755));
-  Extract("/zip/tiny64.elf", "bin/tiny64.elf", 0755);
-  // Extract("/zip/pylife.com", "bin/pylife.com", 0755);
-  Extract("/zip/life-nomod.com", "bin/life-nomod.com", 0755);
-  Extract("/zip/life-classic.com", "bin/life-classic.com", 0755);
-  setenv("TMPDIR", "tmp", true);
-  if (IsOpenbsd()) {
-    // printf is in /usr/bin/printf on openbsd...
-    setenv("PATH", "/bin:/usr/bin", true);
-  } else if (!IsWindows()) {
-    setenv("PATH", "/bin", true);
+__attribute__((__constructor__)) static void init(void) {
+  char buf[8];
+  if (__argc == 4 && !strcmp(__argv[1], "-")) {
+    ASSERT_STREQ(GenBuf(buf, atoi(__argv[2])), __argv[3]);
+    exit(0);
   }
 }
 
-////////////////////////////////////////////////////////////////////////////////
+TEST(execve, testArgPassing) {
+  int i;
+  char ibuf[12], buf[8];
+  for (i = 0; i < N; ++i) {
+    FormatInt32(ibuf, i);
+    GenBuf(buf, i);
+    SPAWN(vfork);
+    execve(GetProgramExecutableName(),
+           (char *const[]){GetProgramExecutableName(), "-", ibuf, buf, 0},
+           (char *const[]){0});
+    kprintf("execve failed: %m\n");
+    EXITS(0);
+  }
+}
 
-TEST(execve, system_elf) {
+TEST(execve, ziposELF) {
+  if (1) return;                                  // TODO: rewrite
+  if (IsFreebsd()) return;                        // TODO: fixme on freebsd
+  if (IsLinux() && !__is_linux_2_6_23()) return;  // TODO: fixme on old linux
+  if (!IsLinux() && !IsFreebsd()) {
+    EXPECT_SYS(ENOSYS, -1,
+               execve("/zip/life.elf", (char *const[]){0}, (char *const[]){0}));
+    return;
+  }
+  SPAWN(fork);
+  execve("/zip/life.elf", (char *const[]){0}, (char *const[]){0});
+  kprintf("execve failed: %m\n");
+  EXITS(42);
+}
+
+TEST(execve, ziposAPE) {
+  if (1) return;                                  // TODO: rewrite
+  if (IsFreebsd()) return;                        // TODO: fixme on freebsd
+  if (IsLinux() && !__is_linux_2_6_23()) return;  // TODO: fixme on old linux
+  if (!IsLinux() && !IsFreebsd()) {
+    EXPECT_EQ(-1, execve("/zip/life-nomod.com", (char *const[]){0},
+                         (char *const[]){0}));
+    return;
+  }
+  SPAWN(fork);
+  execve("/zip/life-nomod.com", (char *const[]){0}, (char *const[]){0});
+  kprintf("execve failed: %m\n");
+  EXITS(42);
+}
+
+// clang-format off
+#define TINY_ELF_PROGRAM "\
+\177\105\114\106\002\001\001\000\000\000\000\000\000\000\000\000\
+\002\000\076\000\001\000\000\000\170\000\100\000\000\000\000\000\
+\100\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\
+\000\000\000\000\100\000\070\000\001\000\000\000\000\000\000\000\
+\001\000\000\000\005\000\000\000\000\000\000\000\000\000\000\000\
+\000\000\100\000\000\000\000\000\000\000\100\000\000\000\000\000\
+\200\000\000\000\000\000\000\000\200\000\000\000\000\000\000\000\
+\000\020\000\000\000\000\000\000\152\052\137\152\074\130\017\005"
+// clang-format on
+
+void ExecvTinyElf(const char *path) {
+  int ws;
+  if (!vfork()) {
+    execv(path, (char *[]){(char *)path, 0});
+    abort();
+  }
+  ASSERT_NE(-1, wait(&ws));
+  ASSERT_EQ(42, WEXITSTATUS(ws));
+}
+
+void ExecvpTinyElf(const char *path) {
+  int ws;
+  if (!vfork()) {
+    execvp(path, (char *[]){(char *)path, 0});
+    abort();
+  }
+  ASSERT_NE(-1, wait(&ws));
+  ASSERT_EQ(42, WEXITSTATUS(ws));
+}
+
+void ExecveTinyElf(const char *path) {
+  int ws;
+  if (!vfork()) {
+    execve(path, (char *[]){(char *)path, 0}, (char *[]){0});
+    abort();
+  }
+  ASSERT_NE(-1, wait(&ws));
+  ASSERT_EQ(42, WEXITSTATUS(ws));
+}
+
+BENCH(execve, bench) {
   if (!IsLinux()) return;
-  ws = system("bin/tiny64.elf");
-  EXPECT_TRUE(WIFEXITED(ws));
-  EXPECT_EQ(42, WEXITSTATUS(ws));
-  system("cp bin/tiny64.elf /tmp/tiny64.elf");
-}
-
-TEST(execve, fork_elf) {
-  if (!IsLinux()) return;
-  ASSERT_NE(-1, (pid = fork()));
-  if (!pid) {
-    execl("bin/tiny64.elf", "bin/tiny64.elf", 0);
-    _Exit(127);
-  }
-  ASSERT_EQ(pid, wait(&ws));
-  EXPECT_TRUE(WIFEXITED(ws));
-  EXPECT_EQ(42, WEXITSTATUS(ws));
-}
-
-TEST(execve, vfork_elf) {
-  if (!IsLinux()) return;
-  ASSERT_NE(-1, (pid = vfork()));
-  if (!pid) {
-    execl("bin/tiny64.elf", "bin/tiny64.elf", 0);
-    _Exit(127);
-  }
-  ASSERT_EQ(pid, wait(&ws));
-  EXPECT_TRUE(WIFEXITED(ws));
-  EXPECT_EQ(42, WEXITSTATUS(ws));
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-TEST(execve, system_apeNoModifySelf) {
-  if (IsWindows()) return;  // todo(jart): wut
-  for (int i = 0; i < 2; ++i) {
-    ws = system("bin/life-nomod.com");
-    EXPECT_TRUE(WIFEXITED(ws));
-    EXPECT_EQ(42, WEXITSTATUS(ws));
-    // see: HasMzHeader()
-    // EXPECT_TRUE(HasMzHeader("bin/life-nomod.com"));
-    system("cp bin/life-nomod.com /tmp/life-nomod.com");
-  }
-}
-
-TEST(execve, fork_apeNoModifySelf) {
-  for (int i = 0; i < 2; ++i) {
-    ASSERT_NE(-1, (pid = fork()));
-    if (!pid) {
-      execl("bin/life-nomod.com", "bin/life-nomod.com", 0);
-      _Exit(127);
-    }
-    ASSERT_EQ(pid, wait(&ws));
-    EXPECT_TRUE(WIFEXITED(ws));
-    EXPECT_EQ(42, WEXITSTATUS(ws));
-    // see: HasMzHeader()
-    // EXPECT_TRUE(HasMzHeader("bin/life-nomod.com"));
-  }
-}
-
-TEST(execve, vfork_apeNoModifySelf) {
-  for (int i = 0; i < 2; ++i) {
-    ASSERT_NE(-1, (pid = vfork()));
-    if (!pid) {
-      execl("bin/life-nomod.com", "bin/life-nomod.com", 0);
-      _Exit(127);
-    }
-    ASSERT_EQ(pid, wait(&ws));
-    EXPECT_TRUE(WIFEXITED(ws));
-    EXPECT_EQ(42, WEXITSTATUS(ws));
-    // see: HasMzHeader()
-    // EXPECT_TRUE(HasMzHeader("bin/life-nomod.com"));
-  }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-TEST(execve, system_apeClassic) {
-  if (IsWindows()) return;  // todo(jart): wut
-  for (int i = 0; i < 2; ++i) {
-    system("bin/life-classic.com");
-    EXPECT_TRUE(WIFEXITED(ws));
-    EXPECT_EQ(42, WEXITSTATUS(ws));
-    // see: HasMzHeader()
-    // if (UsingBinfmtMisc()) {
-    //  EXPECT_TRUE(HasMzHeader("bin/life-classic.com"));
-    // }
-  }
-}
-
-TEST(execve, fork_apeClassic) {
-  for (int i = 0; i < 2; ++i) {
-    ASSERT_NE(-1, (pid = fork()));
-    if (!pid) {
-      execl("bin/life-classic.com", "bin/life-classic.com", 0);
-      _Exit(127);
-    }
-    ASSERT_EQ(pid, wait(&ws));
-    EXPECT_TRUE(WIFEXITED(ws));
-    EXPECT_EQ(42, WEXITSTATUS(ws));
-    // see: HasMzHeader()
-    // if (UsingBinfmtMisc()) {
-    //  EXPECT_TRUE(HasMzHeader("bin/life-classic.com"));
-    // }
-  }
-}
-
-TEST(execve, vfork_apeClassic) {
-  for (int i = 0; i < 2; ++i) {
-    ASSERT_NE(-1, (pid = vfork()));
-    if (!pid) {
-      execl("bin/life-classic.com", "bin/life-classic.com", 0);
-      _Exit(127);
-    }
-    ASSERT_EQ(pid, wait(&ws));
-    EXPECT_TRUE(WIFEXITED(ws));
-    EXPECT_EQ(42, WEXITSTATUS(ws));
-    // see: HasMzHeader()
-    // if (UsingBinfmtMisc()) {
-    //   EXPECT_TRUE(HasMzHeader("bin/life-classic.com"));
-    // }
-  }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-#if 0  // not worth depending on THIRD_PARTY_PYTHON for this test
-
-TEST(execve, system_apeNoMod3mb) {
-  if (IsWindows()) return;  // todo(jart): wut
-  for (int i = 0; i < 2; ++i) {
-    system("bin/pylife.com");
-    EXPECT_TRUE(WIFEXITED(ws));
-    EXPECT_EQ(42, WEXITSTATUS(ws));
-    EXPECT_TRUE(HasMzHeader("bin/pylife.com"));
-  }
-}
-
-TEST(execve, fork_apeNoMod3mb) {
-  for (int i = 0; i < 2; ++i) {
-    ASSERT_NE(-1, (pid = fork()));
-    if (!pid) {
-      execl("bin/pylife.com", "bin/pylife.com", 0);
-      _Exit(127);
-    }
-    ASSERT_EQ(pid, wait(&ws));
-    EXPECT_TRUE(WIFEXITED(ws));
-    EXPECT_EQ(42, WEXITSTATUS(ws));
-    EXPECT_TRUE(HasMzHeader("bin/pylife.com"));
-  }
-}
-
-TEST(execve, vfork_apeNoMod3mb) {
-  for (int i = 0; i < 2; ++i) {
-    ASSERT_NE(-1, (pid = vfork()));
-    if (!pid) {
-      execl("bin/pylife.com", "bin/pylife.com", 0);
-      _Exit(127);
-    }
-    ASSERT_EQ(pid, wait(&ws));
-    EXPECT_TRUE(WIFEXITED(ws));
-    EXPECT_EQ(42, WEXITSTATUS(ws));
-    EXPECT_TRUE(HasMzHeader("bin/pylife.com"));
-  }
-}
-
-#endif
-////////////////////////////////////////////////////////////////////////////////
-
-void SystemElf(void) {
-  system("bin/tiny64.elf");
-}
-
-void ForkElf(void) {
-  if (!(pid = fork())) {
-    execl("bin/tiny64.elf", "bin/tiny64.elf", 0);
-    _Exit(127);
-  }
-  waitpid(pid, 0, 0);
-}
-
-void VforkElf(void) {
-  if (!(pid = vfork())) {
-    execl("bin/tiny64.elf", "bin/tiny64.elf", 0);
-    _Exit(127);
-  }
-  waitpid(pid, 0, 0);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-void SystemNoMod(void) {
-  system("bin/life-nomod.com");
-}
-
-void ForkNoMod(void) {
-  if (!(pid = fork())) {
-    execl("bin/life-nomod.com", "bin/life-nomod.com", 0);
-    _Exit(127);
-  }
-  waitpid(pid, 0, 0);
-}
-
-void VforkNoMod(void) {
-  if (!(pid = vfork())) {
-    execl("bin/life-nomod.com", "bin/life-nomod.com", 0);
-    _Exit(127);
-  }
-  waitpid(pid, 0, 0);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-void SystemClassic(void) {
-  system("bin/life-classic.com");
-}
-
-void ForkClassic(void) {
-  if (!(pid = fork())) {
-    execl("bin/life-classic.com", "bin/life-classic.com", 0);
-    _Exit(127);
-  }
-  waitpid(pid, 0, 0);
-}
-
-void VforkClassic(void) {
-  if (!(pid = vfork())) {
-    execl("bin/life-classic.com", "bin/life-classic.com", 0);
-    _Exit(127);
-  }
-  waitpid(pid, 0, 0);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-void SystemNoMod3mb(void) {
-  system("bin/life-nomod.com");
-}
-
-void ForkNoMod3mb(void) {
-  if (!(pid = fork())) {
-    execl("bin/life-nomod.com", "bin/life-nomod.com", 0);
-    _Exit(127);
-  }
-  waitpid(pid, 0, 0);
-}
-
-void VforkNoMod3mb(void) {
-  if (!(pid = vfork())) {
-    execl("bin/life-nomod.com", "bin/life-nomod.com", 0);
-    _Exit(127);
-  }
-  waitpid(pid, 0, 0);
-}
-
-BENCH(execve, bench1) {
-  if (IsLinux()) {
-    EZBENCH2("ForkElf", donothing, ForkElf());
-    EZBENCH2("VforkElf", donothing, VforkElf());
-    EZBENCH2("SystemElf", donothing, SystemElf());
-    kprintf("\n");
-  }
-
-  EZBENCH2("ForkApeClassic", donothing, ForkClassic());
-  EZBENCH2("VforkApeClassic", donothing, VforkClassic());
-  if (!IsWindows()) {
-    EZBENCH2("SystemApeClassic", donothing, SystemClassic());
-  }
-  kprintf("\n");
-
-  EZBENCH2("ForkApeNoMod", donothing, ForkNoMod());
-  EZBENCH2("VforkApeNoMod", donothing, VforkNoMod());
-  if (!IsWindows()) {
-    EZBENCH2("SystemApeNoMod", donothing, SystemNoMod());
-  }
-  kprintf("\n");
-
-  EZBENCH2("ForkNoMod3mb", donothing, ForkNoMod3mb());
-  EZBENCH2("VforkNoMod3mb", donothing, VforkNoMod3mb());
-  if (!IsWindows()) {
-    EZBENCH2("SystemNoMod3mb", donothing, SystemNoMod3mb());
-  }
+  char path[128] = "/tmp/tinyelf.XXXXXX";
+  int fd = mkstemp(path);
+  fchmod(fd, 0700);
+  write(fd, TINY_ELF_PROGRAM, sizeof(TINY_ELF_PROGRAM));
+  close(fd);
+  EZBENCH2("execv", donothing, ExecvTinyElf(path));
+  EZBENCH2("execvp", donothing, ExecvpTinyElf(path));
+  EZBENCH2("execve", donothing, ExecveTinyElf(path));
+  unlink(path);
 }

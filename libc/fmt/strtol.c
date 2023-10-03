@@ -20,7 +20,9 @@
 #include "libc/fmt/conv.h"
 #include "libc/fmt/strtol.internal.h"
 #include "libc/limits.h"
+#include "libc/stdckdint.h"
 #include "libc/str/str.h"
+#include "libc/str/tab.internal.h"
 
 /**
  * Decodes signed integer from ASCII string.
@@ -44,19 +46,20 @@
  *     on the the prefixes 0 (octal), 0x (hexadecimal), 0b (binary), or
  *     decimal (base 10) by default
  * @return the decoded signed saturated number
+ * @raise EINVAL if `base` isn't 0 or 2..36
+ * @raise ERANGE on overflow
  */
 long strtol(const char *s, char **endptr, int base) {
   char t = 0;
   long x = 0;
   int d, c = *s;
-  CONSUME_SPACES(s, c);
+  CONSUME_SPACES(char, s, c);
   GET_SIGN(s, c, d);
   GET_RADIX(s, c, base);
   if ((c = kBase36[c & 255]) && --c < base) {
     if (!((t |= 1) & 2)) {
       do {
-        if (__builtin_mul_overflow(x, base, &x) ||
-            __builtin_add_overflow(x, c * d, &x)) {
+        if (ckd_mul(&x, x, base) || ckd_add(&x, x, c * d)) {
           x = d > 0 ? LONG_MAX : LONG_MIN;
           errno = ERANGE;
           t |= 2;
@@ -64,6 +67,12 @@ long strtol(const char *s, char **endptr, int base) {
       } while ((c = kBase36[*++s & 255]) && --c < base);
     }
   }
-  if (t && endptr) *endptr = s;
+  if (t && endptr) {
+    *endptr = (char *)s;
+  }
   return x;
 }
+
+__weak_reference(strtol, strtoimax);
+__weak_reference(strtol, strtoll);
+__weak_reference(strtol, strtoll_l);

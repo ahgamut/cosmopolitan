@@ -21,7 +21,7 @@
 #include "libc/log/check.h"
 #include "libc/nexgen32e/crc32.h"
 #include "libc/runtime/runtime.h"
-#include "libc/stdio/append.internal.h"
+#include "libc/stdio/append.h"
 #include "libc/stdio/stdio.h"
 #include "libc/x/x.h"
 #include "third_party/zlib/zlib.h"
@@ -55,8 +55,7 @@ void m(const char *s, void *p, size_t n) {
   fprintf(f, "#include \"libc/x/x.h\"\n");
   fprintf(f, "/* clang-format off */\n");
   fprintf(f, "\n");
-  fprintf(f, "static bool %s_once;\n", s);
-  fprintf(f, "static void *%s_ptr;\n", s);
+  fprintf(f, "static _Atomic(void *) %s_ptr;\n", s);
   fprintf(f, "static const unsigned char %s_rodata[] = {", s);
   for (i = 0; i < m; ++i) {
     if (i % 13 == 0) fprintf(f, "\n ");
@@ -65,9 +64,7 @@ void m(const char *s, void *p, size_t n) {
   fprintf(f, "\n};\n");
   fprintf(f, "\n");
   fprintf(f, "optimizesize void *%s(void) {\n", s);
-  fprintf(f, "  if (%s_once) return %s_ptr;\n", s, s);
-  fprintf(f, "  return xload(&%s_once,\n", s);
-  fprintf(f, "               &%s_ptr,\n", s);
+  fprintf(f, "  return xload(&%s_ptr,\n", s);
   fprintf(f, "               %s_rodata,\n", s);
   fprintf(f, "               %d, %d); /* %g%% profit */\n", m, n,
           (double)m / n * 100);
@@ -89,7 +86,7 @@ void dzd(const char *s, void *p, size_t n, size_t z) {
     } else if (z == 4) {
       x = ((const uint32_t *)p)[i];
     } else {
-      unreachable;
+      __builtin_unreachable();
     }
     appendd(&r, t, zleb64(t, x - y) - t);
     y = x;
@@ -99,8 +96,7 @@ void dzd(const char *s, void *p, size_t n, size_t z) {
   fprintf(f, "#include \"libc/x/x.h\"\n");
   fprintf(f, "/* clang-format off */\n");
   fprintf(f, "\n");
-  fprintf(f, "static bool %s_once;\n", s);
-  fprintf(f, "static void *%s_ptr;\n", s);
+  fprintf(f, "static _Atomic(void *) %s_ptr;\n", s);
   fprintf(f, "static const unsigned char %s_rodata[%zu] = {", s, m);
   for (i = 0; i < m; ++i) {
     if (i % 13 == 0) fprintf(f, "\n ");
@@ -109,9 +105,7 @@ void dzd(const char *s, void *p, size_t n, size_t z) {
   fprintf(f, "\n};\n");
   fprintf(f, "\n");
   fprintf(f, "optimizesize void *%s(void) {\n", s);
-  fprintf(f, "  if (%s_once) return %s_ptr;\n", s, s);
-  fprintf(f, "  return xloadzd(&%s_once,\n", s);
-  fprintf(f, "                 &%s_ptr,\n", s);
+  fprintf(f, "  return xloadzd(&%s_ptr,\n", s);
   fprintf(f, "                 %s_rodata,\n", s);
   fprintf(f, "                 %d, %d, %d, %d, 0x%08xu); /* %g%% profit */\n",
           m, appendz(r).i, n / z, z, S, (double)m / n * 100);

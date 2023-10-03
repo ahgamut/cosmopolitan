@@ -16,9 +16,12 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/asmflag.h"
 #include "libc/calls/calls.h"
-#include "libc/calls/strace.internal.h"
+#include "libc/calls/syscall-sysv.internal.h"
+#include "libc/dce.h"
+#include "libc/errno.h"
+#include "libc/intrin/asmflag.h"
+#include "libc/intrin/strace.internal.h"
 #include "libc/sysv/consts/map.h"
 #include "libc/sysv/consts/mremap.h"
 #include "libc/sysv/errfuns.h"
@@ -31,35 +34,42 @@
  * C library runtime won't have any awareness of this memory, so certain
  * features like ASAN memory safety and kprintf() won't work as well.
  */
-privileged void *sys_mremap(void *p, size_t n, size_t m, int f, void *q) {
+void *sys_mremap(void *p, size_t n, size_t m, int f, void *q) {
+#ifdef __x86_64__
   bool cf;
-  uintptr_t rax, rdi, rsi, rdx;
+  uintptr_t res, rdx;
   register uintptr_t r8 asm("r8");
   register uintptr_t r10 asm("r10");
   if (IsLinux()) {
     r10 = f;
     r8 = (uintptr_t)q;
     asm("syscall"
-        : "=a"(rax)
+        : "=a"(res)
         : "0"(0x019), "D"(p), "S"(n), "d"(m), "r"(r10), "r"(r8)
         : "rcx", "r11", "memory", "cc");
-    if (rax > -4096ul) errno = -rax, rax = -1;
+    if (res > -4096ul) errno = -res, res = -1;
   } else if (IsNetbsd()) {
     if (f & MREMAP_MAYMOVE) {
-      rax = 0x19B;
+      res = 0x19B;
       r10 = m;
       r8 = (f & MREMAP_FIXED) ? MAP_FIXED : 0;
       asm(CFLAG_ASM("syscall")
-          : CFLAG_CONSTRAINT(cf), "+a"(rax), "=d"(rdx)
+          : CFLAG_CONSTRAINT(cf), "+a"(res), "=d"(rdx)
           : "D"(p), "S"(n), "2"(q), "r"(r10), "r"(r8)
           : "rcx", "r9", "r11", "memory", "cc");
-      if (cf) errno = rax, rax = -1;
+      if (cf) errno = res, res = -1;
     } else {
-      rax = einval();
+      res = einval();
     }
   } else {
-    rax = enosys();
+    res = enosys();
   }
-  KERNTRACE("sys_mremap(%p, %'zu, %'zu, %#b, %p) → %p% m", p, n, m, f, q, rax);
-  return (void *)rax;
+#elif defined(__aarch64__)
+  void *res;
+  res = __sys_mremap(p, n, m, f, q);
+#else
+#error "arch unsupported"
+#endif
+  KERNTRACE("sys_mremap(%p, %'zu, %'zu, %#b, %p) → %p% m", p, n, m, f, q, res);
+  return (void *)res;
 }

@@ -5,7 +5,7 @@
 │ https://docs.python.org/3/license.html                                       │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
-#include "libc/bits/likely.h"
+#include "libc/intrin/likely.h"
 #include "libc/fmt/fmt.h"
 #include "libc/log/countbranch.h"
 #include "third_party/python/Include/abstract.h"
@@ -32,6 +32,11 @@
 #include "third_party/python/Include/warnings.h"
 #include "third_party/python/Include/weakrefobject.h"
 /* clang-format off */
+
+static const short slotoffsets[] = {
+    -1, /* invalid slot */
+#include "third_party/python/Objects/typeslots.inc"
+};
 
 /* Type object implementation */
 
@@ -2790,11 +2795,6 @@ error:
     Py_XDECREF(type);
     return NULL;
 }
-
-static const short slotoffsets[] = {
-    -1, /* invalid slot */
-#include "typeslots.inc"
-};
 
 PyObject *
 PyType_FromSpecWithBases(PyType_Spec *spec, PyObject *bases)

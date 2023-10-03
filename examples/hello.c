@@ -9,9 +9,7 @@
 #endif
 #include "libc/stdio/stdio.h"
 
-STATIC_YOINK("mmap");  // TODO: fix bandaid for MODE=asan
-
 int main() {
-  printf("%s\n", "hello world");
+  printf("hello world\n");
   return 0;
 }

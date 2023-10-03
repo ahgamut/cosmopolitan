@@ -19,14 +19,33 @@
 #include "libc/calls/struct/flock.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/calls/syscall_support-sysv.internal.h"
+#include "libc/dce.h"
+#include "libc/errno.h"
+#include "libc/intrin/asan.internal.h"
 #include "libc/sysv/consts/f.h"
+#include "libc/sysv/consts/o.h"
+#include "libc/sysv/errfuns.h"
 
-int sys_fcntl(int fd, int cmd, uintptr_t arg) {
-  int rc;
+int sys_fcntl(int fd, int cmd, uintptr_t arg, int impl(int, int, ...)) {
+  int e, rc;
   bool islock;
-  islock = cmd == F_SETLK || cmd == F_SETLKW || cmd == F_GETLK;
-  if (islock) cosmo2flock(arg);
-  rc = __sys_fcntl(fd, cmd, arg);
-  if (islock) flock2cosmo(arg);
+  if ((islock = cmd == F_GETLK ||  //
+                cmd == F_SETLK ||  //
+                cmd == F_SETLKW)) {
+    if ((!IsAsan() && !arg) ||
+        (IsAsan() &&
+         !__asan_is_valid((struct flock *)arg, sizeof(struct flock)))) {
+      return efault();
+    }
+    cosmo2flock(arg);
+  }
+  e = errno;
+  rc = impl(fd, cmd, arg);
+  if (islock) {
+    flock2cosmo(arg);
+  } else if (rc == -1 && cmd == F_DUPFD_CLOEXEC && errno == EINVAL) {
+    errno = e;
+    rc = __fixupnewfd(impl(fd, F_DUPFD, arg), O_CLOEXEC);
+  }
   return rc;
 }

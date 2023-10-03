@@ -17,14 +17,13 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "dsp/tty/quant.h"
-#include "libc/bits/hilbert.h"
-#include "libc/bits/morton.h"
+#include "libc/intrin/hilbert.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
 #include "libc/macros.internal.h"
 #include "libc/math.h"
+#include "libc/mem/gc.internal.h"
 #include "libc/mem/mem.h"
-#include "libc/runtime/gc.internal.h"
 #include "libc/str/str.h"
 #include "tool/viz/lib/graphic.h"
 #include "tool/viz/lib/knobs.h"
@@ -91,15 +90,14 @@ static void SerpentineDither(long yw, long xw, unsigned char rgb[3][yw][xw],
                              long yn, long xn, long y, long x, long r,
                              const struct Dither *d) {
   void *c;
-  long b, e, i, j, n, m;
-  e = 0;
+  long b, i, j, n, m;
   b = d->chunks[r].b;
   c = d->chunks[r].c;
   n = (yn - y) / b;
   m = (xn - x) / b;
   for (i = 0; i < n; ++i) {
     for (j = 0; j < m; ++j) {
-      e = SerpentineDitherSq2(yw, xw, rgb, y + i * b, x + j * b, b, c, 0);
+      SerpentineDitherSq2(yw, xw, rgb, y + i * b, x + j * b, b, c, 0);
     }
   }
   if (r) {

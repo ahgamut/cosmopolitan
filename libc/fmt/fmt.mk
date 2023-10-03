@@ -34,11 +34,10 @@ LIBC_FMT_A_CHECKS =				\
 	$(LIBC_FMT_A_HDRS:%=o/$(MODE)/%.ok)
 
 LIBC_FMT_A_DIRECTDEPS =				\
+	LIBC_INTRIN				\
 	LIBC_NEXGEN32E				\
 	LIBC_NT_KERNEL32			\
 	LIBC_STR				\
-	LIBC_INTRIN				\
-	LIBC_STUBS				\
 	LIBC_SYSV				\
 	LIBC_TINYMATH				\
 	THIRD_PARTY_COMPILER_RT
@@ -54,15 +53,15 @@ $(LIBC_FMT_A).pkg:				\
 		$(LIBC_FMT_A_OBJS)		\
 		$(foreach x,$(LIBC_FMT_A_DIRECTDEPS),$($(x)_A).pkg)
 
-$(LIBC_FMT_A_OBJS):				\
-		OVERRIDE_CFLAGS +=		\
+$(LIBC_FMT_A_OBJS): private			\
+		CFLAGS +=			\
 			-fno-jump-tables
 
 o/$(MODE)/libc/fmt/formatint64.o		\
 o/$(MODE)/libc/fmt/formatint64thousands.o	\
 o/$(MODE)/libc/fmt/dosdatetimetounix.o		\
-o/$(MODE)/libc/fmt/itoa64radix10.greg.o:	\
-		OVERRIDE_CFLAGS +=		\
+o/$(MODE)/libc/fmt/itoa64radix10.greg.o: private\
+		CFLAGS +=			\
 			-O3
 
 o/$(MODE)/libc/fmt/atoi.o			\
@@ -73,19 +72,20 @@ o/$(MODE)/libc/fmt/wcstoul.o			\
 o/$(MODE)/libc/fmt/strtoimax.o			\
 o/$(MODE)/libc/fmt/strtoumax.o			\
 o/$(MODE)/libc/fmt/wcstoimax.o			\
-o/$(MODE)/libc/fmt/wcstoumax.o:			\
-		OVERRIDE_CFLAGS +=		\
+o/$(MODE)/libc/fmt/wcstoumax.o: private		\
+		CFLAGS +=			\
 			-Os
 
 # we can't use compiler magic because:
 #   kprintf() depends on these functions
 o/$(MODE)/libc/fmt/strerrno.greg.o		\
 o/$(MODE)/libc/fmt/strerrdoc.greg.o		\
-o/$(MODE)/libc/fmt/strerror_wr.greg.o:		\
-		OVERRIDE_CFLAGS +=		\
+o/$(MODE)/libc/fmt/strerror_wr.greg.o: private	\
+		COPTS +=			\
 			-fpie			\
-			-ffreestanding		\
-			$(NO_MAGIC)
+			-fno-sanitize=all	\
+			-fno-stack-protector	\
+			-fpatchable-function-entry=0,0
 
 LIBC_FMT_LIBS = $(foreach x,$(LIBC_FMT_ARTIFACTS),$($(x)))
 LIBC_FMT_SRCS = $(foreach x,$(LIBC_FMT_ARTIFACTS),$($(x)_SRCS))

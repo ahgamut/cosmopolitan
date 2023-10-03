@@ -10,24 +10,27 @@
 #include "dsp/tty/itoa8.h"
 #include "dsp/tty/quant.h"
 #include "dsp/tty/tty.h"
-#include "libc/alg/arraylist2.internal.h"
 #include "libc/assert.h"
-#include "libc/bits/bits.h"
-#include "libc/bits/safemacros.internal.h"
 #include "libc/calls/calls.h"
+#include "libc/calls/struct/dirent.h"
 #include "libc/calls/struct/itimerval.h"
 #include "libc/calls/struct/winsize.h"
+#include "libc/calls/termios.h"
 #include "libc/errno.h"
 #include "libc/fmt/conv.h"
 #include "libc/fmt/fmt.h"
+#include "libc/intrin/bits.h"
+#include "libc/intrin/safemacros.internal.h"
 #include "libc/inttypes.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
 #include "libc/macros.internal.h"
 #include "libc/math.h"
+#include "libc/mem/arraylist2.internal.h"
 #include "libc/mem/mem.h"
 #include "libc/runtime/runtime.h"
 #include "libc/sock/sock.h"
+#include "libc/sock/struct/pollfd.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/ex.h"
@@ -37,15 +40,16 @@
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/poll.h"
 #include "libc/sysv/consts/sig.h"
+#include "libc/thread/thread.h"
 #include "libc/time/time.h"
-#include "libc/x/x.h"
-#include "libc/zip.h"
-#include "libc/zipos/zipos.internal.h"
-#include "third_party/getopt/getopt.h"
+#include "libc/x/xasprintf.h"
+#include "libc/x/xsigaction.h"
+#include "libc/zip.internal.h"
+#include "third_party/getopt/getopt.internal.h"
 #include "third_party/libcxx/vector"
 #include "tool/viz/lib/knobs.h"
 
-STATIC_YOINK("zip_uri_support");
+__static_yoink("zipos");
 
 #define USAGE \
   " [ROM] [FMV]\n\
@@ -161,7 +165,6 @@ static struct TtyRgb* ttyrgb_;
 static unsigned char *R, *G, *B;
 static struct ZipGames zipgames_;
 static struct Action arrow_, button_;
-static struct SamplingSolution* asx_;
 static struct SamplingSolution* ssy_;
 static struct SamplingSolution* ssx_;
 static unsigned char pixels_[3][DYN][DXN];
@@ -247,7 +250,7 @@ void Exit(int rc) {
 void Cleanup(void) {
   ttyraw((enum TtyRawFlags)(-1u));
   ttyshowcursor(STDOUT_FILENO);
-  if (playpid_) kill(playpid_, SIGTERM), sched_yield();
+  if (playpid_) kill(playpid_, SIGTERM), pthread_yield();
 }
 
 void OnTimer(void) {
@@ -285,13 +288,13 @@ void GetTermSize(void) {
   struct winsize wsize_;
   wsize_.ws_row = 25;
   wsize_.ws_col = 80;
-  getttysize(STDIN_FILENO, &wsize_);
+  tcgetwinsize(0, &wsize_);
   FreeSamplingSolution(ssy_);
   FreeSamplingSolution(ssx_);
   tyn_ = wsize_.ws_row * 2;
   txn_ = wsize_.ws_col * 2;
   ssy_ = ComputeSamplingSolution(tyn_, ChopAxis(tyn_, DYN), 0, 0, 2);
-  ssx_ = ComputeSamplingSolution(txn_, ChopAxis(txn_, DXN), 0, 0, 0);
+  ssx_ = ComputeSamplingSolution(txn_, ChopAxis(txn_, DXN), 0, 0, 2);
   R = (unsigned char*)realloc(R, tyn_ * txn_);
   G = (unsigned char*)realloc(G, tyn_ * txn_);
   B = (unsigned char*)realloc(B, tyn_ * txn_);
@@ -582,7 +585,6 @@ void Raster(void) {
     f->p = stpcpy(f->p, "\e[0m\e[H");
     f->p = stpcpy(f->p, status_.text);
   }
-  CHECK_LT(f->p - f->mem, vtsize_);
   PollAndSynchronize();
 }
 
@@ -596,7 +598,6 @@ void FlushScanline(unsigned py) {
 }
 
 static void PutPixel(unsigned px, unsigned py, unsigned pixel, int offset) {
-  unsigned rgb;
   static unsigned prev;
   pixels_[0][py][px] = palette_[offset][prev % 64][pixel][2];
   pixels_[1][py][px] = palette_[offset][prev % 64][pixel][1];
@@ -1673,7 +1674,7 @@ char* GetLine(void) {
   static char* line;
   static size_t linesize;
   if (getline(&line, &linesize, stdin) > 0) {
-    return _chomp(line);
+    return chomp(line);
   } else {
     return NULL;
   }
@@ -1807,19 +1808,12 @@ void GetOpts(int argc, char* argv[]) {
 }
 
 size_t FindZipGames(void) {
-  char* name;
-  struct Zipos* zipos;
-  size_t i, cf, namesize;
-  if ((zipos = __zipos_get())) {
-    for (i = 0, cf = ZIP_CDIR_OFFSET(zipos->cdir);
-         i < ZIP_CDIR_RECORDS(zipos->cdir);
-         ++i, cf += ZIP_CFILE_HDRSIZE(zipos->map + cf)) {
-      if (ZIP_CFILE_NAMESIZE(zipos->map + cf) > 4 &&
-          !memcmp((ZIP_CFILE_NAME(zipos->map + cf) +
-                   ZIP_CFILE_NAMESIZE(zipos->map + cf) - 4),
-                  ".nes", 4) &&
-          (name = xasprintf("/zip/%.*s", ZIP_CFILE_NAMESIZE(zipos->map + cf),
-                            ZIP_CFILE_NAME(zipos->map + cf)))) {
+  DIR* dir;
+  if ((dir = opendir("/zip/usr/share/rom"))) {
+    struct dirent* ent;
+    while ((ent = readdir(dir))) {
+      if (endswith(ent->d_name, ".nes")) {
+        char* name = xasprintf("/zip/usr/share/rom/%s", ent->d_name);
         APPEND(&zipgames_.p, &zipgames_.i, &zipgames_.n, &name);
       }
     }
@@ -1831,14 +1825,14 @@ int SelectGameFromZip(void) {
   int i, rc;
   char *line, *uri;
   fputs("\nCOSMOPOLITAN NESEMU1\n\n", stdout);
-  for (i = 0; i < zipgames_.i; ++i) {
+  for (i = 0; i < (int)zipgames_.i; ++i) {
     printf("  [%d] %s\n", i, zipgames_.p[i]);
   }
   fputs("\nPlease choose a game (or CTRL-C to quit) [default 0]: ", stdout);
   fflush(stdout);
   rc = 0;
   if ((line = GetLine())) {
-    i = MAX(0, MIN(zipgames_.i - 1, atoi(line)));
+    i = MAX(0, MIN((int)zipgames_.i - 1, atoi(line)));
     uri = zipgames_.p[i];
     rc = PlayGame(uri, NULL);
     free(uri);

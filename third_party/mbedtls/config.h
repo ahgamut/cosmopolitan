@@ -1,12 +1,5 @@
 #ifndef MBEDTLS_CONFIG_H_
 #define MBEDTLS_CONFIG_H_
-#include "libc/dce.h"
-
-/* /\* uncomment for testing old cpu code paths *\/ */
-/* #include "libc/nexgen32e/x86feature.h" */
-/* #undef X86_HAVE */
-/* #define X86_HAVE(x) 0 */
-/* #undef __x86_64__ */
 
 /* protocols */
 #define MBEDTLS_SSL_PROTO_TLS1_2
@@ -27,19 +20,15 @@
 /* random numbers */
 #define ENTROPY_HAVE_STRONG
 #define MBEDTLS_CTR_DRBG_C
-#ifndef TINY
 #define MBEDTLS_HMAC_DRBG_C
 /*#define MBEDTLS_ENTROPY_FORCE_SHA256*/
 /*#define MBEDTLS_TEST_NULL_ENTROPY*/
-#endif
 
 /* ciphers */
 #define MBEDTLS_AES_C
-#ifndef TINY
 #define MBEDTLS_CHACHA20_C
 #define MBEDTLS_POLY1305_C
 #define MBEDTLS_CHACHAPOLY_C
-#endif
 #ifdef MBEDTLS_SSL_PROTO_TLS1
 #define MBEDTLS_DES_C
 #endif
@@ -62,14 +51,14 @@
 #define MBEDTLS_RSA_C
 #define MBEDTLS_KEY_EXCHANGE_RSA_ENABLED
 #define MBEDTLS_KEY_EXCHANGE_PSK_ENABLED
-#ifndef TINY
 #define MBEDTLS_ECP_C
 #define MBEDTLS_ECDH_C
 #define MBEDTLS_ECDSA_C
 #define MBEDTLS_ECDSA_DETERMINISTIC
-#define MBEDTLS_ECDH_VARIANT_EVEREST_ENABLED
 #define MBEDTLS_KEY_EXCHANGE_ECDHE_ECDSA_ENABLED
 #define MBEDTLS_KEY_EXCHANGE_ECDHE_RSA_ENABLED
+#define MBEDTLS_ECDH_VARIANT_EVEREST_ENABLED
+#ifndef TINY
 #define MBEDTLS_KEY_EXCHANGE_ECDHE_PSK_ENABLED
 #define MBEDTLS_DHM_C
 #define MBEDTLS_KEY_EXCHANGE_DHE_RSA_ENABLED
@@ -80,11 +69,11 @@
 #endif
 
 /* eliptic curves */
-#ifndef TINY
-#define MBEDTLS_ECP_DP_SECP384R1_ENABLED
 #define MBEDTLS_ECP_DP_SECP256R1_ENABLED
-#define MBEDTLS_ECP_DP_CURVE448_ENABLED
+#define MBEDTLS_ECP_DP_SECP384R1_ENABLED
 #define MBEDTLS_ECP_DP_CURVE25519_ENABLED
+#ifndef TINY
+#define MBEDTLS_ECP_DP_CURVE448_ENABLED
 /*#define MBEDTLS_ECP_DP_SECP521R1_ENABLED*/
 /*#define MBEDTLS_ECP_DP_BP384R1_ENABLED*/
 /*#define MBEDTLS_ECP_DP_SECP192R1_ENABLED*/
@@ -112,7 +101,9 @@
  * Hardens against against sbox side channels
  */
 #define MBEDTLS_AESNI_C
-#ifndef TINY
+#define MBEDTLS_AESCE_C
+
+#ifdef __x86_64__
 #define MBEDTLS_HAVE_X86_64
 #define MBEDTLS_HAVE_SSE2
 #endif
@@ -146,7 +137,7 @@
 #define MBEDTLS_ZLIB_SUPPORT
 #endif
 
-#if IsModeDbg()
+#ifdef MODE_DBG
 #define MBEDTLS_CHECK_PARAMS
 #endif
 

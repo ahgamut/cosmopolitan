@@ -1,5 +1,7 @@
 #ifndef ZUTIL_H
 #define ZUTIL_H
+#include "libc/intrin/kprintf.h"
+#include "libc/limits.h"
 #include "third_party/zlib/zlib.h"
 
 /* default windowBits for decompression. MAX_WBITS is for compression only */
@@ -22,6 +24,10 @@
 
 #define OS_CODE 3 /* assume Unix */
 
+#if defined(STDC) && !defined(HAVE_MEMCPY) && !defined(NO_MEMCPY)
+#define HAVE_MEMCPY
+#endif
+
 #if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 
@@ -32,7 +38,7 @@ COSMOPOLITAN_C_START_
    define "local" for the non-static meaning of "static", for readability
    (compile with -Dlocal if your debugger can't find static symbols) */
 
-extern const char *const z_errmsg[10] hidden; /* indexed by 2-zlib_error */
+extern const char *const z_errmsg[10]; /* indexed by 2-zlib_error */
 /* (size given to avoid silly warnings with Visual C++) */
 
 #define ERR_MSG(err) z_errmsg[Z_NEED_DICT - (err)]
@@ -46,32 +52,33 @@ extern const char *const z_errmsg[10] hidden; /* indexed by 2-zlib_error */
 
 /* Diagnostic functions */
 #ifdef ZLIB_DEBUG
-#include "libc/stdio/stdio.h"
-extern int z_verbose hidden;
-extern void z_error(char *m) hidden;
-#define Assert(cond, msg)      \
-  {                            \
-    if (!(cond)) z_error(msg); \
+extern int z_verbose;
+extern void z_error(const char *, int, char *);
+#define Assert(cond, msg)               \
+  {                                     \
+    if (!(cond)) {                      \
+      z_error(__FILE__, __LINE__, msg); \
+    }                                   \
   }
 #define Trace(x)                   \
   {                                \
-    if (z_verbose >= 0) fprintf x; \
+    if (z_verbose >= 0) kprintf x; \
   }
 #define Tracev(x)                 \
   {                               \
-    if (z_verbose > 0) fprintf x; \
+    if (z_verbose > 0) kprintf x; \
   }
 #define Tracevv(x)                \
   {                               \
-    if (z_verbose > 1) fprintf x; \
+    if (z_verbose > 1) kprintf x; \
   }
 #define Tracec(c, x)                     \
   {                                      \
-    if (z_verbose > 0 && (c)) fprintf x; \
+    if (z_verbose > 0 && (c)) kprintf x; \
   }
 #define Tracecv(c, x)                    \
   {                                      \
-    if (z_verbose > 1 && (c)) fprintf x; \
+    if (z_verbose > 1 && (c)) kprintf x; \
   }
 #else
 #define Assert(cond, msg)
@@ -94,6 +101,38 @@ extern void z_error(char *m) hidden;
 #define ZSWAP32(q)                                                      \
   ((((q) >> 24) & 0xff) + (((q) >> 8) & 0xff00) + (((q)&0xff00) << 8) + \
    (((q)&0xff) << 24))
+
+typedef unsigned char uch;
+typedef uch uchf;
+typedef unsigned short ush;
+typedef ush ushf;
+typedef unsigned long ulg;
+
+#ifdef HAVE_HIDDEN
+#define ZLIB_INTERNAL __attribute__((__visibility__("hidden")))
+#else
+#define ZLIB_INTERNAL
+#endif
+
+#ifndef local
+#define local static
+#endif
+
+#if !defined(Z_U8) && !defined(Z_SOLO) && defined(STDC)
+#if (ULONG_MAX == 0xffffffffffffffff)
+#define Z_U8 unsigned long
+#elif (ULLONG_MAX == 0xffffffffffffffff)
+#define Z_U8 unsigned long long
+#elif (UINT_MAX == 0xffffffffffffffff)
+#define Z_U8 unsigned
+#endif
+#endif
+
+#ifdef _MSC_VER
+#define zalign(x) __declspec(align(x))
+#else
+#define zalign(x) __attribute__((aligned((x))))
+#endif
 
 COSMOPOLITAN_C_END_
 #endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */

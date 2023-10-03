@@ -8,12 +8,14 @@
 ╚─────────────────────────────────────────────────────────────────*/
 #endif
 #include "libc/calls/calls.h"
+#include "libc/intrin/kprintf.h"
 #include "libc/log/check.h"
-#include "libc/stdio/stdio.h"
 
 int main(int argc, char *argv[]) {
-  char hostname[254];
-  CHECK_NE(-1, gethostname(hostname, sizeof(hostname)));
-  puts(hostname);
+  char name[254];
+  gethostname(name, sizeof(name));
+  kprintf("gethostname() → %#s\n", name);
+  getdomainname(name, sizeof(name));
+  kprintf("getdomainname() → %#s\n", name);
   return 0;
 }

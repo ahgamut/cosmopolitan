@@ -16,10 +16,11 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/strace.internal.h"
 #include "libc/calls/syscall_support-nt.internal.h"
 #include "libc/intrin/describeflags.internal.h"
+#include "libc/intrin/strace.internal.h"
 #include "libc/nt/process.h"
+#include "libc/nt/runtime.h"
 #include "libc/nt/thunk/msabi.h"
 
 __msabi extern typeof(CreateProcess) *const __imp_CreateProcessW;
@@ -31,8 +32,8 @@ __msabi extern typeof(CreateProcess) *const __imp_CreateProcessW;
  */
 textwindows bool32
 CreateProcess(const char16_t *opt_lpApplicationName, char16_t *lpCommandLine,
-              struct NtSecurityAttributes *opt_lpProcessAttributes,
-              struct NtSecurityAttributes *opt_lpThreadAttributes,
+              const struct NtSecurityAttributes *opt_lpProcessAttributes,
+              const struct NtSecurityAttributes *opt_lpThreadAttributes,
               bool32 bInheritHandles, uint32_t dwCreationFlags,
               void *opt_lpEnvironment, const char16_t *opt_lpCurrentDirectory,
               const struct NtStartupInfo *lpStartupInfo,

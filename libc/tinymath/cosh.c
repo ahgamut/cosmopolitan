@@ -33,7 +33,7 @@ asm(".ident\t\"\\n\\n\
 Musl libc (MIT License)\\n\
 Copyright 2005-2014 Rich Felker, et. al.\"");
 asm(".include \"libc/disclaimer.inc\"");
-/* clang-format off */
+// clang-format off
 
 /**
  * Returns hyperbolic cosine of 𝑥.
@@ -76,3 +76,7 @@ double cosh(double x)
 	t = __expo2(x, 1.0);
 	return t;
 }
+
+#if LDBL_MANT_DIG == 53 && LDBL_MAX_EXP == 1024
+__weak_reference(cosh, coshl);
+#endif

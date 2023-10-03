@@ -16,24 +16,22 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/calls.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/calls/termios.h"
 #include "libc/errno.h"
-#include "libc/fmt/itoa.h"
-#include "libc/str/str.h"
-#include "libc/sysv/consts/termios.h"
-#include "libc/sysv/errfuns.h"
 
+/**
+ * Gets name subordinate pseudoteletypewriter.
+ *
+ * @return 0 on success, or errno on error
+ */
 errno_t ptsname_r(int fd, char *buf, size_t size) {
-  int pty;
-  char tb[32];
-  if (size) {
-    if (!buf) return einval();
-    if (ioctl(fd, TIOCGPTN, &pty) == -1) return errno;
-    FormatInt32(stpcpy(tb, "/dev/pts/"), pty);
-    if (strlen(tb) + 1 >= size) return (errno = ERANGE);
-    stpcpy(buf, tb);
-    /* TODO(jart): OpenBSD OMG */
+  int rc, e = errno;
+  if (!_ptsname(fd, buf, size)) {
+    rc = 0;
+  } else {
+    rc = errno;
+    errno = e;
   }
-  return 0;
+  return rc;
 }

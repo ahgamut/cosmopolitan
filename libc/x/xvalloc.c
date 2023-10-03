@@ -16,12 +16,11 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/log/log.h"
 #include "libc/mem/mem.h"
 #include "libc/x/x.h"
 
 /**
- * Allocates page-aligned memory, or dies.
+ * Allocates frame-aligned memory, or dies.
  */
 void *xvalloc(size_t size) {
   void *res = valloc(size);

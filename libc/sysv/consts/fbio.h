@@ -1,0 +1,16 @@
+#ifndef COSMOPOLITAN_LIBC_SYSV_CONSTS_FB_H_
+#define COSMOPOLITAN_LIBC_SYSV_CONSTS_FB_H_
+#if !(__ASSEMBLER__ + __LINKER__ + 0)
+COSMOPOLITAN_C_START_
+
+extern const uint64_t FBIOGET_VSCREENINFO;
+extern const uint64_t FBIOPUT_VSCREENINFO;
+extern const uint64_t FBIOGET_FSCREENINFO;
+extern const uint64_t FBIOGETCMAP;
+extern const uint64_t FBIOPUTCMAP;
+extern const uint64_t FBIOPAN_DISPLAY;
+extern const uint64_t FBIO_WAITFORVSYNC;
+
+COSMOPOLITAN_C_END_
+#endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
+#endif /* COSMOPOLITAN_LIBC_SYSV_CONSTS_FB_H_ */

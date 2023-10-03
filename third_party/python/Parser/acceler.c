@@ -4,6 +4,7 @@
 │ Python 3                                                                     │
 │ https://docs.python.org/3/license.html                                       │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/runtime/runtime.h"
 #include "third_party/python/Include/grammar.h"
 #include "third_party/python/Include/node.h"
 #include "third_party/python/Include/objimpl.h"
@@ -65,7 +66,7 @@ fixdfa(grammar *g, dfa *d)
         fixstate(g, s);
 }
 
-static optimizespeed void
+static void
 fixstate(grammar *g, state *s)
 {
     arc *a;

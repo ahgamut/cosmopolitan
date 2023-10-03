@@ -16,30 +16,30 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/runtime/gc.internal.h"
+#include "libc/mem/gc.internal.h"
 #include "libc/str/str.h"
 #include "libc/testlib/hyperion.h"
 #include "libc/testlib/testlib.h"
 #include "libc/x/x.h"
 
+void SetUpOnce(void) {
+  testlib_enable_tmp_setup_teardown();
+}
+
 TEST(xslurp, testEmptyWithNulTerminatedStringBehavior) {
   size_t got;
   const char *data;
-  const char *path = gc(xjoinpaths(kTmpPath, "xslurp.txt"));
-  ASSERT_NE(-1, xbarf(path, "", -1));
-  ASSERT_NE(NULL, (data = gc(xslurp(path, &got))));
+  ASSERT_NE(-1, xbarf("xslurp.txt", "", -1));
+  ASSERT_NE(NULL, (data = gc(xslurp("xslurp.txt", &got))));
   ASSERT_EQ(0, got);
   ASSERT_STREQ("", data);
-  ASSERT_NE(-1, unlink(path));
 }
 
 TEST(xslurp, testHyperion) {
   size_t got;
   const char *data;
-  const char *path = gc(xjoinpaths(kTmpPath, "xslurp.txt"));
-  ASSERT_NE(-1, xbarf(path, kHyperion, kHyperionSize));
-  ASSERT_NE(NULL, (data = gc(xslurp(path, &got))));
+  ASSERT_NE(-1, xbarf("xslurp.txt", kHyperion, kHyperionSize));
+  ASSERT_NE(NULL, (data = gc(xslurp("xslurp.txt", &got))));
   ASSERT_EQ(kHyperionSize, got);
   ASSERT_EQ(0, memcmp(data, kHyperion, kHyperionSize));
-  ASSERT_NE(-1, unlink(path));
 }

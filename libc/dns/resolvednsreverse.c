@@ -24,17 +24,18 @@
 │ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR        │
 │ OTHER DEALINGS IN THE SOFTWARE.                                              │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/bits.h"
 #include "libc/calls/calls.h"
 #include "libc/dns/consts.h"
 #include "libc/dns/dns.h"
 #include "libc/dns/dnsheader.h"
 #include "libc/dns/dnsquestion.h"
 #include "libc/dns/resolvconf.h"
+#include "libc/intrin/bits.h"
 #include "libc/mem/mem.h"
-#include "libc/rand/rand.h"
 #include "libc/runtime/runtime.h"
 #include "libc/sock/sock.h"
+#include "libc/sock/struct/sockaddr.h"
+#include "libc/stdio/rand.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/af.h"
 #include "libc/sysv/consts/ipproto.h"
@@ -65,7 +66,7 @@ int ResolveDnsReverse(const struct ResolvConf *resolvconf, int af,
   if (!resolvconf->nameservers.i) return 0;
   bzero(&h, sizeof(h));
   rc = ebadmsg();
-  h.id = rand64();
+  h.id = _rand64();
   h.bf1 = 1; /* recursion desired */
   h.qdcount = 1;
   q.qname = name;
@@ -75,7 +76,7 @@ int ResolveDnsReverse(const struct ResolvConf *resolvconf, int af,
   SerializeDnsHeader(msg, &h);
   if ((n = SerializeDnsQuestion(msg + 12, 500, &q)) == -1) return -1;
   if ((fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1) return -1;
-  if (sendto(fd, msg, 12 + n, 0, resolvconf->nameservers.p,
+  if (sendto(fd, msg, 12 + n, 0, (struct sockaddr *)resolvconf->nameservers.p,
              sizeof(*resolvconf->nameservers.p)) == 12 + n &&
       (n = read(fd, msg, 512)) >= 12) {
     DeserializeDnsHeader(&h2, msg);

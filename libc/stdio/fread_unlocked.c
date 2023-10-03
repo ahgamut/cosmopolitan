@@ -19,16 +19,12 @@
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/iovec.h"
 #include "libc/errno.h"
-#include "libc/fmt/conv.h"
 #include "libc/macros.internal.h"
-#include "libc/runtime/runtime.h"
-#include "libc/sock/sock.h"
+#include "libc/stdckdint.h"
 #include "libc/stdio/internal.h"
 #include "libc/stdio/stdio.h"
-#include "libc/str/internal.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/o.h"
-#include "libc/sysv/errfuns.h"
 
 /**
  * Reads data from stream.
@@ -42,6 +38,9 @@ size_t fread_unlocked(void *buf, size_t stride, size_t count, FILE *f) {
   ssize_t rc;
   size_t n, m;
   struct iovec iov[2];
+  if (!stride) {
+    return 0;
+  }
   if ((f->iomode & O_ACCMODE) == O_WRONLY) {
     f->state = errno = EBADF;
     return 0;
@@ -50,7 +49,7 @@ size_t fread_unlocked(void *buf, size_t stride, size_t count, FILE *f) {
     f->state = errno = EINVAL;
     return 0;
   }
-  if (__builtin_mul_overflow(stride, count, &n)) {
+  if (ckd_mul(&n, stride, count)) {
     f->state = errno = EOVERFLOW;
     return 0;
   }

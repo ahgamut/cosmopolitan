@@ -31,7 +31,7 @@ this program.  If not, see <http://www.gnu.org/licenses/>.  */
 #endif
 
 #ifdef HAVE_CONFIG_H
-# include "third_party/make/config.h"
+#include "third_party/make/config.h"
 #endif
 #pragma GCC diagnostic ignored "-Wredundant-decls"
 
@@ -646,7 +646,7 @@ _getopt_internal (int argc, char *const *argv, const char *optstring,
 		optarg = nameend + 1;
 	      else
 		{
-		  if (opterr)
+		  if (opterr) {
 		   if (argv[optind - 1][1] == '-')
 		    /* --option */
 		    fprintf (stderr,
@@ -657,7 +657,7 @@ _getopt_internal (int argc, char *const *argv, const char *optstring,
 		    fprintf (stderr,
 		     _("%s: option '%c%s' doesn't allow an argument\n"),
 		     argv[0], argv[optind - 1][0], pfound->name);
-
+                  }
 		  nextchar += strlen (nextchar);
 
 		  optopt = pfound->val;

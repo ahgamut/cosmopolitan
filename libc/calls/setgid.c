@@ -17,14 +17,18 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
-#include "libc/calls/strace.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
+#include "libc/dce.h"
+#include "libc/intrin/strace.internal.h"
 
 /**
  * Sets group id of current process.
- * @return 0 on success or -1 w/ errno
+ *
+ * @return 0 on success, or -1 w/ errno
+ * @raise EINVAL if gid not in legal range
+ * @raise EPERM if lack privileges
  */
-int setgid(int gid) {
+int setgid(unsigned gid) {
   int rc;
   if (IsWindows() && gid == getgid()) {
     rc = 0;

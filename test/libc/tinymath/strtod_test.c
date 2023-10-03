@@ -16,12 +16,16 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/fmt/conv.h"
 #include "libc/macros.internal.h"
+#include "libc/mem/gc.h"
+#include "libc/mem/mem.h"
 #include "libc/runtime/fenv.h"
-#include "libc/runtime/gc.internal.h"
+#include "libc/stdio/stdio.h"
+#include "libc/testlib/ezbench.h"
 #include "libc/testlib/testlib.h"
-#include "libc/x/x.h"
-#include "third_party/gdtoa/gdtoa.h"
+#include "libc/x/xasprintf.h"
+#include "third_party/double-conversion/wrapper.h"
 
 #define HEX(d) (union Pun){d}.i
 
@@ -34,6 +38,17 @@ static const struct {
   uint64_t i;
   const char *s;
 } V[] = {
+    {0x7FF8000000000000, "nan"},                        //
+    {0x7FF8000000000000, "NaN"},                        //
+    {0x7FF8000000000000, "NAn"},                        //
+    {0x7FF8000000000000, "nAN"},                        //
+    {0x7FF8000000000000, "NAN"},                        //
+    {0x7FF0000000000000, "INF"},                        //
+    {0x7FF0000000000000, "iNf"},                        //
+    {0x7FF8000000000000, "+NAN"},                       //
+    {0xFFF8000000000000, "-NAN"},                       //
+    {0x7FF0000000000000, "+INF"},                       //
+    {0xFFF0000000000000, "-INF"},                       //
     {0x2fa7b6d71d20b96c, "4e-079"},                     //
     {0x09eb8d7e32be6396, "7e-261"},                     //
     {0x3ae7361cb863de62, "6e-025"},                     //
@@ -81,6 +96,10 @@ static const struct {
     {0x7044d64d4079150c, "647e0230"},                   //
     {0x64a7d93193f78fc6, "755e0174"},                   //
     {0x30dcd5bee57763e6, "255e-075"},                   //
+    {0x7FF0000000000000, "INFINITY"},                   //
+    {0x7FF0000000000000, "iNfiNiTy"},                   //
+    {0x7FF0000000000000, "+INFINITY"},                  //
+    {0xFFF0000000000000, "-INFINITY"},                  //
     {0x4c159bd3ad46e346, "3391e0055"},                  //
     {0x3d923d1b5eb1d778, "4147e-015"},                  //
     {0x3b482782afe1869e, "3996e-026"},                  //
@@ -375,19 +394,19 @@ TEST(strtod, test) {
 TEST(strtod, testNearest) {
   fesetround(FE_TONEAREST);
   EXPECT_STREQ("-1.79769313486231e+308",
-               gc(xasprintf("%.15g", strtod("-1.79769313486231e+308", NULL))));
+               _gc(xasprintf("%.15g", strtod("-1.79769313486231e+308", NULL))));
 }
 
 TEST(strtod, testDownward) {
   fesetround(FE_DOWNWARD);
   EXPECT_STREQ("-1.79769313486232e+308",
-               gc(xasprintf("%.15g", strtod("-1.79769313486231e+308", NULL))));
+               _gc(xasprintf("%.15g", strtod("-1.79769313486231e+308", NULL))));
 }
 
 TEST(strtod, testUpward) {
   fesetround(FE_UPWARD);
   EXPECT_STREQ("-1.7976931348623e+308",
-               gc(xasprintf("%.15g", strtod("-1.79769313486231e+308", NULL))));
+               _gc(xasprintf("%.15g", strtod("-1.79769313486231e+308", NULL))));
 }
 
 TEST(strtod, testTowardzero) {
@@ -400,4 +419,15 @@ TEST(strtod, testTowardzero) {
     fesetround(FE_TONEAREST);
     free(p);
   }
+}
+
+BENCH(strtod, bench) {
+  char buf[128];
+  EZBENCH2("strtod", donothing, strtod("-1.79769313486231e+308", 0));
+  EZBENCH2("StringToDouble", donothing,
+           StringToDouble("-1.79769313486231e+308", 22, 0));
+  EZBENCH2("snprintf %g", donothing,
+           snprintf(buf, 128, "%g", -1.79769313486231e+308));
+  EZBENCH2("DoubleToEcmascript", donothing,
+           DoubleToEcmascript(buf, -1.79769313486231e+308));
 }

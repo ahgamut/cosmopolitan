@@ -17,13 +17,12 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/math.h"
-#include "libc/str/str.h"
 
 /**
  * Adds floats in array.
  */
-float fsumf(const float *p, size_t n) {
-  float s;
+double fsumf(const float *p, size_t n) {
+  double s;
   size_t i;
   if (n > 8) return fsumf(p, n / 2) + fsumf(p + n / 2, n - n / 2);
   for (s = i = 0; i < n; ++i) s += p[i];

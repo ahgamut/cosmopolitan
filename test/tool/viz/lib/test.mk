@@ -24,21 +24,17 @@ TEST_TOOL_VIZ_LIB_CHECKS =				\
 
 TEST_TOOL_VIZ_LIB_DIRECTDEPS =				\
 	DSP_MPEG					\
-	LIBC_ALG					\
 	LIBC_FMT					\
 	LIBC_INTRIN					\
 	LIBC_LOG					\
 	LIBC_MEM					\
 	LIBC_NEXGEN32E					\
-	LIBC_RAND					\
 	LIBC_RUNTIME					\
 	LIBC_STDIO					\
-	LIBC_STUBS					\
 	LIBC_TESTLIB					\
 	LIBC_STR					\
 	LIBC_TIME					\
 	LIBC_TINYMATH					\
-	LIBC_UNICODE					\
 	LIBC_X						\
 	TOOL_VIZ_LIB
 

@@ -16,36 +16,57 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/atomic.h"
 #include "libc/calls/calls.h"
 #include "libc/errno.h"
-#include "libc/intrin/kprintf.h"
-#include "libc/intrin/pthread.h"
+#include "libc/intrin/atomic.h"
+#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/weaken.h"
+#include "libc/runtime/internal.h"
+#include "libc/thread/thread.h"
+#include "third_party/nsync/mu.h"
 
 /**
  * Releases mutex.
+ *
+ * This function does nothing in vfork() children.
+ *
  * @return 0 on success or error number on failure
  * @raises EPERM if in error check mode and not owned by caller
+ * @vforksafe
  */
-int(pthread_mutex_unlock)(pthread_mutex_t *mutex) {
-  int me, owner;
-  switch (mutex->attr) {
-    case PTHREAD_MUTEX_ERRORCHECK:
-      me = gettid();
-      owner = atomic_load_explicit(&mutex->lock, memory_order_relaxed);
-      if (owner != me) return EPERM;
-      // fallthrough
-    case PTHREAD_MUTEX_RECURSIVE:
-      if (--mutex->reent) return 0;
-      // fallthrough
-    case PTHREAD_MUTEX_NORMAL:
-      atomic_store_explicit(&mutex->lock, 0, memory_order_relaxed);
-      if ((IsLinux() || IsOpenbsd()) &&
-          atomic_load_explicit(&mutex->waits, memory_order_relaxed) > 0) {
-        _pthread_mutex_wake(mutex);
-      }
-      return 0;
-    default:
-      return EINVAL;
+int pthread_mutex_unlock(pthread_mutex_t *mutex) {
+  int t;
+
+  LOCKTRACE("pthread_mutex_unlock(%t)", mutex);
+
+  if (mutex->_type == PTHREAD_MUTEX_NORMAL &&        //
+      mutex->_pshared == PTHREAD_PROCESS_PRIVATE &&  //
+      _weaken(nsync_mu_unlock)) {
+    _weaken(nsync_mu_unlock)((nsync_mu *)mutex);
+    return 0;
   }
+
+  if (mutex->_type == PTHREAD_MUTEX_NORMAL) {
+    atomic_store_explicit(&mutex->_lock, 0, memory_order_release);
+    return 0;
+  }
+
+  t = gettid();
+
+  // we allow unlocking an initialized lock that wasn't locked, but we
+  // don't allow unlocking a lock held by another thread, or unlocking
+  // recursive locks from a forked child, since it should be re-init'd
+  if (mutex->_owner && (mutex->_owner != t || mutex->_pid != __pid)) {
+    return EPERM;
+  }
+
+  if (mutex->_depth) {
+    --mutex->_depth;
+    return 0;
+  }
+
+  mutex->_owner = 0;
+  atomic_store_explicit(&mutex->_lock, 0, memory_order_release);
+
+  return 0;
 }

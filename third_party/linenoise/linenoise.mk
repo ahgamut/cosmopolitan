@@ -28,8 +28,6 @@ THIRD_PARTY_LINENOISE_A_DIRECTDEPS =				\
 	LIBC_LOG						\
 	LIBC_SYSV_CALLS						\
 	LIBC_STR						\
-	LIBC_UNICODE						\
-	LIBC_STUBS						\
 	NET_HTTP
 
 THIRD_PARTY_LINENOISE_A_DEPS :=					\
@@ -44,8 +42,8 @@ $(THIRD_PARTY_LINENOISE_A).pkg:					\
 		$(THIRD_PARTY_LINENOISE_A_OBJS)			\
 		$(foreach x,$(THIRD_PARTY_LINENOISE_A_DIRECTDEPS),$($(x)_A).pkg)
 
-$(THIRD_PARTY_LINENOISE_A_OBJS):				\
-		OVERRIDE_CFLAGS +=				\
+$(THIRD_PARTY_LINENOISE_A_OBJS): private			\
+		CFLAGS +=					\
 			-fno-jump-tables			\
 			-ffunction-sections			\
 			-fdata-sections

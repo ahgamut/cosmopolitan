@@ -29,6 +29,8 @@
 #define LUA_LIB
 #include "libc/calls/calls.h"
 #include "libc/errno.h"
+#include "libc/mem/mem.h"
+#include "libc/str/str.h"
 #include "third_party/lua/lauxlib.h"
 #include "third_party/lua/lprefix.h"
 #include "third_party/lua/lua.h"
@@ -216,7 +218,7 @@ LUALIB_API void luaL_traceback (lua_State *L, lua_State *L1,
 
 
 /**
- * Improved Lua traceback.
+ * [jart] Improved Lua traceback.
  * @see https://luyuhuang.tech/2020/12/01/lua-traceback-with-parameters.html
  * @author Luyu Huang
  */

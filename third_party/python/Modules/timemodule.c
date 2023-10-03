@@ -10,7 +10,7 @@
 #include "libc/calls/struct/tms.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
-#include "libc/fmt/conv.h"
+#include "libc/fmt/wintime.internal.h"
 #include "libc/nt/accounting.h"
 #include "libc/nt/runtime.h"
 #include "libc/runtime/clktck.h"
@@ -110,7 +110,6 @@ PyDoc_STRVAR(time_ns_doc,
 Return the current time in nanoseconds since the Epoch.");
 
 #ifdef HAVE_CLOCK
-#define CLOCKS_PER_SEC CLK_TCK
 static PyObject *
 floatclock(_Py_clock_info_t *info)
 {
@@ -1521,7 +1520,6 @@ pysleep(_PyTime_t secs)
 {
     _PyTime_t deadline, monotonic;
 #ifndef MS_WINDOWS
-    struct timeval timeout;
     struct timespec timeout2;
     int err = 0;
 #else
@@ -1598,7 +1596,12 @@ pysleep(_PyTime_t secs)
     return 0;
 }
 
-_Section(".rodata.pytab.1") const struct _inittab _PyImport_Inittab_time = {
+#ifdef __aarch64__
+_Section(".rodata.pytab.1 //")
+#else
+_Section(".rodata.pytab.1")
+#endif
+ const struct _inittab _PyImport_Inittab_time = {
     "time",
     PyInit_time,
 };

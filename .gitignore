@@ -1,6 +1,7 @@
 # -*- conf -*-
 
 /o
+/.prompt.jtlp
 
 # TODO: Find some way to have Python write to o/
 __pycache__
@@ -11,3 +12,5 @@ __pycache__
 /TAGS
 /bx_enh_dbg.ini
 /tool/emacs/*.elc
+/perf.data
+/perf.data.old

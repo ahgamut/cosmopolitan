@@ -13,6 +13,42 @@ THIRD_PARTY_MAKE_BINS =					\
 THIRD_PARTY_MAKE_A =					\
 	o/$(MODE)/third_party/make/make.a
 
+THIRD_PARTY_MAKE_HDRS =					\
+	third_party/make/filename.h			\
+	third_party/make/dirname.h			\
+	third_party/make/stddef.h			\
+	third_party/make/error.h			\
+	third_party/make/gnumake.h			\
+	third_party/make/gettext.h			\
+	third_party/make/stdlib.h			\
+	third_party/make/xalloc.h			\
+	third_party/make/xalloc-oversized.h		\
+	third_party/make/os.h				\
+	third_party/make/stdint.h			\
+	third_party/make/fd-hook.h			\
+	third_party/make/job.h				\
+	third_party/make/unistd.h			\
+	third_party/make/getprogname.h			\
+	third_party/make/dosname.h			\
+	third_party/make/config.h			\
+	third_party/make/concat-filename.h		\
+	third_party/make/findprog.h			\
+	third_party/make/intprops.h			\
+	third_party/make/exitfail.h			\
+	third_party/make/alloca.h			\
+	third_party/make/hash.h				\
+	third_party/make/rule.h				\
+	third_party/make/filedef.h			\
+	third_party/make/fcntl.h			\
+	third_party/make/stdio.h			\
+	third_party/make/variable.h			\
+	third_party/make/debug.h			\
+	third_party/make/output.h			\
+	third_party/make/getopt.h			\
+	third_party/make/dep.h				\
+	third_party/make/commands.h
+
+
 THIRD_PARTY_MAKE_INCS =					\
 	third_party/make/makeint.inc
 
@@ -29,7 +65,6 @@ THIRD_PARTY_MAKE_SRCS_LIB =				\
 	third_party/make/fcntl.c			\
 	third_party/make/fd-hook.c			\
 	third_party/make/findprog-in.c			\
-	third_party/make/getloadavg.c			\
 	third_party/make/getprogname.c			\
 	third_party/make/stripslash.c			\
 	third_party/make/unistd.c			\
@@ -38,8 +73,6 @@ THIRD_PARTY_MAKE_SRCS_LIB =				\
 	third_party/make/xmalloc.c
 
 THIRD_PARTY_MAKE_SRCS_BASE =				\
-	third_party/make/ar.c				\
-	third_party/make/arscan.c			\
 	third_party/make/commands.c			\
 	third_party/make/default.c			\
 	third_party/make/dir.c				\
@@ -62,7 +95,6 @@ THIRD_PARTY_MAKE_SRCS_BASE =				\
 	third_party/make/remake.c			\
 	third_party/make/remote-stub.c			\
 	third_party/make/rule.c				\
-	third_party/make/signame.c			\
 	third_party/make/strcache.c			\
 	third_party/make/variable.c			\
 	third_party/make/version.c			\
@@ -77,20 +109,23 @@ THIRD_PARTY_MAKE_OBJS =					\
 
 THIRD_PARTY_MAKE_DIRECTDEPS =				\
 	LIBC_CALLS					\
+	LIBC_ELF					\
 	LIBC_FMT					\
 	LIBC_INTRIN					\
 	LIBC_LOG					\
 	LIBC_MEM					\
 	LIBC_NEXGEN32E					\
+	LIBC_PROC					\
 	LIBC_RUNTIME					\
 	LIBC_STDIO					\
 	LIBC_STR					\
+	LIBC_SOCK					\
+	LIBC_NT_KERNEL32				\
 	LIBC_SYSV					\
 	LIBC_SYSV_CALLS					\
 	LIBC_TIME					\
-	LIBC_X						\
 	LIBC_TINYMATH					\
-	LIBC_UNICODE					\
+	LIBC_X						\
 	THIRD_PARTY_COMPILER_RT				\
 	THIRD_PARTY_MUSL				\
 	THIRD_PARTY_GDTOA
@@ -116,30 +151,29 @@ o/$(MODE)/third_party/make/make.com.dbg:		\
 		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
 
+o/$(MODE)/third_party/make/make.com:			\
+		o/$(MODE)/third_party/make/make.com.dbg	\
+		o/$(MODE)/third_party/zip/zip.com	\
+		o/$(MODE)/tool/build/symtab.com
+	@$(MAKE_OBJCOPY)
+	@$(MAKE_SYMTAB_CREATE)
+	@$(MAKE_SYMTAB_ZIP)
+
 o/$(MODE)/third_party/make/strcache.o			\
 o/$(MODE)/third_party/make/expand.o			\
-o/$(MODE)/third_party/make/read.o:			\
-		OVERRIDE_CFLAGS +=			\
+o/$(MODE)/third_party/make/read.o: private		\
+		CFLAGS +=				\
 			-O2
 
-o/$(MODE)/third_party/make/hash.o:			\
-		OVERRIDE_CFLAGS +=			\
+o/$(MODE)/third_party/make/hash.o: private		\
+		CFLAGS +=				\
 			-O3
 
-o/$(MODE)/third_party/make/make.com:						\
-		o/$(MODE)/third_party/make/make.com.dbg				\
-		o/$(MODE)/third_party/zip/zip.com				\
-		o/$(MODE)/tool/build/symtab.com
-	@$(COMPILE) -AOBJCOPY -T$@ $(OBJCOPY) -S -O binary $< $@
-	@$(COMPILE) -ASYMTAB o/$(MODE)/tool/build/symtab.com			\
-		-o o/$(MODE)/third_party/make/.make/.symtab $<
-	@$(COMPILE) -AZIP -T$@ o/$(MODE)/third_party/zip/zip.com -9qj $@	\
-		o/$(MODE)/third_party/make/.make/.symtab
-
-$(THIRD_PARTY_MAKE_OBJS):				\
-		OVERRIDE_CFLAGS +=			\
-			-DSTACK_FRAME_UNLIMITED		\
+$(THIRD_PARTY_MAKE_OBJS): private			\
+		CFLAGS +=				\
+			-DNO_ARCHIVES			\
 			-DHAVE_CONFIG_H			\
+			-DSTACK_FRAME_UNLIMITED		\
 			-DINCLUDEDIR=\".\"		\
 			-DLIBDIR=\".\"			\
 			-DLOCALEDIR=\".\"

@@ -16,19 +16,55 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/errno.h"
-#include "libc/nexgen32e/gettls.h"
+#include "libc/assert.h"
+#include "libc/intrin/atomic.h"
+#include "libc/mem/mem.h"
+#include "libc/thread/posixthread.internal.h"
 #include "libc/thread/thread.h"
+#include "libc/thread/tls.h"
 
-STATIC_YOINK("_main_thread_ctor");
+// this is a legacy api so we avoid making the tib 1024 bytes larger
+static void pthread_key_init(void) {
+  if (!__get_tls()->tib_keys) {
+    __get_tls()->tib_keys = calloc(PTHREAD_KEYS_MAX, sizeof(void *));
+  }
+}
+
+/**
+ * Sets value of TLS slot for current thread.
+ *
+ * If `k` wasn't created by pthread_key_create() then the behavior is
+ * undefined. If `k` was unregistered earlier by pthread_key_delete()
+ * then the behavior is undefined.
+ */
+int pthread_setspecific(pthread_key_t k, const void *val) {
+  // "The effect of calling pthread_getspecific() or
+  //  pthread_setspecific() with a key value not obtained from
+  //  pthread_key_create() or after key has been deleted with
+  //  pthread_key_delete() is undefined."
+  //                                  ──Quoth POSIX.1-2017
+  pthread_key_init();
+  unassert(0 <= k && k < PTHREAD_KEYS_MAX);
+  unassert(atomic_load_explicit(_pthread_key_dtor + k, memory_order_acquire));
+  __get_tls()->tib_keys[k] = (void *)val;
+  return 0;
+}
 
 /**
  * Gets value of TLS slot for current thread.
+ *
+ * If `k` wasn't created by pthread_key_create() then the behavior is
+ * undefined. If `k` was unregistered earlier by pthread_key_delete()
+ * then the behavior is undefined.
  */
-void *pthread_getspecific(pthread_key_t key) {
-  if (key < PTHREAD_KEYS_MAX) {
-    return ((cthread_t)__get_tls_inline())->key[key];
-  } else {
-    return 0;
-  }
+void *pthread_getspecific(pthread_key_t k) {
+  // "The effect of calling pthread_getspecific() or
+  //  pthread_setspecific() with a key value not obtained from
+  //  pthread_key_create() or after key has been deleted with
+  //  pthread_key_delete() is undefined."
+  //                                  ──Quoth POSIX.1-2017
+  pthread_key_init();
+  unassert(0 <= k && k < PTHREAD_KEYS_MAX);
+  unassert(atomic_load_explicit(_pthread_key_dtor + k, memory_order_acquire));
+  return __get_tls()->tib_keys[k];
 }

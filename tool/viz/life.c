@@ -16,22 +16,20 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "dsp/core/gamma.h"
 #include "dsp/scale/scale.h"
-#include "libc/bits/bits.h"
-#include "libc/bits/popcnt.h"
-#include "libc/bits/safemacros.internal.h"
-#include "libc/bits/xchg.internal.h"
 #include "libc/calls/calls.h"
-#include "libc/calls/ioctl.h"
-#include "libc/calls/struct/stat.h"
+#include "libc/calls/struct/sigaction.h"
 #include "libc/calls/struct/termios.h"
 #include "libc/calls/struct/winsize.h"
-#include "libc/calls/termios.internal.h"
+#include "libc/calls/termios.h"
 #include "libc/errno.h"
 #include "libc/fmt/conv.h"
 #include "libc/fmt/fmt.h"
 #include "libc/fmt/itoa.h"
+#include "libc/intrin/popcnt.h"
+#include "libc/intrin/safemacros.internal.h"
+#include "libc/intrin/xchg.internal.h"
+#include "libc/limits.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
 #include "libc/macros.internal.h"
@@ -41,9 +39,7 @@
 #include "libc/nt/dll.h"
 #include "libc/nt/enum/bitblt.h"
 #include "libc/nt/enum/color.h"
-#include "libc/nt/enum/cs.h"
 #include "libc/nt/enum/cw.h"
-#include "libc/nt/enum/ht.h"
 #include "libc/nt/enum/idc.h"
 #include "libc/nt/enum/mb.h"
 #include "libc/nt/enum/mf.h"
@@ -51,37 +47,29 @@
 #include "libc/nt/enum/ofn.h"
 #include "libc/nt/enum/rdw.h"
 #include "libc/nt/enum/sc.h"
-#include "libc/nt/enum/size.h"
 #include "libc/nt/enum/sw.h"
-#include "libc/nt/enum/tpm.h"
-#include "libc/nt/enum/vk.h"
 #include "libc/nt/enum/wm.h"
 #include "libc/nt/enum/ws.h"
 #include "libc/nt/events.h"
 #include "libc/nt/messagebox.h"
 #include "libc/nt/paint.h"
-#include "libc/nt/struct/msg.h"
 #include "libc/nt/struct/openfilename.h"
-#include "libc/nt/struct/paintstruct.h"
-#include "libc/nt/struct/windowplacement.h"
-#include "libc/nt/struct/wndclass.h"
 #include "libc/nt/windows.h"
-#include "libc/rand/rand.h"
 #include "libc/runtime/runtime.h"
-#include "libc/sock/sock.h"
+#include "libc/runtime/sysconf.h"
+#include "libc/sock/struct/pollfd.h"
+#include "libc/stdio/rand.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
-#include "libc/str/tpenc.h"
+#include "libc/str/strwidth.h"
+#include "libc/sysv/consts/auxv.h"
 #include "libc/sysv/consts/ex.h"
 #include "libc/sysv/consts/exit.h"
-#include "libc/sysv/consts/map.h"
 #include "libc/sysv/consts/poll.h"
-#include "libc/sysv/consts/prot.h"
+#include "libc/sysv/consts/sig.h"
 #include "libc/sysv/consts/termios.h"
 #include "libc/time/time.h"
-#include "libc/unicode/unicode.h"
-#include "libc/x/x.h"
-#include "third_party/getopt/getopt.h"
+#include "third_party/getopt/getopt.internal.h"
 
 /**
  * @fileoverview Conway's Game of Life
@@ -271,6 +259,12 @@ static char16_t statusline16[256];
     RES = (B11 | r0) & r1 & ~r2;                                           \
   } while (0)
 
+static void SwapBoards(void) {
+  uint64_t *t = board;
+  board = board2;
+  board2 = t;
+}
+
 static void Step(void) {
   long y, x, yn, xn;
   yn = byn >> 3;
@@ -288,7 +282,7 @@ static void Step(void) {
            board[(y + 1 < yn ? y + 1 : 0) * xn + (x + 1 < xn ? x + 1 : 0)]);
     }
   }
-  xchg(&board, &board2);
+  SwapBoards();
   ++generation;
 }
 
@@ -308,12 +302,7 @@ static void Unset(long y, long x) {
 }
 
 static long Population(void) {
-  long i, n, p;
-  n = (byn * bxn) >> 6;
-  for (p = i = 0; i < n; ++i) {
-    p += popcnt(board[i]);
-  }
-  return p;
+  return _countbits(board, byn * bxn / 64 * 8);
 }
 
 /*───────────────────────────────────────────────────────────────────────────│─╗
@@ -434,8 +423,8 @@ static void OnMouseLeftDrag(long y, long x) {
   save_x = x;
   y = top + (y << (zoom + !!zoom));
   x = left + (x << zoom);
-  y += rand64() & ((1ul << (zoom + !!zoom)) - 1);
-  x += rand64() & ((1ul << zoom) - 1);
+  y += _rand64() & ((1ul << (zoom + !!zoom)) - 1);
+  x += _rand64() & ((1ul << zoom) - 1);
   if (y < 0 || y >= byn) return;
   if (x < 0 || x >= bxn) return;
   if (erase) {
@@ -501,17 +490,17 @@ static void *NewBoard(size_t *out_size) {
   char *p;
   size_t s, n, k;
   s = (byn * bxn) >> 3;
-  k = PAGESIZE + ROUNDUP(s, PAGESIZE);
-  n = ROUNDUP(k + PAGESIZE, FRAMESIZE);
-  p = mmap(NULL, n, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-  mprotect(p, PAGESIZE, PROT_NONE);
-  mprotect(p + k, n - k, PROT_NONE);
+  k = getauxval(AT_PAGESZ) + ROUNDUP(s, getauxval(AT_PAGESZ));
+  n = ROUNDUP(k + getauxval(AT_PAGESZ), sysconf(_SC_PAGESIZE));
+  p = _mapanon(n);
+  mprotect(p, getauxval(AT_PAGESZ), 0);
+  mprotect(p + k, n - k, 0);
   if (out_size) *out_size = n;
-  return p + PAGESIZE;
+  return p + getauxval(AT_PAGESZ);
 }
 
 static void FreeBoard(void *p, size_t n) {
-  munmap((char *)p - PAGESIZE, n);
+  munmap((char *)p - getauxval(AT_PAGESZ), n);
 }
 
 static void AllocateBoardsWithHardwareAcceleratedMemorySafety(void) {
@@ -584,7 +573,7 @@ static int GetChar(FILE *f) {
 
 static int LoadFile(const char *path) {
   FILE *f;
-  long c, y, x, i, j, n, yn, xn, yo, xo;
+  long c, y, x, i, n, yn, xn, yo, xo;
   line = 0;
   f = fopen(path, "r");
   if (GetChar(f) != 'x') goto ReadError;
@@ -611,7 +600,7 @@ static int LoadFile(const char *path) {
     if ((c = ReadChar(f)) == -1) goto ReadError;
   }
   if (yn > byn || xn > bxn) goto ReadError;
-  xchg(&board, &board2);
+  SwapBoards();
   bzero(board, (byn * bxn) >> 3);
   yo = byn / 2 - yn / 2;
   xo = bxn / 2 - xn / 2;
@@ -658,7 +647,7 @@ static int LoadFile(const char *path) {
   return 0;
 ReadError:
   fclose(f);
-  xchg(&board, &board2);
+  SwapBoards();
   return -1;
 }
 
@@ -732,7 +721,7 @@ static void GetTtySize(void) {
   struct winsize wsize;
   wsize.ws_row = tyn + 1;
   wsize.ws_col = txn;
-  getttysize(out, &wsize);
+  tcgetwinsize(out, &wsize);
   tyn = wsize.ws_row - 1;
   txn = wsize.ws_col;
   right = left + txn;
@@ -749,21 +738,21 @@ static void EnableRaw(void) {
   term.c_cflag &= ~(CSIZE | PARENB);
   term.c_cflag |= CS8;
   term.c_iflag |= IUTF8;
-  ioctl(out, TCSETS, &term);
+  tcsetattr(out, TCSANOW, &term);
 }
 
 static void OnExit(void) {
   LeaveScreen();
   ShowTtyCursor();
   DisableMouse();
-  ioctl(out, TCSETS, &oldterm);
+  tcsetattr(out, TCSANOW, &oldterm);
 }
 
-static void OnSigInt(int sig, struct siginfo *sa, struct ucontext *uc) {
+static void OnSigInt(int sig) {
   action |= INTERRUPTED;
 }
 
-static void OnSigWinch(int sig, struct siginfo *sa, struct ucontext *uc) {
+static void OnSigWinch(int sig) {
   action |= RESIZED;
 }
 
@@ -839,7 +828,7 @@ static void Rando1(void) {
   long i, n;
   n = (byn * bxn) >> 6;
   for (i = 0; i < n; ++i) {
-    board[i] = rand64();
+    board[i] = _rand64();
   }
 }
 
@@ -1105,13 +1094,12 @@ static bool HasPendingInput(void) {
 }
 
 static bool ShouldDraw(void) {
-  long double now, rate;
-  static long double next;
+  struct timespec now;
+  static struct timespec next;
   if (!isdragging) return true;
-  now = nowl();
-  rate = 1. / 24;
-  if (now > next && !HasPendingInput()) {
-    next = now + rate;
+  now = timespec_real();
+  if (timespec_cmp(now, next) > 0 && !HasPendingInput()) {
+    next = timespec_add(now, timespec_frommicros(1. / 24 * 1e6));
     return true;
   } else {
     return false;
@@ -1121,13 +1109,13 @@ static bool ShouldDraw(void) {
 static void Tui(void) {
   GetTtySize();
   Dimension();
-  ioctl(out, TCGETS, &oldterm);
+  tcgetattr(out, &oldterm);
   HideTtyCursor();
   EnableRaw();
   EnableMouse();
   atexit(OnExit);
-  sigaction(SIGINT, &(struct sigaction){.sa_sigaction = OnSigInt}, NULL);
-  sigaction(SIGWINCH, &(struct sigaction){.sa_sigaction = OnSigWinch}, NULL);
+  sigaction(SIGINT, &(struct sigaction){.sa_handler = OnSigInt}, 0);
+  sigaction(SIGWINCH, &(struct sigaction){.sa_handler = OnSigWinch}, 0);
   do {
     if (action & RESIZED) {
       GetTtySize();
@@ -1307,7 +1295,7 @@ static void OnWindowRbuttonup(int64_t hwnd, int64_t wParam, int64_t lParam) {
 }
 
 static void OnWindowMousemove(int64_t hwnd, int64_t wParam, int64_t lParam) {
-  int y, x, by, bx;
+  int y, x;
   y = (lParam & 0xFFFF0000) >> 020;
   x = (lParam & 0x0000FFFF) >> 000;
   if (wParam & kNtMkLbutton) {
@@ -1415,7 +1403,7 @@ int main(int argc, char *argv[]) {
       return 1;
     }
   }
-  if (IsWindows()) {
+  if (0 && IsWindows()) {
     Gui();
   } else {
     Tui();

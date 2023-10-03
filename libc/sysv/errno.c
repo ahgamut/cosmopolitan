@@ -17,11 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/errno.h"
-
-asm(".weak\t__asan_init");
-asm(".weak\t__asan_register_globals");
-asm(".weak\t__asan_unregister_globals");
-asm(".weak\t__asan_version_mismatch_check_v8");
+#include "libc/thread/tls.h"
 
 /**
  * Global variable for last error.
@@ -36,3 +32,14 @@ asm(".weak\t__asan_version_mismatch_check_v8");
  * @see	__errno_location() stable abi
  */
 errno_t __errno;
+
+/**
+ * Returns address of `errno` variable.
+ */
+errno_t *__errno_location(void) {
+  if (__tls_enabled) {
+    return &__get_tls()->tib_errno;
+  } else {
+    return &__errno;
+  }
+}

@@ -9,34 +9,24 @@ THIRD_PARTY_DLMALLOC_A = o/$(MODE)/third_party/dlmalloc/dlmalloc.a
 THIRD_PARTY_DLMALLOC_A_FILES := $(wildcard third_party/dlmalloc/*)
 THIRD_PARTY_DLMALLOC_A_HDRS = $(filter %.h,$(THIRD_PARTY_DLMALLOC_A_FILES))
 THIRD_PARTY_DLMALLOC_A_INCS = $(filter %.inc,$(THIRD_PARTY_DLMALLOC_A_FILES))
-THIRD_PARTY_DLMALLOC_A_SRCS_S = $(filter %.S,$(THIRD_PARTY_DLMALLOC_A_FILES))
-THIRD_PARTY_DLMALLOC_A_SRCS_C = $(filter %.c,$(THIRD_PARTY_DLMALLOC_A_FILES))
-
-THIRD_PARTY_DLMALLOC_A_SRCS =					\
-	$(THIRD_PARTY_DLMALLOC_A_SRCS_S)			\
-	$(THIRD_PARTY_DLMALLOC_A_SRCS_C)
-
-THIRD_PARTY_DLMALLOC_A_OBJS =					\
-	$(THIRD_PARTY_DLMALLOC_A_SRCS_S:%.S=o/$(MODE)/%.o)	\
-	$(THIRD_PARTY_DLMALLOC_A_SRCS_C:%.c=o/$(MODE)/%.o)
+THIRD_PARTY_DLMALLOC_A_SRCS = $(filter %.c,$(THIRD_PARTY_DLMALLOC_A_FILES))
+THIRD_PARTY_DLMALLOC_A_OBJS = $(THIRD_PARTY_DLMALLOC_A_SRCS:%.c=o/$(MODE)/%.o)
 
 THIRD_PARTY_DLMALLOC_A_CHECKS =					\
 	$(THIRD_PARTY_DLMALLOC_A).pkg				\
 	$(THIRD_PARTY_DLMALLOC_A_HDRS:%=o/$(MODE)/%.ok)
 
 THIRD_PARTY_DLMALLOC_A_DIRECTDEPS =				\
-	LIBC_BITS						\
 	LIBC_CALLS						\
 	LIBC_INTRIN						\
 	LIBC_FMT						\
 	LIBC_NEXGEN32E						\
 	LIBC_RUNTIME						\
 	LIBC_STR						\
-	LIBC_RAND						\
-	LIBC_STUBS						\
 	LIBC_SYSV						\
 	LIBC_SYSV_CALLS						\
-	THIRD_PARTY_COMPILER_RT
+	THIRD_PARTY_COMPILER_RT					\
+	THIRD_PARTY_NSYNC
 
 THIRD_PARTY_DLMALLOC_A_DEPS :=					\
 	$(call uniq,$(foreach x,$(THIRD_PARTY_DLMALLOC_A_DIRECTDEPS),$($(x))))
@@ -50,26 +40,24 @@ $(THIRD_PARTY_DLMALLOC_A).pkg:					\
 		$(THIRD_PARTY_DLMALLOC_A_OBJS)			\
 		$(foreach x,$(THIRD_PARTY_DLMALLOC_A_DIRECTDEPS),$($(x)_A).pkg)
 
+ifneq ($(MODE),tiny)
+ifneq ($(MODE),tinylinux)
 # README file recommends -O3
 # It does double performance in default mode
-o//third_party/dlmalloc/dlmalloc.o				\
-o/rel/third_party/dlmalloc/dlmalloc.o:				\
-		OVERRIDE_CFLAGS +=				\
+o/$(MODE)/third_party/dlmalloc/dlmalloc.o: private		\
+		CFLAGS +=					\
 			-O3
+endif
+endif
 
-# we can't use address sanitizer because:
-#   address sanitizer depends on dlmalloc
-o/$(MODE)/third_party/dlmalloc/dlmalloc.o:			\
-		OVERRIDE_CFLAGS +=				\
+$(THIRD_PARTY_DLMALLOC_A_OBJS): private				\
+		COPTS +=					\
 			-ffreestanding				\
-			-fno-sanitize=address
-
-# we must segregate codegen because:
-#   file contains multiple independently linkable apis
-o/$(MODE)/third_party/dlmalloc/dlmalloc.o:			\
-		OVERRIDE_CFLAGS +=				\
+			-fdata-sections				\
 			-ffunction-sections			\
-			-fdata-sections
+			-fno-sanitize=address			\
+			-Wframe-larger-than=4096		\
+			-Walloca-larger-than=4096
 
 THIRD_PARTY_DLMALLOC_LIBS = $(foreach x,$(THIRD_PARTY_DLMALLOC_ARTIFACTS),$($(x)))
 THIRD_PARTY_DLMALLOC_SRCS = $(foreach x,$(THIRD_PARTY_DLMALLOC_ARTIFACTS),$($(x)_SRCS))

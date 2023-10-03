@@ -32,6 +32,12 @@
    Locking: as above.
 */
 
+#ifdef WITH_THREAD
+extern void wait_for_thread_shutdown(void);
+extern void _PyGILState_Init(PyInterpreterState *, PyThreadState *);
+extern void _PyGILState_Fini(void);
+#endif /* WITH_THREAD */
+
 int
 Py_FinalizeEx(void)
 {
@@ -96,6 +102,7 @@ Py_FinalizeEx(void)
 #endif
     /* Destroy all modules */
     PyImport_Cleanup();
+    _PyImportLookupTables_Cleanup();
 
     /* Flush sys.stdout and sys.stderr (again, in case more was printed) */
     if (_Py_FlushStdFiles() < 0) {

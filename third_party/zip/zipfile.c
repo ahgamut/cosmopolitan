@@ -1,4 +1,4 @@
-/* clang-format off */
+// clang-format off
 /*
   zipfile.c - Zip 3
 
@@ -17,21 +17,63 @@
 #include "third_party/zip/zip.h"
 #include "third_party/zip/revision.h"
 #ifdef UNICODE_SUPPORT
+#include "libc/assert.h"
 #include "third_party/zip/crc32.h"
 #endif
+#include "third_party/zip/crc32.h"
 
 /* for realloc 2/6/2005 EG */
+#include "libc/calls/calls.h"
+#include "libc/stdio/dprintf.h"
+#include "libc/calls/termios.h"
+#include "libc/fmt/conv.h"
+#include "libc/limits.h"
+#include "libc/mem/alg.h"
 #include "libc/mem/mem.h"
-#include "libc/alg/alg.h"
+#include "libc/runtime/runtime.h"
+#include "libc/stdio/rand.h"
+#include "libc/temp.h"
+#include "libc/str/str.h"
+#include "libc/sysv/consts/exit.h"
+#include "third_party/gdtoa/gdtoa.h"
+#include "third_party/musl/crypt.h"
+#include "third_party/musl/rand48.h"
+
 #include "libc/errno.h"
 
 /* for toupper() */
 #include "libc/str/str.h"
-#include "libc/fmt/fmt.h"
 
-#if defined(__GNUC__) && !defined(__llvm__)
-#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#ifdef VMS
+// MISSING #include "vms/vms.h"
+// MISSING #include "vms/vmsmunch.h"
+// MISSING #include "vms/vmsdefs.h"
 #endif
+
+#ifdef WIN32
+#  define WIN32_LEAN_AND_MEAN
+#include "libc/nt/accounting.h"
+#include "libc/nt/automation.h"
+#include "libc/nt/console.h"
+#include "libc/nt/debug.h"
+#include "libc/nt/dll.h"
+#include "libc/nt/enum/keyaccess.h"
+#include "libc/nt/enum/regtype.h"
+#include "libc/nt/errors.h"
+#include "libc/nt/events.h"
+#include "libc/nt/files.h"
+#include "libc/nt/ipc.h"
+#include "libc/nt/memory.h"
+#include "libc/nt/paint.h"
+#include "libc/nt/process.h"
+#include "libc/nt/registry.h"
+#include "libc/nt/synchronization.h"
+#include "libc/nt/thread.h"
+#include "libc/nt/windows.h"
+#include "libc/nt/winsock.h"
+#endif
+
+unsigned _Cz_crc32(unsigned crc, const unsigned char *buf, unsigned len);
 
 /*
  * XXX start of zipfile.h
@@ -826,7 +868,7 @@ local void read_Unicode_Path_entry(pZipListEntry)
   }
   strcpy(iname, pZipListEntry->iname);
 
-  chksum = crc32(chksum, (uch *)(iname), strlen(iname));
+  chksum = _Cz_crc32(chksum, (uch *)(iname), strlen(iname));
 
   free(iname);
 
@@ -931,7 +973,7 @@ local void read_Unicode_Path_local_entry(pZipListEntry)
   }
   strcpy(iname, pZipListEntry->iname);
 
-  chksum = crc32(chksum, (uch *)(iname), strlen(iname));
+  chksum = _Cz_crc32(chksum, (uch *)(iname), strlen(iname));
 
   free(iname);
 
@@ -1517,7 +1559,7 @@ local int add_Unicode_Path_local_extra_field(pZEntry)
 # define inameLocal (pZEntry->iname)
 #endif
 
-  chksum = crc32(chksum, (uch *)(inameLocal), strlen(inameLocal));
+  chksum = _Cz_crc32(chksum, (uch *)(inameLocal), strlen(inameLocal));
 
 #ifdef WIN32_OEM
   free(inameLocal);
@@ -1644,7 +1686,7 @@ local int add_Unicode_Path_cen_extra_field(pZEntry)
 # define inameLocal (pZEntry->iname)
 #endif
 
-  chksum = crc32(chksum, (uch *)(inameLocal), strlen(inameLocal));
+  chksum = _Cz_crc32(chksum, (uch *)(inameLocal), strlen(inameLocal));
 
 #ifdef WIN32_OEM
   free(inameLocal);
@@ -2957,7 +2999,8 @@ local int find_next_signature(f)
 
   /* look for P K ? ? signature */
 
-  m = getc(f);
+  flockfile(f);
+  m = getc_unlocked(f);
 
   /*
   here = zftello(f);
@@ -2969,20 +3012,20 @@ local int find_next_signature(f)
       /* found a P */
       sigbuf[0] = (char) m;
 
-      if ((m = getc(f)) == EOF)
+      if ((m = getc_unlocked(f)) == EOF)
         break;
       if (m != 0x4b /*'K' except EBCDIC*/) {
         /* not a signature */
-        ungetc(m, f);
+        ungetc_unlocked(m, f);
       } else {
         /* found P K */
         sigbuf[1] = (char) m;
 
-        if ((m = getc(f)) == EOF)
+        if ((m = getc_unlocked(f)) == EOF)
           break;
         if (m == 0x50 /*'P' except EBCDIC*/) {
           /* not a signature but maybe start of new one */
-          ungetc(m, f);
+          ungetc_unlocked(m, f);
           continue;
         } else if (m >= 16) {
           /* last 2 chars expect < 16 for signature */
@@ -2990,11 +3033,11 @@ local int find_next_signature(f)
         }
         sigbuf[2] = (char) m;
 
-        if ((m = getc(f)) == EOF)
+        if ((m = getc_unlocked(f)) == EOF)
           break;
         if (m == 0x50 /*'P' except EBCDIC*/) {
           /* not a signature but maybe start of new one */
-          ungetc(m, f);
+          ungetc_unlocked(m, f);
           continue;
         } else if (m >= 16) {
           /* last 2 chars expect < 16 */
@@ -3003,16 +3046,15 @@ local int find_next_signature(f)
         sigbuf[3] = (char) m;
 
         /* found possible signature */
+        funlockfile(f);
         return 1;
       }
     }
-    m = getc(f);
-  }
-  if (ferror(f)) {
-    return 0;
+    m = getc_unlocked(f);
   }
 
   /* found nothing */
+  funlockfile(f);
   return 0;
 }
 
@@ -3209,7 +3251,7 @@ local int scanzipf_fixnew()
 
   int r = 0;                  /* zipcopy return */
   uzoff_t s;                  /* size of data, start of central */
-  struct zlist far * far *x;  /* pointer last entry's link */
+  struct zlist far * far *x=0;  /* pointer last entry's link */
   struct zlist far *z;        /* current zip entry structure */
   int plen;
   char *in_path_ext;
@@ -3630,6 +3672,7 @@ local int scanzipf_fixnew()
             /* first link */
             x = &zfiles;
           /* Link into list */
+          assert(x != NULL);
           *x = z;
           z->nxt = NULL;
           x = &z->nxt;
@@ -4041,7 +4084,7 @@ local int scanzipf_regnew()
   int skipped_disk = 0;       /* 1 if skipped start disk and start offset is useless */
 
   uzoff_t s;                  /* size of data, start of central */
-  struct zlist far * far *x;  /* pointer last entry's link */
+  struct zlist far * far *x=0;  /* pointer last entry's link */
   struct zlist far *z;        /* current zip entry structure */
 
 
@@ -5049,6 +5092,7 @@ local int scanzipf_regnew()
 #endif
 
       /* Link into list */
+      assert(x != NULL);
       *x = z;
       z->nxt = NULL;
       x = &z->nxt;

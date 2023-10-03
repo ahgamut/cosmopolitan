@@ -16,12 +16,9 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/fmt/fmt.h"
-#include "libc/mem/mem.h"
 #include "libc/testlib/testlib.h"
-#include "libc/x/x.h"
-#include "third_party/gdtoa/gdtoa.h"
+#include "libc/x/xasprintf.h"
 
-testonly char *testlib_formatfloat(long double x) {
+char *testlib_formatfloat(long double x) {
   return xasprintf("%.15Lg", x);
 }

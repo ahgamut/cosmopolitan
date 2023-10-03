@@ -15,18 +15,15 @@
 │ See the License for the specific language governing permissions and          │
 │ limitations under the License.                                               │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/assert.h"
-#include "libc/bits/bits.h"
-#include "libc/bits/bswap.h"
-#include "libc/log/backtrace.internal.h"
-#include "libc/log/check.h"
-#include "libc/log/log.h"
+#include "third_party/mbedtls/bignum.h"
+#include "libc/intrin/bits.h"
+#include "libc/intrin/bsf.h"
+#include "libc/intrin/bswap.h"
 #include "libc/macros.internal.h"
-#include "libc/nexgen32e/bsf.h"
 #include "libc/nexgen32e/nexgen32e.h"
 #include "libc/nexgen32e/x86feature.h"
 #include "libc/runtime/runtime.h"
-#include "third_party/mbedtls/bignum.h"
+#include "libc/str/str.h"
 #include "third_party/mbedtls/bignum_internal.h"
 #include "third_party/mbedtls/chk.h"
 #include "third_party/mbedtls/common.h"
@@ -294,7 +291,7 @@ int mbedtls_mpi_safe_cond_assign(mbedtls_mpi *X,
     for (i = 0; i < Y->n; i++)
         X->p[i] = Select(Y->p[i], X->p[i], -assign);
     for (i = Y->n; i < X->n; i++)
-        X->p[i] &= CONCEAL("r", assign - 1);
+        X->p[i] &= __conceal("r", assign - 1);
 cleanup:
     return( ret );
 }
@@ -441,7 +438,7 @@ cleanup:
  */
 size_t mbedtls_mpi_lsb( const mbedtls_mpi *X )
 {
-    size_t i, j, count = 0;
+    size_t i, count = 0;
     MBEDTLS_INTERNAL_VALIDATE_RET(X, 0);
     for( i = 0; i < X->n; i++ )
     {
@@ -1282,6 +1279,8 @@ forceinline mbedtls_mpi_uint mpi_sub_hlp(mbedtls_mpi_uint *d,
     size_t i;
     unsigned char cf;
     mbedtls_mpi_uint c, x;
+    (void)x;
+    (void)cf;
     cf = c = i = 0;
 #if defined(__x86_64__) && !defined(__STRICT_ANSI__)
     if (!n) return 0;
@@ -1682,7 +1681,7 @@ int mbedtls_mpi_div_mpi(mbedtls_mpi *Q, mbedtls_mpi *R, const mbedtls_mpi *A,
                         const mbedtls_mpi *B)
 {
     int ret = MBEDTLS_ERR_THIS_CORRUPTION;
-    size_t i, n, t, k, Xn, Yn;
+    size_t i, n, t, k;
     mbedtls_mpi X, Y, Z, T1, T2;
     mbedtls_mpi_uint TP2[3];
     MPI_VALIDATE_RET(A);

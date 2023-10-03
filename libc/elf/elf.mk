@@ -27,7 +27,6 @@ LIBC_ELF_A_DIRECTDEPS =				\
 	LIBC_INTRIN				\
 	LIBC_NEXGEN32E				\
 	LIBC_STR				\
-	LIBC_STUBS
 
 LIBC_ELF_A_DEPS :=				\
 	$(call uniq,$(foreach x,$(LIBC_ELF_A_DIRECTDEPS),$($(x))))
@@ -39,6 +38,12 @@ $(LIBC_ELF_A):	libc/elf/			\
 $(LIBC_ELF_A).pkg:				\
 		$(LIBC_ELF_A_OBJS)		\
 		$(foreach x,$(LIBC_ELF_A_DIRECTDEPS),$($(x)_A).pkg)
+
+$(LIBC_ELF_A_OBJS): private				\
+		COPTS +=				\
+			-fno-sanitize=all		\
+			-Wframe-larger-than=4096	\
+			-Walloca-larger-than=4096
 
 LIBC_ELF_LIBS = $(foreach x,$(LIBC_ELF_ARTIFACTS),$($(x)))
 LIBC_ELF_SRCS = $(foreach x,$(LIBC_ELF_ARTIFACTS),$($(x)_SRCS))

@@ -68,6 +68,7 @@
 #define EM_NONE      0
 #define EM_M32       1
 #define EM_386       3
+#define EM_PPC64     21
 #define EM_S390      22
 #define EM_ARM       40
 #define EM_NEXGEN32E 62
@@ -84,7 +85,7 @@
 #define EM_RISCV     243
 #define EM_BPF       247
 
-#define GRP_COMDAT 0x1
+#define GRP_COMDAT 1
 #define STN_UNDEF  0
 
 #define EV_NONE    0
@@ -173,6 +174,38 @@
 #define R_X86_64_GOTPCRELX       41 /* 6 bytes */
 #define R_X86_64_REX_GOTPCRELX   42 /* 7 bytes */
 #define R_X86_64_NUM             43
+
+#define R_AARCH64_NONE   0
+#define R_AARCH64_ABS64  257
+#define R_AARCH64_ABS32  258
+#define R_AARCH64_ABS16  259
+#define R_AARCH64_PREL64 260
+#define R_AARCH64_PREL32 261
+#define R_AARCH64_PREL16 262
+
+#define R_PPC_NONE   0
+#define R_PPC_ADDR32 1
+#define R_PPC_ADDR24 2
+#define R_PPC_ADDR16 3
+#define R_PPC_REL32  26
+
+#define R_PPC64_NONE   R_PPC_NONE
+#define R_PPC64_ADDR32 R_PPC_ADDR32
+#define R_PPC64_ADDR24 R_PPC_ADDR24
+#define R_PPC64_ADDR16 R_PPC_ADDR16
+#define R_PPC64_REL32  R_PPC_REL32
+
+#define R_RISCV_NONE     0
+#define R_RISCV_32       1
+#define R_RISCV_64       2
+#define R_RISCV_RELATIVE 3
+
+#define R_390_NONE 0
+#define R_390_8    1
+#define R_390_12   2
+#define R_390_16   3
+#define R_390_32   4
+#define R_390_PC32 5
 
 #define STB_LOCAL      0
 #define STB_GLOBAL     1

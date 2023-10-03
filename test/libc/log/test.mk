@@ -36,11 +36,9 @@ TEST_LIBC_LOG_DIRECTDEPS =					\
 	LIBC_NEXGEN32E						\
 	LIBC_LOG						\
 	LIBC_STR						\
-	LIBC_STUBS						\
 	LIBC_TESTLIB						\
 	LIBC_SYSV						\
-	LIBC_LOG						\
-	LIBC_ZIPOS
+	LIBC_LOG
 
 TEST_LIBC_LOG_DEPS :=						\
 	$(call uniq,$(foreach x,$(TEST_LIBC_LOG_DIRECTDEPS),$($(x))))
@@ -76,13 +74,10 @@ o/$(MODE)/test/libc/log/backtrace.com.dbg:			\
 		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
 
-o/$(MODE)/test/libc/log/backtrace.com.zip.o:			\
-		o/$(MODE)/test/libc/log/backtrace.com
-	@$(COMPILE) -AZIPOBJ $(ZIPOBJ) $(ZIPOBJ_FLAGS) -B $(OUTPUT_OPTION) $<
-
-o/$(MODE)/test/libc/log/backtrace.com.dbg.zip.o:			\
-		o/$(MODE)/test/libc/log/backtrace.com.dbg
-	@$(COMPILE) -AZIPOBJ $(ZIPOBJ) $(ZIPOBJ_FLAGS) -B $(OUTPUT_OPTION) $<
+o/$(MODE)/test/libc/log/backtrace.com.zip.o			\
+o/$(MODE)/test/libc/log/backtrace.com.dbg.zip.o: private	\
+		ZIPOBJ_FLAGS +=					\
+			-B
 
 .PHONY: o/$(MODE)/test/libc/log
 o/$(MODE)/test/libc/log:					\

@@ -17,13 +17,14 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #define ShouldUseMsabiAttribute() 1
-#include "libc/bits/weaken.h"
+#include "libc/assert.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/nt/errors.h"
 #include "libc/nt/runtime.h"
 #include "libc/sock/internal.h"
 #include "libc/sysv/errfuns.h"
+#include "libc/thread/tls2.internal.h"
 
 /**
  * Return path for failed Win32 API calls.
@@ -38,6 +39,10 @@ privileged int64_t __winerr(void) {
   } else {
     e = ENOSYS;
   }
-  errno = e;
+  if (__tls_enabled) {
+    __get_tls_privileged()->tib_errno = e;
+  } else {
+    __errno = e;
+  }
   return -1;
 }

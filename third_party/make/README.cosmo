@@ -1,4 +1,33 @@
+DESCRIPTION
+
+  Landlock Make is a fork of GNU Make that adds support for automatic
+  sandboxing, resource limits, and network access restrictions.
+
 ORIGIN
 
-    GNU Make 4.3
-    http://ftp.gnu.org/gnu/make/make-4.3.tar.gz
+  GNU Make 4.3
+  http://ftp.gnu.org/gnu/make/make-4.3.tar.gz
+
+LICENSE
+
+  GNU GPL version 3 or later
+  http://gnu.org/licenses/gpl.html
+
+LOCAL CHANGES
+
+  - Introduce $(uniq token...) native function
+  - .INTERNET variable to allow internet access
+  - .PLEDGE variable which restricts system calls
+  - .UNVEIL variable which controls Landlock LSM
+  - .STRICT variable to disable implicit unveiling
+  - .UNSANDBOXED variable to disable pledge / unveil
+  - .CPU variable which tunes CPU rlimit in seconds
+  - .MEMORY variable for virtual memory limit, e.g. 512m
+  - .RSS variable for resident memory limit, e.g. 512m
+  - .FSIZE variable which tunes max file size, e.g. 1g
+  - .NPROC variable which tunes fork() / clone() limit
+  - .NOFILE variable which tunes file descriptor limit
+  - .MAXCORE variable to set upper limit on core dumps
+  - Do automatic setup and teardown of TMPDIR per rule
+  - Remove code that forces slow path if not using /bin/sh
+  - Remove 200,000 lines of VAX/OS2/DOS/AMIGA/etc. code

@@ -18,23 +18,37 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/elf/def.h"
 #include "libc/elf/elf.h"
+#include "libc/elf/struct/ehdr.h"
+#include "libc/elf/struct/shdr.h"
 #include "libc/str/str.h"
 
-char *GetElfStringTable(const Elf64_Ehdr *elf, size_t mapsize) {
+/**
+ * Returns pointer to elf string table.
+ *
+ * @param elf points to the start of the executable image data
+ * @param mapsize is the number of bytes past `elf` we can access
+ * @param section_name is usually `".strtab"`, `".dynstr"`, or null
+ * @return pointer to string table within `elf` image, which should
+ *     normally be a sequence of NUL-terminated strings whose first
+ *     string is the empty string; otherwise NULL is returned, when
+ *     either: (1) `section_name` is not found, (2) it did not have
+ *     the `SHT_STRTAB` section type, (3) the section size was zero
+ *     noting that the ELF spec does consider that legal, or lastly
+ *     (4) an overflow or boundary violation occurred
+ */
+char *GetElfStringTable(const Elf64_Ehdr *elf,  //
+                        size_t mapsize,         //
+                        const char *section_name) {
+  int i;
   char *name;
-  Elf64_Half i;
-  Elf64_Shdr *shdr;
-  if (elf->e_shentsize) {
-    for (i = 0; i < elf->e_shnum; ++i) {
-      shdr = GetElfSectionHeaderAddress(elf, mapsize, i);
-      if (shdr->sh_type == SHT_STRTAB) {
-        name = GetElfSectionName(elf, mapsize,
-                                 GetElfSectionHeaderAddress(elf, mapsize, i));
-        if (name && !strcmp(name, ".strtab")) {
-          return GetElfSectionAddress(elf, mapsize, shdr);
-        }
-      }
+  const Elf64_Shdr *shdr;
+  for (i = 0; i < elf->e_shnum; ++i) {
+    if ((shdr = GetElfSectionHeaderAddress(elf, mapsize, i)) &&
+        shdr->sh_type == SHT_STRTAB &&
+        (name = GetElfSectionName(elf, mapsize, shdr)) &&
+        (!section_name || !strcmp(name, section_name))) {
+      return GetElfSectionAddress(elf, mapsize, shdr);
     }
   }
-  return NULL;
+  return 0;
 }

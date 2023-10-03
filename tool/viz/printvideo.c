@@ -23,15 +23,9 @@
 #include "dsp/scale/scale.h"
 #include "dsp/tty/quant.h"
 #include "dsp/tty/tty.h"
-#include "libc/alg/alg.h"
-#include "libc/alg/arraylist.internal.h"
 #include "libc/assert.h"
-#include "libc/bits/bits.h"
-#include "libc/bits/safemacros.internal.h"
-#include "libc/bits/xchg.internal.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
-#include "libc/calls/ioctl.h"
 #include "libc/calls/struct/framebufferfixedscreeninfo.h"
 #include "libc/calls/struct/framebuffervirtualscreeninfo.h"
 #include "libc/calls/struct/iovec.h"
@@ -39,6 +33,8 @@
 #include "libc/calls/struct/sigaction.h"
 #include "libc/calls/struct/siginfo.h"
 #include "libc/calls/struct/sigset.h"
+#include "libc/calls/struct/timespec.h"
+#include "libc/calls/struct/winsize.h"
 #include "libc/calls/termios.h"
 #include "libc/calls/ucontext.h"
 #include "libc/dns/dns.h"
@@ -46,23 +42,30 @@
 #include "libc/fmt/conv.h"
 #include "libc/fmt/fmt.h"
 #include "libc/fmt/itoa.h"
+#include "libc/intrin/bits.h"
+#include "libc/intrin/kprintf.h"
+#include "libc/intrin/safemacros.internal.h"
+#include "libc/intrin/xchg.internal.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
 #include "libc/macros.internal.h"
 #include "libc/math.h"
+#include "libc/mem/alg.h"
+#include "libc/mem/arraylist.internal.h"
 #include "libc/mem/mem.h"
 #include "libc/nexgen32e/bench.h"
 #include "libc/nexgen32e/x86feature.h"
 #include "libc/nt/console.h"
 #include "libc/nt/runtime.h"
-#include "libc/rand/rand.h"
-#include "libc/runtime/buffer.h"
-#include "libc/runtime/gc.internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/sock/sock.h"
+#include "libc/sock/struct/pollfd.h"
 #include "libc/stdio/internal.h"
+#include "libc/stdio/rand.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
+#include "libc/str/strwidth.h"
+#include "libc/str/unicode.h"
 #include "libc/sysv/consts/af.h"
 #include "libc/sysv/consts/auxv.h"
 #include "libc/sysv/consts/clock.h"
@@ -87,10 +90,10 @@
 #include "libc/sysv/consts/termios.h"
 #include "libc/sysv/consts/w.h"
 #include "libc/sysv/errfuns.h"
+#include "libc/thread/thread.h"
 #include "libc/time/time.h"
-#include "libc/unicode/unicode.h"
-#include "libc/x/x.h"
-#include "third_party/getopt/getopt.h"
+#include "libc/x/xsigaction.h"
+#include "third_party/getopt/getopt.internal.h"
 #include "third_party/stb/stb_image_resize.h"
 #include "tool/viz/lib/graphic.h"
 #include "tool/viz/lib/knobs.h"
@@ -171,14 +174,14 @@ mode.\n\
 #define BALLOC(B, A, N, NAME)               \
   ({                                        \
     INFOF("balloc/%s %,zu bytes", NAME, N); \
-    balloc(B, A, N);                        \
+    *(B) = pvalloc(N);                      \
   })
 
-#define TIMEIT(OUT_NANOS, FORM)                        \
-  do {                                                 \
-    long double Start = nowl();                        \
-    FORM;                                              \
-    (OUT_NANOS) = (uint64_t)((nowl() - Start) * 1e9L); \
+#define TIMEIT(OUT_NANOS, FORM)                                           \
+  do {                                                                    \
+    struct timespec Start = timespec_real();                              \
+    FORM;                                                                 \
+    (OUT_NANOS) = timespec_tonanos(timespec_sub(timespec_real(), Start)); \
   } while (0)
 
 typedef bool (*openspeaker_f)(void);
@@ -205,7 +208,7 @@ struct NamedVector {
 struct VtFrame {
   size_t i, n;
   union {
-    struct GuardedBuffer b;
+    void *b;
     char *bytes;
   };
 };
@@ -229,7 +232,7 @@ static const struct itimerval kTimerDisarm = {
     {0, 0},
 };
 
-static const struct itimerval kTimerHalfSecordSingleShot = {
+static const struct itimerval kTimerHalfSecondSingleShot = {
     {0, 0},
     {0, 500000},
 };
@@ -264,6 +267,7 @@ static bool emboss_, sobel_;
 static volatile int playpid_;
 static struct winsize wsize_;
 static float hue_, sat_, lit_;
+static void *xtcodes_, *audio_;
 static struct FrameBuffer fb0_;
 static unsigned chans_, srate_;
 static volatile bool ignoresigs_;
@@ -275,18 +279,17 @@ static openspeaker_f tryspeakerfns_[4];
 static int primaries_, lighting_, swing_;
 static uint64_t t1, t2, t3, t4, t5, t6, t8;
 static const char *sox_, *ffplay_, *patharg_;
-static struct GuardedBuffer xtcodes_, audio_;
 static struct VtFrame vtframe_[2], *f1_, *f2_;
 static struct Graphic graphic_[2], *g1_, *g2_;
+static struct timespec deadline_, dura_, starttime_;
 static bool yes_, stats_, dither_, ttymode_, istango_;
-static long double deadline_, dura_, skip_, starttime_;
-static long double decode_start_, f1_start_, f2_start_;
+static struct timespec decode_start_, f1_start_, f2_start_;
 static int16_t pcm_[PLM_AUDIO_SAMPLES_PER_FRAME * 2 / 8][8];
 static int16_t pcmscale_[PLM_AUDIO_SAMPLES_PER_FRAME * 2 / 8][8];
 static bool fullclear_, historyclear_, tuned_, yonly_, gotvideo_;
-static int homerow_, lastrow_, playfd_, infd_, outfd_, nullfd_, speakerfails_;
-static char host_[DNS_NAME_MAX + 1], status_[7][200], logpath_[PATH_MAX],
-    fifopath_[PATH_MAX], chansstr_[32], sratestr_[32], port_[32];
+static int homerow_, lastrow_, playfd_, infd_, outfd_, speakerfails_;
+static char status_[7][200], logpath_[PATH_MAX], fifopath_[PATH_MAX],
+    chansstr_[32], sratestr_[32];
 
 static void OnCtrlC(void) {
   longjmp(jb_, 1);
@@ -308,23 +311,18 @@ static void StrikeDownCrapware(int sig) {
   kill(playpid_, SIGKILL);
 }
 
-static long AsMilliseconds(long double ts) {
-  return rintl(ts * 1e3);
-}
-
-static long AsNanoseconds(long double ts) {
-  return rintl(ts * 1e9);
-}
-
-static long double GetGraceTime(void) {
-  return deadline_ - nowl();
+static struct timespec GetGraceTime(void) {
+  return timespec_sub(deadline_, timespec_real());
 }
 
 static int GetNamedVector(const struct NamedVector *choices, size_t n,
                           const char *s) {
   int i;
   char name[sizeof(choices->name)];
+#pragma GCC push_options
+#pragma GCC diagnostic ignored "-Wstringop-truncation"
   strncpy(name, s, sizeof(name));
+#pragma GCC pop_options
   strntoupper(name, sizeof(name));
   for (i = 0; i < n; ++i) {
     if (memcmp(choices[i].name, name, sizeof(name)) == 0) {
@@ -345,7 +343,7 @@ static int GetLighting(const char *s) {
 static bool CloseSpeaker(void) {
   int rc, wstatus;
   rc = 0;
-  sched_yield();
+  pthread_yield();
   if (playfd_) {
     rc |= close(playfd_);
     playfd_ = -1;
@@ -353,7 +351,7 @@ static bool CloseSpeaker(void) {
   if (playpid_) {
     kill(playpid_, SIGTERM);
     xsigaction(SIGALRM, StrikeDownCrapware, SA_RESETHAND, 0, 0);
-    setitimer(ITIMER_REAL, &kTimerHalfSecordSingleShot, NULL);
+    setitimer(ITIMER_REAL, &kTimerHalfSecondSingleShot, NULL);
     while (playpid_) {
       if (waitpid(playpid_, &wstatus, 0) != -1) {
         rc |= WEXITSTATUS(wstatus);
@@ -371,12 +369,17 @@ static bool CloseSpeaker(void) {
 }
 
 static void ResizeVtFrame(struct VtFrame *f, size_t yn, size_t xn) {
-  BALLOC(&f->b, PAGESIZE, 64 + yn * (xn * 32 + 8), __FUNCTION__);
+  BALLOC(&f->b, 4096, 64 + yn * (xn * 32 + 8), __FUNCTION__);
   f->i = f->n = 0;
 }
 
+static float timespec_tofloat(struct timespec ts) {
+  return ts.tv_sec + ts.tv_nsec * 1e-9;
+}
+
 static void RecordFactThatFrameWasFullyRendered(void) {
-  fcring_.p[fcring_.i] = nowl() - starttime_;
+  fcring_.p[fcring_.i] =
+      timespec_tofloat(timespec_sub(timespec_real(), starttime_));
   fcring_.n += 1;
   fcring_.i += 1;
   fcring_.i &= ARRAYLEN(fcring_.p) - 1;
@@ -426,7 +429,9 @@ static void DimensionDisplay(void) {
       wsize_.ws_row = 25;
       wsize_.ws_col = 80;
       wsize_ = (struct winsize){.ws_row = 40, .ws_col = 80};
-      if (getttysize(outfd_, &wsize_) == -1) getttysize(0, &wsize_);
+      if (tcgetwinsize(outfd_, &wsize_) == -1) {
+        tcgetwinsize(0, &wsize_);
+      }
       dh_ = wsize_.ws_row * 2;
       dw_ = wsize_.ws_col * 2;
     }
@@ -519,7 +524,7 @@ static bool OpenSpeaker(void) {
     if (ffplay_) tryspeakerfns_[i++] = TryFfplay;
     if (sox_) tryspeakerfns_[i++] = TrySox;
   }
-  snprintf(fifopath_, sizeof(fifopath_), "%s%s.%d.%d.wav", kTmpPath,
+  snprintf(fifopath_, sizeof(fifopath_), "%s%s.%d.%d.wav", __get_tmpdir(),
            firstnonnull(program_invocation_short_name, "unknown"), getpid(),
            count);
   for (i = 0; i < ARRAYLEN(tryspeakerfns_); ++i) {
@@ -537,7 +542,7 @@ static bool OpenSpeaker(void) {
 
 static void OnAudio(plm_t *mpeg, plm_samples_t *samples, void *user) {
   if (playfd_ != -1) {
-    DEBUGF("OnAudio() [grace=%,ldns]", AsNanoseconds(GetGraceTime()));
+    DEBUGF("OnAudio() [grace=%,ldns]", timespec_tonanos(GetGraceTime()));
     CHECK_EQ(2, chans_);
     CHECK_EQ(ARRAYLEN(pcm_) * 8, samples->count * chans_);
     float2short(ARRAYLEN(pcm_), pcm_, (void *)samples->interleaved);
@@ -547,7 +552,7 @@ static void OnAudio(plm_t *mpeg, plm_samples_t *samples, void *user) {
   TryAgain:
     if (WriteAudio(playfd_, pcm_, sizeof(pcm_), 1000) != -1) {
       DEBUGF("WriteAudio(%d, %zu) ok [grace=%,ldns]", playfd_,
-             samples->count * 2, AsNanoseconds(GetGraceTime()));
+             samples->count * 2, timespec_tonanos(GetGraceTime()));
     } else {
       WARNF("WriteAudio(%d, %zu) failed: %s", playfd_, samples->count * 2,
             strerror(errno));
@@ -610,7 +615,7 @@ static char *StartRender(char *vt) {
 
 static void EndRender(char *vt) {
   vt += sprintf(vt, "\e[0m");
-  f2_->n = (intptr_t)vt - (intptr_t)f2_->b.p;
+  f2_->n = (intptr_t)vt - (intptr_t)f2_->b;
   f2_->i = 0;
 }
 
@@ -688,7 +693,7 @@ static void RenderIt(void) {
   struct TtyRgb bg, fg;
   yn = g2_->yn;
   xn = g2_->xn;
-  vt = f2_->b.p;
+  vt = f2_->b;
   p = StartRender(vt);
   if (TTYQUANT()->alg == kTtyQuantTrue) {
     bg = (struct TtyRgb){0, 0, 0, 0};
@@ -704,7 +709,7 @@ static void RenderIt(void) {
     fg = (struct TtyRgb){0xff, 0xff, 0xff, 231};
     p = stpcpy(p, "\e[48;5;16;38;5;231m");
   }
-  p = ttyraster(p, xtcodes_.p, yn, xn, bg, fg);
+  p = ttyraster(p, xtcodes_, yn, xn, bg, fg);
   if (ttymode_ && stats_) {
     bpc = bpf = p - vt;
     bpc /= wsize_.ws_row * wsize_.ws_col;
@@ -751,11 +756,11 @@ static void RasterIt(void) {
   static bool once;
   static void *buf;
   if (!once) {
-    buf = mapanon(ROUNDUP(fb0_.size, FRAMESIZE));
+    buf = _mapanon(ROUNDUP(fb0_.size, FRAMESIZE));
     once = true;
   }
   WriteToFrameBuffer(fb0_.vscreen.yres_virtual, fb0_.vscreen.xres_virtual, buf,
-                     g2_->yn, g2_->xn, g2_->b.p, fb0_.vscreen.yres,
+                     g2_->yn, g2_->xn, g2_->b, fb0_.vscreen.yres,
                      fb0_.vscreen.xres);
   memcpy(fb0_.map, buf, fb0_.size);
 }
@@ -763,7 +768,7 @@ static void RasterIt(void) {
 static void TranscodeVideo(plm_frame_t *pf) {
   CHECK_EQ(pf->cb.width, pf->cr.width);
   CHECK_EQ(pf->cb.height, pf->cr.height);
-  DEBUGF("TranscodeVideo() [grace=%,ldns]", AsNanoseconds(GetGraceTime()));
+  DEBUGF("TranscodeVideo() [grace=%,ldns]", timespec_tonanos(GetGraceTime()));
   g2_ = &graphic_[1];
   t5 = 0;
 
@@ -772,7 +777,7 @@ static void TranscodeVideo(plm_frame_t *pf) {
     if (pf1_) pary_ = 1.;
     if (pf2_) pary_ = (266 / 64.) * (900 / 1600.);
     pary_ *= plm_get_pixel_aspect_ratio(plm_);
-    YCbCr2RgbScale(g2_->yn, g2_->xn, g2_->b.p, pf->y.height, pf->y.width,
+    YCbCr2RgbScale(g2_->yn, g2_->xn, g2_->b, pf->y.height, pf->y.width,
                    (void *)pf->y.data, pf->cr.height, pf->cr.width,
                    (void *)pf->cb.data, (void *)pf->cr.data, pf->y.height,
                    pf->y.width, pf->cr.height, pf->cr.width, pf->height,
@@ -787,7 +792,7 @@ static void TranscodeVideo(plm_frame_t *pf) {
         boxblur(g2_);
         break;
       case kBlurGaussian:
-        gaussian(g2_->yn, g2_->xn, g2_->b.p);
+        gaussian(g2_->yn, g2_->xn, g2_->b);
         break;
       default:
         break;
@@ -796,16 +801,16 @@ static void TranscodeVideo(plm_frame_t *pf) {
     if (emboss_) emboss(g2_);
     switch (sharp_) {
       case kSharpSharp:
-        sharpen(3, g2_->yn, g2_->xn, g2_->b.p, g2_->yn, g2_->xn);
+        sharpen(3, g2_->yn, g2_->xn, g2_->b, g2_->yn, g2_->xn);
         break;
       case kSharpUnsharp:
-        unsharp(3, g2_->yn, g2_->xn, g2_->b.p, g2_->yn, g2_->xn);
+        unsharp(3, g2_->yn, g2_->xn, g2_->b, g2_->yn, g2_->xn);
         break;
       default:
         break;
     }
     if (dither_ && TTYQUANT()->alg != kTtyQuantTrue) {
-      dither(g2_->yn, g2_->xn, g2_->b.p, g2_->yn, g2_->xn);
+      dither(g2_->yn, g2_->xn, g2_->b, g2_->yn, g2_->xn);
     }
   });
 
@@ -813,7 +818,7 @@ static void TranscodeVideo(plm_frame_t *pf) {
     t3 = 0;
     TIMEIT(t4, RasterIt());
   } else {
-    TIMEIT(t3, getxtermcodes(xtcodes_.p, g2_));
+    TIMEIT(t3, getxtermcodes(xtcodes_, g2_));
     TIMEIT(t4, RenderIt());
   }
 
@@ -835,7 +840,8 @@ static void OnVideo(plm_t *mpeg, plm_frame_t *pf, void *user) {
   } else {
     TranscodeVideo(pf);
     if (!f1_->n) {
-      xchg(&f1_, &f2_);
+      struct VtFrame *t = f1_;
+      f1_ = f2_, f2_ = t;
       f1_start_ = decode_start_;
     } else {
       f2_start_ = decode_start_;
@@ -870,18 +876,20 @@ static void OpenVideo(void) {
 static ssize_t WriteVideoCall(void) {
   size_t amt;
   ssize_t rc;
-  amt = min(PAGESIZE * 4, f1_->n - f1_->i);
+  amt = min(4096 * 4, f1_->n - f1_->i);
   if ((rc = write(outfd_, f1_->bytes + f1_->i, amt)) != -1) {
     if ((f1_->i += rc) == f1_->n) {
       if (plm_get_audio_enabled(plm_)) {
         plm_set_audio_lead_time(
             plm_,
-            MAX(0, MIN(nowl() - f1_start_, plm_get_samplerate(plm_) /
-                                               PLM_AUDIO_SAMPLES_PER_FRAME)));
+            max(0,
+                min(timespec_tofloat(timespec_sub(timespec_real(), f1_start_)),
+                    plm_get_samplerate(plm_) / PLM_AUDIO_SAMPLES_PER_FRAME)));
       }
       f1_start_ = f2_start_;
       f1_->i = f1_->n = 0;
-      xchg(&f1_, &f2_);
+      struct VtFrame *t = f1_;
+      f1_ = f2_, f2_ = t;
       RecordFactThatFrameWasFullyRendered();
     }
   }
@@ -900,10 +908,10 @@ static void DrainVideo(void) {
 
 static void WriteVideo(void) {
   ssize_t rc;
-  DEBUGF("write(tty) grace=%,ldns", AsNanoseconds(GetGraceTime()));
+  DEBUGF("write(tty) grace=%,ldns", timespec_tonanos(GetGraceTime()));
   if ((rc = WriteVideoCall()) != -1) {
     DEBUGF("write(tty) → %zd [grace=%,ldns]", rc,
-           AsNanoseconds(GetGraceTime()));
+           timespec_tonanos(GetGraceTime()));
   } else if (errno == EAGAIN || errno == EINTR) {
     DEBUGF("write(tty) → EINTR");
     longjmp(jbi_, 1);
@@ -1265,11 +1273,11 @@ static void PerformBestEffortIo(void) {
       {infd_, POLLIN},
       {outfd_, f1_ && f1_->n ? POLLOUT : 0},
   };
-  pollms = MAX(0, AsMilliseconds(GetGraceTime()));
+  pollms = MAX(0, timespec_tomillis(GetGraceTime()));
   DEBUGF("poll() ms=%,d", pollms);
   if ((toto = poll(fds, ARRAYLEN(fds), pollms)) != -1) {
     DEBUGF("poll() toto=%d [grace=%,ldns]", toto,
-           AsNanoseconds(GetGraceTime()));
+           timespec_tonanos(GetGraceTime()));
     if (toto) {
       if (fds[0].revents & (POLLIN | POLLERR)) ReadKeyboard();
       if (fds[1].revents & (POLLOUT | POLLERR)) WriteVideo();
@@ -1301,32 +1309,36 @@ static void HandleSignals(void) {
 }
 
 static void PrintVideo(void) {
-  long double decode_last, decode_end, next_tick, lag;
-  dura_ = MIN(MAX_FRAMERATE, 1 / plm_get_framerate(plm_));
+  struct timespec decode_last, decode_end, next_tick, lag;
+  dura_ = timespec_frommicros(min(MAX_FRAMERATE, 1 / plm_get_framerate(plm_)) *
+                              1e6);
   INFOF("framerate=%f dura=%f", plm_get_framerate(plm_), dura_);
-  next_tick = deadline_ = decode_last = nowl();
-  next_tick += dura_;
-  deadline_ += dura_;
+  next_tick = deadline_ = decode_last = timespec_real();
+  next_tick = timespec_add(next_tick, dura_);
+  deadline_ = timespec_add(deadline_, dura_);
   do {
-    DEBUGF("plm_decode [grace=%,ldns]", AsNanoseconds(GetGraceTime()));
-    decode_start_ = nowl();
-    plm_decode(plm_, decode_start_ - decode_last);
+    DEBUGF("plm_decode [grace=%,ldns]", timespec_tonanos(GetGraceTime()));
+    decode_start_ = timespec_real();
+    plm_decode(plm_,
+               timespec_tofloat(timespec_sub(decode_start_, decode_last)));
     decode_last = decode_start_;
-    decode_end = nowl();
-    lag = decode_end - decode_start_;
-    while (decode_end + lag > next_tick) next_tick += dura_;
-    deadline_ = next_tick - lag;
+    decode_end = timespec_real();
+    lag = timespec_sub(decode_end, decode_start_);
+    while (timespec_cmp(timespec_add(decode_end, lag), next_tick) > 0) {
+      next_tick = timespec_add(next_tick, dura_);
+    }
+    deadline_ = timespec_sub(next_tick, lag);
     if (gotvideo_ || !plm_get_video_enabled(plm_)) {
       gotvideo_ = false;
       INFOF("entering printvideo event loop (lag=%,ldns, grace=%,ldns)",
-            AsNanoseconds(lag), AsNanoseconds(GetGraceTime()));
+            timespec_tonanos(lag), timespec_tonanos(GetGraceTime()));
     }
     do {
       if (!setjmp(jbi_)) {
         PerformBestEffortIo();
       }
       HandleSignals();
-    } while (AsMilliseconds(GetGraceTime()) > 0);
+    } while (timespec_tomillis(GetGraceTime()) > 0);
   } while (plm_ && !plm_has_ended(plm_));
 }
 
@@ -1362,7 +1374,7 @@ static void PrintUsage(int rc, FILE *f) {
 
 static void GetOpts(int argc, char *argv[]) {
   int opt;
-  snprintf(logpath_, sizeof(logpath_), "%s%s.log", kTmpPath,
+  snprintf(logpath_, sizeof(logpath_), "%s%s.log", __get_tmpdir(),
            firstnonnull(program_invocation_short_name, "unknown"));
   while ((opt = getopt(argc, argv, "?34AGSTVYabdfhnpstxyzvL:")) != -1) {
     switch (opt) {
@@ -1395,20 +1407,19 @@ static void OnExit(void) {
   YCbCrFree(&ycbcr_);
   RestoreTty();
   ttyidentclear(&ti_);
-  close_s(&infd_);
-  close_s(&outfd_);
-  bfree(&graphic_[0].b);
-  bfree(&graphic_[1].b);
-  bfree(&vtframe_[0].b);
-  bfree(&vtframe_[1].b);
-  bfree(&xtcodes_);
-  bfree(&audio_);
+  close(infd_), infd_ = -1;
+  close(outfd_), outfd_ = -1;
+  free(graphic_[0].b);
+  free(graphic_[1].b);
+  free(vtframe_[0].b);
+  free(vtframe_[1].b);
+  free(xtcodes_);
+  free(audio_);
   CloseSpeaker();
 }
 
 static void MakeLatencyLittleLessBad(void) {
-  _peekall();
-  LOGIFNEG1(mlockall(MCL_CURRENT));
+  LOGIFNEG1(sys_mlockall(MCL_CURRENT));
   LOGIFNEG1(nice(-5));
 }
 
@@ -1426,7 +1437,7 @@ static void PickDefaults(void) {
 }
 
 static void RenounceSpecialPrivileges(void) {
-  if (getauxval(AT_SECURE)) {
+  if (issetugid()) {
     setegid(getgid());
     seteuid(getuid());
   }
@@ -1529,6 +1540,8 @@ static void TryToOpenFrameBuffer(void) {
 
 int main(int argc, char *argv[]) {
   sigset_t wut;
+  const char *s;
+  ShowCrashReports();
   gamma_ = 2.4;
   volscale_ -= 2;
   dither_ = true;
@@ -1542,8 +1555,17 @@ int main(int argc, char *argv[]) {
   if (!tuned_) PickDefaults();
   if (optind == argc) PrintUsage(EX_USAGE, stderr);
   patharg_ = argv[optind];
-  sox_ = strdup(commandvenv("SOX", "sox"));
-  ffplay_ = strdup(commandvenv("FFPLAY", "ffplay"));
+  s = commandvenv("SOX", "sox");
+  sox_ = s ? strdup(s) : 0;
+  s = commandvenv("FFPLAY", "ffplay");
+  ffplay_ = s ? strdup(s) : 0;
+  if (!sox_ && !ffplay_) {
+    fprintf(stderr, "please install either the "
+                    "`play` (sox) or "
+                    "`ffplay` (ffmpeg) "
+                    "commands, so printvideo.com can play audio\n");
+    usleep(10000);
+  }
   infd_ = STDIN_FILENO;
   outfd_ = STDOUT_FILENO;
   if (!setjmp(jb_)) {
@@ -1568,7 +1590,7 @@ int main(int argc, char *argv[]) {
     if (t2 > t1) longjmp(jb_, 1);
     OpenVideo();
     DimensionDisplay();
-    starttime_ = nowl();
+    starttime_ = timespec_real();
     PrintVideo();
   }
   INFOF("jb_ triggered");

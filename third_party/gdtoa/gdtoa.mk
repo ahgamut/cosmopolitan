@@ -22,7 +22,6 @@ THIRD_PARTY_GDTOA_A_DIRECTDEPS =			\
 	LIBC_NEXGEN32E					\
 	LIBC_RUNTIME					\
 	LIBC_STR					\
-	LIBC_STUBS					\
 	LIBC_SYSV					\
 	LIBC_TINYMATH
 
@@ -38,8 +37,8 @@ $(THIRD_PARTY_GDTOA_A).pkg:				\
 		$(THIRD_PARTY_GDTOA_A_OBJS)		\
 		$(foreach x,$(THIRD_PARTY_GDTOA_A_DIRECTDEPS),$($(x)_A).pkg)
 
-$(THIRD_PARTY_GDTOA_A_OBJS):				\
-		OVERRIDE_CFLAGS +=			\
+$(THIRD_PARTY_GDTOA_A_OBJS): private			\
+		CFLAGS +=				\
 			-ffunction-sections		\
 			-fdata-sections
 

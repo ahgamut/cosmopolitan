@@ -4,6 +4,7 @@
 │ Python 3                                                                     │
 │ https://docs.python.org/3/license.html                                       │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/calls/struct/timeval.h"
 #include "libc/time/struct/tm.h"
 #include "libc/time/time.h"
 #include "third_party/python/Include/abstract.h"
@@ -908,7 +909,12 @@ PyInit__lsprof(void)
     return module;
 }
 
-_Section(".rodata.pytab.1") const struct _inittab _PyImport_Inittab__lsprof = {
+#ifdef __aarch64__
+_Section(".rodata.pytab.1 //")
+#else
+_Section(".rodata.pytab.1")
+#endif
+ const struct _inittab _PyImport_Inittab__lsprof = {
     "_lsprof",
     PyInit__lsprof,
 };

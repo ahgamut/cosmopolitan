@@ -31,8 +31,6 @@ DSP_SCALE_A_DIRECTDEPS =			\
 	LIBC_NEXGEN32E				\
 	LIBC_RUNTIME				\
 	LIBC_STR				\
-	LIBC_STUBS				\
-	LIBC_STUBS				\
 	LIBC_TIME				\
 	LIBC_TINYMATH				\
 	LIBC_X
@@ -51,8 +49,8 @@ $(DSP_SCALE_A).pkg:				\
 o/$(MODE)/dsp/scale/cdecimate2xuint8x8.o	\
 o/$(MODE)/dsp/scale/gyarados.o			\
 o/$(MODE)/dsp/scale/magikarp.o			\
-o/$(MODE)/dsp/scale/scale.o:			\
-		OVERRIDE_CFLAGS +=		\
+o/$(MODE)/dsp/scale/scale.o: private		\
+		CFLAGS +=			\
 			$(MATHEMATICAL)
 
 DSP_SCALE_LIBS = $(foreach x,$(DSP_SCALE_ARTIFACTS),$($(x)))

@@ -18,22 +18,39 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
 #include "libc/errno.h"
+#include "libc/intrin/weaken.h"
+#include "libc/mem/mem.h"
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/internal.h"
+#include "libc/stdio/stdio.h"
 #include "libc/sysv/consts/o.h"
 
 int __fflush_impl(FILE *f) {
   size_t i;
   ssize_t rc;
-  free_s(&f->getln);
-  if (f->beg && !f->end && (f->iomode & O_ACCMODE) != O_RDONLY) {
-    for (i = 0; i < f->beg; i += rc) {
-      if ((rc = write(f->fd, f->buf + i, f->beg - i)) == -1) {
+  if (f->getln) {
+    if (_weaken(free)) {
+      _weaken(free)(f->getln);
+    }
+    f->getln = 0;
+  }
+  if (f->fd != -1) {
+    if (f->beg && !f->end && (f->iomode & O_ACCMODE) != O_RDONLY) {
+      for (i = 0; i < f->beg; i += rc) {
+        if ((rc = write(f->fd, f->buf + i, f->beg - i)) == -1) {
+          f->state = errno;
+          return -1;
+        }
+      }
+      f->beg = 0;
+    }
+    if (f->beg < f->end && (f->iomode & O_ACCMODE) != O_WRONLY) {
+      if (lseek(f->fd, -(int)(f->end - f->beg), SEEK_CUR) == -1) {
         f->state = errno;
         return -1;
       }
+      f->end = f->beg;
     }
-    f->beg = 0;
   }
   return 0;
 }

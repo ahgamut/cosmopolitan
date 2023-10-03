@@ -1,6 +1,8 @@
 #-*-mode:makefile-gmake;indent-tabs-mode:t;tab-width:8;coding:utf-8-*-┐
 #───vi: set et ft=make ts=8 tw=8 fenc=utf-8 :vi───────────────────────┘
 
+ifeq ($(ARCH), x86_64)
+
 PKGS += TEST_TOOL_PLINKO
 
 TEST_TOOL_PLINKO = $(TOOL_PLINKO_A_DEPS) $(TOOL_PLINKO_A)
@@ -43,15 +45,13 @@ TEST_TOOL_PLINKO_DIRECTDEPS =					\
 	LIBC_LOG						\
 	LIBC_MEM						\
 	LIBC_NEXGEN32E						\
+	LIBC_PROC						\
 	LIBC_RUNTIME						\
 	LIBC_STDIO						\
 	LIBC_STR						\
-	LIBC_STUBS						\
 	LIBC_SYSV						\
 	LIBC_TESTLIB						\
-	LIBC_UNICODE						\
 	LIBC_X							\
-	LIBC_ZIPOS						\
 	THIRD_PARTY_COMPILER_RT					\
 	THIRD_PARTY_XED
 
@@ -77,13 +77,18 @@ o/$(MODE)/test/tool/plinko/%.com.dbg:				\
 		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
 
-o/$(MODE)/test/tool/plinko/plinko_test.com.runs:		\
+o/$(MODE)/test/tool/plinko/plinko_test.com.runs: private	\
 		QUOTA =	-M100g
 
-o/$(MODE)/test/tool/plinko/algebra_test.lisp.zip.o: ZIPOBJ_FLAGS += -B
-o/$(MODE)/test/tool/plinko/library_test.lisp.zip.o: ZIPOBJ_FLAGS += -B
+o/$(MODE)/test/tool/plinko/algebra_test.lisp.zip.o: private ZIPOBJ_FLAGS += -B
+o/$(MODE)/test/tool/plinko/library_test.lisp.zip.o: private ZIPOBJ_FLAGS += -B
 
 .PHONY: o/$(MODE)/test/tool/plinko
 o/$(MODE)/test/tool/plinko:					\
 		$(TEST_TOOL_PLINKO_BINS)			\
 		$(TEST_TOOL_PLINKO_CHECKS)
+
+else
+.PHONY: o/$(MODE)/test/tool/plinko
+o/$(MODE)/test/tool/plinko:
+endif

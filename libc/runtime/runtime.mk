@@ -26,25 +26,27 @@ LIBC_RUNTIME_A_SRCS =					\
 
 LIBC_RUNTIME_A_OBJS =					\
 	$(LIBC_RUNTIME_A_SRCS_S:%.S=o/$(MODE)/%.o)	\
-	$(LIBC_RUNTIME_A_SRCS_C:%.c=o/$(MODE)/%.o)
+	$(LIBC_RUNTIME_A_SRCS_C:%.c=o/$(MODE)/%.o)	\
+	o/$(MODE)/libc/runtime/.cosmo.zip.o
 
 LIBC_RUNTIME_A_CHECKS =					\
 	$(LIBC_RUNTIME_A).pkg				\
 	$(LIBC_RUNTIME_A_HDRS:%=o/$(MODE)/%.ok)
 
 LIBC_RUNTIME_A_DIRECTDEPS =				\
-	LIBC_BITS					\
 	LIBC_CALLS					\
 	LIBC_ELF					\
 	LIBC_FMT					\
 	LIBC_INTRIN					\
 	LIBC_NEXGEN32E					\
+	LIBC_NT_ADVAPI32				\
 	LIBC_NT_KERNEL32				\
+	LIBC_NT_SYNCHRONIZATION				\
 	LIBC_STR					\
-	LIBC_STUBS					\
 	LIBC_SYSV					\
 	LIBC_SYSV_CALLS					\
-	THIRD_PARTY_ZLIB				\
+	THIRD_PARTY_NSYNC				\
+	THIRD_PARTY_PUFF				\
 	THIRD_PARTY_XED
 
 LIBC_RUNTIME_A_DEPS :=					\
@@ -63,58 +65,55 @@ $(LIBC_RUNTIME_A).pkg:					\
 #   asan and ubsan can be function traced
 # we can't use function tracing because:
 #   this is the function tracing runtime
-o/$(MODE)/libc/runtime/ftracer.o:			\
-		OVERRIDE_CFLAGS +=			\
-			-x-no-pg			\
-			-mno-fentry			\
-			-ffreestanding			\
-			-fno-sanitize=all
+o/$(MODE)/libc/runtime/cosmo2.o: private		\
+		CFLAGS += -O0
 
-o/$(MODE)/libc/runtime/fork-nt.o			\
-o/$(MODE)/libc/runtime/printmemoryintervals.o		\
-o/$(MODE)/libc/runtime/arememoryintervalsok.o		\
-o/$(MODE)/libc/runtime/findmemoryinterval.o		\
-o/$(MODE)/libc/runtime/sys_mprotect.greg.o		\
-o/$(MODE)/libc/runtime/getdosargv.o			\
-o/$(MODE)/libc/runtime/getdosenviron.o			\
-o/$(MODE)/libc/runtime/hook.greg.o			\
-o/$(MODE)/libc/runtime/ismemtracked.greg.o		\
-o/$(MODE)/libc/runtime/memtracknt.o			\
-o/$(MODE)/libc/runtime/memtrack.greg.o			\
-o/$(MODE)/libc/runtime/metalprintf.greg.o		\
-o/$(MODE)/libc/runtime/printargs.greg.o			\
-o/$(MODE)/libc/runtime/mman.greg.o			\
-o/$(MODE)/libc/runtime/print.greg.o			\
-o/$(MODE)/libc/runtime/stackchkfail.o			\
-o/$(MODE)/libc/runtime/stackchkfaillocal.o		\
-o/$(MODE)/libc/runtime/winmain.greg.o			\
-o/$(MODE)/libc/runtime/opensymboltable.o:		\
-		OVERRIDE_CFLAGS +=			\
-			-Os				\
-			-ffreestanding			\
-			$(NO_MAGIC)
+$(LIBC_RUNTIME_A_OBJS): private				\
+		COPTS +=				\
+			-fno-sanitize=all		\
+			-Wframe-larger-than=4096	\
+			-Walloca-larger-than=4096
 
-# must use alloca()
-# can't use asan or any runtime services
-o/$(MODE)/libc/runtime/fork-nt.o:			\
-		OVERRIDE_CPPFLAGS +=			\
-			-DSTACK_FRAME_UNLIMITED
-
-o/$(MODE)/libc/runtime/qsort.o:				\
-		OVERRIDE_CFLAGS +=			\
+o/$(MODE)/libc/runtime/qsort.o: private			\
+		CFLAGS +=				\
 			-Og
 
 # make always linked runtimes less huge when it's profitable
 o//libc/runtime/mmap.o					\
 o//libc/runtime/munmap.o				\
 o//libc/runtime/memtrack.greg.o				\
-o//libc/runtime/opensymboltable.greg.o:			\
-		OVERRIDE_CFLAGS +=			\
+o//libc/runtime/opensymboltable.greg.o: private		\
+		CFLAGS +=				\
 			-Os
 
-o/$(MODE)/libc/runtime/ftrace.greg.o:			\
-		OVERRIDE_CFLAGS +=			\
-			-mgeneral-regs-only
+ifeq ($(ARCH), aarch64)
+o/$(MODE)/libc/runtime/mmap.o				\
+o/$(MODE)/libc/runtime/enable_tls.o: private		\
+		CFLAGS +=				\
+			-mcmodel=large
+endif
+
+o/$(MODE)/libc/runtime/.cosmo.zip.o: private		\
+		ZIPOBJ_FLAGS +=				\
+			-B
+
+# these assembly files are safe to build on aarch64
+o/$(MODE)/libc/runtime/init.o: libc/runtime/init.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/runtime/wipe.o: libc/runtime/wipe.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/runtime/clone-linux.o: libc/runtime/clone-linux.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/runtime/ftrace-hook.o: libc/runtime/ftrace-hook.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/runtime/dsohandle.o: libc/runtime/dsohandle.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/runtime/zipos.o: libc/runtime/zipos.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/runtime/switchstacks.o: libc/runtime/switchstacks.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/runtime/sigsetjmp.o: libc/runtime/sigsetjmp.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
 
 LIBC_RUNTIME_LIBS = $(foreach x,$(LIBC_RUNTIME_ARTIFACTS),$($(x)))
 LIBC_RUNTIME_SRCS = $(foreach x,$(LIBC_RUNTIME_ARTIFACTS),$($(x)_SRCS))

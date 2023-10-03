@@ -16,7 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/x/x.h"
+#include "libc/x/xasprintf.h"
 
 /**
  * Returns dynamically formatted string.
@@ -24,11 +24,11 @@
  * @return must be free()'d or gc()'d
  * @note greatest of all C functions
  */
-char *(xasprintf)(const char *fmt, ...) {
+char *xasprintf(const char *fmt, ...) {
   char *res;
   va_list va;
   va_start(va, fmt);
-  res = (xvasprintf)(fmt, va);
+  res = xvasprintf(fmt, va);
   va_end(va);
   return res;
 }

@@ -18,22 +18,40 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/internal.h"
 #include "libc/calls/metalfile.internal.h"
+#include "libc/calls/struct/fd.internal.h"
+#include "libc/calls/struct/iovec.h"
+#include "libc/calls/struct/iovec.internal.h"
+#include "libc/intrin/weaken.h"
 #include "libc/macros.internal.h"
 #include "libc/str/str.h"
 #include "libc/sysv/errfuns.h"
+#include "libc/vga/vga.internal.h"
 
-ssize_t sys_readv_metal(struct Fd *fd, const struct iovec *iov, int iovlen) {
+#ifdef __x86_64__
+
+ssize_t sys_readv_metal(int fd, const struct iovec *iov, int iovlen) {
   int i;
   size_t got, toto;
   struct MetalFile *file;
-  switch (fd->kind) {
+  switch (g_fds.p[fd].kind) {
+    case kFdConsole:
+      /*
+       * The VGA teletypewriter code may wish to send out "status report"
+       * escape sequences, in response to requests sent to it via write().
+       * Read & return these if they are available.
+       */
+      if (_weaken(sys_readv_vga)) {
+        ssize_t res = _weaken(sys_readv_vga)(g_fds.p + fd, iov, iovlen);
+        if (res > 0) return res;
+      }
+      /* fall through */
     case kFdSerial:
       return sys_readv_serial(fd, iov, iovlen);
     case kFdFile:
-      file = (struct MetalFile *)fd->handle;
+      file = (struct MetalFile *)g_fds.p[fd].handle;
       for (toto = i = 0; i < iovlen && file->pos < file->size; ++i) {
         got = MIN(iov[i].iov_len, file->size - file->pos);
-        memcpy(iov[i].iov_base, file->base, got);
+        if (got) memcpy(iov[i].iov_base, file->base, got);
         toto += got;
       }
       return toto;
@@ -41,3 +59,5 @@ ssize_t sys_readv_metal(struct Fd *fd, const struct iovec *iov, int iovlen) {
       return ebadf();
   }
 }
+
+#endif /* __x86_64__ */

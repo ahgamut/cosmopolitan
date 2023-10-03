@@ -16,48 +16,59 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/assert.h"
-#include "libc/bits/bits.h"
-#include "libc/bits/safemacros.internal.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/copyfile.h"
-#include "libc/calls/ioctl.h"
 #include "libc/calls/struct/itimerval.h"
 #include "libc/calls/struct/rlimit.h"
 #include "libc/calls/struct/rusage.h"
+#include "libc/calls/struct/sigaction.h"
 #include "libc/calls/struct/sigset.h"
 #include "libc/calls/struct/stat.h"
 #include "libc/calls/struct/timeval.h"
+#include "libc/calls/struct/winsize.h"
+#include "libc/calls/termios.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/fmt/conv.h"
 #include "libc/fmt/itoa.h"
-#include "libc/intrin/kprintf.h"
+#include "libc/fmt/libgen.h"
+#include "libc/fmt/magnumstrs.internal.h"
+#include "libc/intrin/bits.h"
+#include "libc/intrin/safemacros.internal.h"
 #include "libc/limits.h"
+#include "libc/log/appendresourcereport.internal.h"
 #include "libc/log/color.internal.h"
 #include "libc/log/log.h"
 #include "libc/macros.internal.h"
 #include "libc/math.h"
+#include "libc/mem/alg.h"
+#include "libc/mem/gc.internal.h"
 #include "libc/mem/mem.h"
 #include "libc/nexgen32e/kcpuids.h"
 #include "libc/nexgen32e/x86feature.h"
+#include "libc/nexgen32e/x86info.h"
 #include "libc/runtime/runtime.h"
-#include "libc/runtime/sysconf.h"
-#include "libc/stdio/append.internal.h"
-#include "libc/stdio/stdio.h"
+#include "libc/stdio/append.h"
+#include "libc/proc/posix_spawn.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/auxv.h"
 #include "libc/sysv/consts/clock.h"
 #include "libc/sysv/consts/itimer.h"
+#include "libc/sysv/consts/madv.h"
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/rlimit.h"
 #include "libc/sysv/consts/s.h"
 #include "libc/sysv/consts/sa.h"
 #include "libc/sysv/consts/sig.h"
 #include "libc/sysv/consts/termios.h"
+#include "libc/thread/thread.h"
 #include "libc/time/time.h"
 #include "libc/x/x.h"
-#include "third_party/getopt/getopt.h"
+#include "third_party/getopt/getopt.internal.h"
+
+#ifndef NDEBUG
+__static_yoink("zipos");
+#endif
 
 #define MANUAL \
   "\
@@ -103,12 +114,14 @@ FLAGS\n\
   -C SECS      set cpu limit [default 16]\n\
   -L SECS      set lat limit [default 90]\n\
   -P PROCS     set pro limit [default 2048]\n\
+  -S BYTES     set stk limit [default 8m]\n\
   -M BYTES     set mem limit [default 512m]\n\
   -F BYTES     set fsz limit [default 256m]\n\
   -O BYTES     set out limit [default 1m]\n\
   -s           decrement verbosity [default 4]\n\
   -v           increments verbosity [default 4]\n\
   -n           do nothing (prime ape executable)\n\
+  -w           disable landlock tmp workaround\n\
   -h           print help\n\
 \n\
 ENVIRONMENT\n\
@@ -120,11 +133,12 @@ ENVIRONMENT\n\
   V=4          print command w/ wall+cpu+mem usage\n\
   V=5          print output when exitcode is zero\n\
   COLUMNS=INT  explicitly set terminal width for output truncation\n\
-  TERM=dumb    disable ansi x3.64 seuences and thousands separators\n\
+  TERM=dumb    disable ansi x3.64 sequences and thousands separators\n\
 \n"
 
 struct Strings {
-  size_t n;
+  int n;
+  int c;
   char **p;
 };
 
@@ -144,6 +158,7 @@ bool wantfentry;
 bool wantrecord;
 bool fulloutput;
 bool touchtarget;
+bool noworkaround;
 bool wantnoredzone;
 bool stdoutmustclose;
 bool no_sanitize_null;
@@ -160,6 +175,7 @@ int pipefds[2];
 long cpuquota;
 long fszquota;
 long memquota;
+long stkquota;
 long proquota;
 long outquota;
 
@@ -171,6 +187,7 @@ char *target;
 char *output;
 char *outpath;
 char *command;
+char *movepath;
 char *shortened;
 char *colorflag;
 char ccpath[PATH_MAX];
@@ -186,21 +203,28 @@ struct itimerval timer;
 struct timespec signalled;
 
 sigset_t mask;
+char buf[4096];
 sigset_t savemask;
-char buf[PAGESIZE];
+char tmpout[PATH_MAX];
+posix_spawnattr_t spawnattr;
+posix_spawn_file_actions_t spawnfila;
+
+char *g_tmpout;
+const char *g_tmpout_original;
 
 const char *const kSafeEnv[] = {
-    "ADDR2LINE",  // needed by GetAddr2linePath
-    "HOME",       // needed by ~/.runit.psk
-    "HOMEDRIVE",  // needed by ~/.runit.psk
-    "HOMEPATH",   // needed by ~/.runit.psk
-    "MAKEFLAGS",  // needed by IsRunningUnderMake
-    "MODE",       // needed by test scripts
-    "PATH",       // needed by clang
-    "PWD",        // just seems plain needed
-    "STRACE",     // useful for troubleshooting
-    "TERM",       // needed to detect colors
-    "TMPDIR",     // needed by compiler
+    "ADDR2LINE",   // needed by GetAddr2linePath
+    "HOME",        // needed by ~/.runit.psk
+    "HOMEDRIVE",   // needed by ~/.runit.psk
+    "HOMEPATH",    // needed by ~/.runit.psk
+    "MAKEFLAGS",   // needed by IsRunningUnderMake
+    "MODE",        // needed by test scripts
+    "PATH",        // needed by clang
+    "PWD",         // just seems plain needed
+    "STRACE",      // useful for troubleshooting
+    "TERM",        // needed to detect colors
+    "TMPDIR",      // needed by compiler
+    "SYSTEMROOT",  // needed by socket()
 };
 
 const char *const kGccOnlyFlags[] = {
@@ -215,6 +239,8 @@ const char *const kGccOnlyFlags[] = {
     "-fcx-limited-range",
     "-fdelete-dead-exceptions",
     "-femit-struct-debug-baseonly",
+    "-ffp-int-builtin-inexact",
+    "-finline-functions-called-once",
     "-fipa-pta",
     "-fivopts",
     "-flimit-function-alignment",
@@ -224,9 +250,11 @@ const char *const kGccOnlyFlags[] = {
     "-fno-align-jumps",
     "-fno-align-labels",
     "-fno-align-loops",
+    "-fno-cx-limited-range",
     "-fno-fp-int-builtin-inexact",
     "-fno-gnu-unique",
     "-fno-gnu-unique",
+    "-fno-inline-functions-called-once",
     "-fno-instrument-functions",
     "-fno-schedule-insns2",
     "-fno-whole-program",
@@ -262,7 +290,7 @@ void OnAlrm(int sig) {
   ++gotalrm;
 }
 
-void OnChld(int sig, siginfo_t *si, ucontext_t *ctx) {
+void OnChld(int sig, siginfo_t *si, void *ctx) {
   if (!gotchld++) {
     clock_gettime(CLOCK_MONOTONIC, &signalled);
   }
@@ -287,11 +315,10 @@ void PrintReset(void) {
 }
 
 void PrintMakeCommand(void) {
-  const char *s;
   appends(&output, "make MODE=");
   appends(&output, mode);
   appends(&output, " -j");
-  appendd(&output, buf, FormatUint64(buf, GetCpuCount()) - buf);
+  appendd(&output, buf, FormatUint64(buf, __get_cpu_count()) - buf);
   appendw(&output, ' ');
   appends(&output, target);
 }
@@ -324,8 +351,7 @@ int GetTerminalWidth(void) {
     return atoi(s);
   } else {
     ws.ws_col = 0;
-    ioctl(2, TIOCGWINSZ, &ws);
-    if (!ws.ws_col) ws.ws_col = 80;
+    tcgetwinsize(2, &ws);
     return ws.ws_col;
   }
 }
@@ -339,7 +365,7 @@ int GetLineWidth(bool *isineditor) {
   }
   if (s) {
     return atoi(s);
-  } else if (ioctl(2, TIOCGWINSZ, &ws) != -1) {
+  } else if (tcgetwinsize(2, &ws) != -1) {
     if (ws.ws_col && ws.ws_row) {
       return ws.ws_col * ws.ws_row / 3;
     } else {
@@ -358,8 +384,12 @@ bool IsSafeEnv(const char *s) {
   l = 0;
   r = ARRAYLEN(kSafeEnv) - 1;
   while (l <= r) {
-    m = (l + r) >> 1;
-    x = strncmp(s, kSafeEnv[m], n);
+    m = (l & r) + ((l ^ r) >> 1);  // floor((a+b)/2)
+    if (IsWindows()) {
+      x = strncasecmp(s, kSafeEnv[m], n);
+    } else {
+      x = strncmp(s, kSafeEnv[m], n);
+    }
     if (x < 0) {
       r = m - 1;
     } else if (x > 0) {
@@ -376,7 +406,7 @@ bool IsGccOnlyFlag(const char *s) {
   l = 0;
   r = ARRAYLEN(kGccOnlyFlags) - 1;
   while (l <= r) {
-    m = (l + r) >> 1;
+    m = (l & r) + ((l ^ r) >> 1);  // floor((a+b)/2)
     x = strcmp(s, kGccOnlyFlags[m]);
     if (x < 0) {
       r = m - 1;
@@ -386,16 +416,20 @@ bool IsGccOnlyFlag(const char *s) {
       return true;
     }
   }
-  if (startswith(s, "-ffixed-")) return true;
-  if (startswith(s, "-fcall-saved")) return true;
-  if (startswith(s, "-fcall-used")) return true;
-  if (startswith(s, "-fgcse-")) return true;
-  if (startswith(s, "-fvect-cost-model=")) return true;
-  if (startswith(s, "-fsimd-cost-model=")) return true;
-  if (startswith(s, "-fopt-info")) return true;
-  if (startswith(s, "-mstringop-strategy=")) return true;
-  if (startswith(s, "-mpreferred-stack-boundary=")) return true;
-  if (startswith(s, "-Wframe-larger-than=")) return true;
+  if (s[0] == '-') {
+    if (s[1] == 'f') {
+      if (startswith(s, "-ffixed-")) return true;
+      if (startswith(s, "-fcall-saved")) return true;
+      if (startswith(s, "-fcall-used")) return true;
+      if (startswith(s, "-fgcse-")) return true;
+      if (startswith(s, "-fvect-cost-model=")) return true;
+      if (startswith(s, "-fsimd-cost-model=")) return true;
+      if (startswith(s, "-fopt-info")) return true;
+    }
+    if (startswith(s, "-mstringop-strategy=")) return true;
+    if (startswith(s, "-mpreferred-stack-boundary=")) return true;
+    if (startswith(s, "-Wframe-larger-than=")) return true;
+  }
   return false;
 }
 
@@ -418,9 +452,16 @@ static size_t TallyArgs(char **p) {
 }
 
 void AddStr(struct Strings *l, char *s) {
-  l->p = realloc(l->p, (++l->n + 1) * sizeof(*l->p));
-  l->p[l->n - 1] = s;
-  l->p[l->n - 0] = 0;
+  if (l->n == l->c) {
+    if (l->c) {
+      l->c += l->c >> 1;
+    } else {
+      l->c = 16;
+    }
+    l->p = realloc(l->p, (l->c + 1) * sizeof(*l->p));
+  }
+  l->p[l->n++] = s;
+  l->p[l->n] = 0;
 }
 
 void AddEnv(char *s) {
@@ -435,20 +476,27 @@ char *StripPrefix(char *s, char *p) {
   }
 }
 
-void AddArg(char *s) {
+void AddArg(char *actual) {
+  const char *s;
+  if (actual == g_tmpout) {
+    s = g_tmpout_original;
+  } else {
+    s = actual;
+  }
   if (args.n) {
     appendw(&command, ' ');
   }
   appends(&command, s);
   if (!args.n) {
-    appends(&shortened, StripPrefix(basename(s), "x86_64-linux-musl-"));
+    appends(&shortened,
+            StripPrefix(basename(gc(strdup(s))), "x86_64-linux-musl-"));
   } else if (*s != '-') {
     appendw(&shortened, ' ');
     if ((isar || isbfd || ispkg) &&
         (strcmp(args.p[args.n - 1], "-o") &&
          (endswith(s, ".o") || endswith(s, ".pkg") ||
           (endswith(s, ".a") && !isar)))) {
-      appends(&shortened, basename(s));
+      appends(&shortened, basename(gc(strdup(s))));
     } else {
       appends(&shortened, s);
     }
@@ -468,55 +516,54 @@ void AddArg(char *s) {
     appendw(&shortened, ' ');
     appends(&shortened, s);
   }
-  AddStr(&args, s);
+  AddStr(&args, actual);
 }
 
-int GetBaseCpuFreqMhz(void) {
+static int GetBaseCpuFreqMhz(void) {
   return KCPUIDS(16H, EAX) & 0x7fff;
 }
 
+void PlanResource(int resource, struct rlimit rlim) {
+  struct rlimit prior;
+  if (getrlimit(resource, &prior)) return;
+  rlim.rlim_cur = MIN(rlim.rlim_cur, prior.rlim_max);
+  rlim.rlim_max = MIN(rlim.rlim_max, prior.rlim_max);
+  posix_spawnattr_setrlimit(&spawnattr, resource, &rlim);
+}
+
 void SetCpuLimit(int secs) {
-  int mhz, lim;
-  struct rlimit rlim;
   if (secs <= 0) return;
   if (IsWindows()) return;
+#ifdef __x86_64__
+  int mhz, lim;
   if (!(mhz = GetBaseCpuFreqMhz())) return;
   lim = ceil(3100. / mhz * secs);
-  rlim.rlim_cur = lim;
-  rlim.rlim_max = lim + 1;
-  if (setrlimit(RLIMIT_CPU, &rlim) == -1) {
-    if (getrlimit(RLIMIT_CPU, &rlim) == -1) return;
-    if (lim < rlim.rlim_cur) {
-      rlim.rlim_cur = lim;
-      setrlimit(RLIMIT_CPU, &rlim);
-    }
-  }
+  PlanResource(RLIMIT_CPU, (struct rlimit){lim, lim + 1});
+#endif
 }
 
 void SetFszLimit(long n) {
-  struct rlimit rlim;
   if (n <= 0) return;
   if (IsWindows()) return;
-  rlim.rlim_cur = n;
-  rlim.rlim_max = n << 1;
-  if (setrlimit(RLIMIT_FSIZE, &rlim) == -1) {
-    if (getrlimit(RLIMIT_FSIZE, &rlim) == -1) return;
-    rlim.rlim_cur = n;
-    setrlimit(RLIMIT_FSIZE, &rlim);
-  }
+  PlanResource(RLIMIT_FSIZE, (struct rlimit){n, n + (n >> 1)});
 }
 
 void SetMemLimit(long n) {
-  struct rlimit rlim = {n, n};
   if (n <= 0) return;
   if (IsWindows() || IsXnu()) return;
-  setrlimit(RLIMIT_AS, &rlim);
+  PlanResource(RLIMIT_AS, (struct rlimit){n, n});
+}
+
+void SetStkLimit(long n) {
+  if (IsWindows()) return;
+  if (n <= 0) return;
+  n = MAX(n, PTHREAD_STACK_MIN * 2);
+  PlanResource(RLIMIT_STACK, (struct rlimit){n, n});
 }
 
 void SetProLimit(long n) {
-  struct rlimit rlim = {n, n};
   if (n <= 0) return;
-  setrlimit(RLIMIT_NPROC, &rlim);
+  PlanResource(RLIMIT_NPROC, (struct rlimit){n, n});
 }
 
 bool ArgNeedsShellQuotes(const char *s) {
@@ -569,49 +616,60 @@ char *AddShellQuotes(const char *s) {
   return p;
 }
 
+void MakeDirs(const char *path, int mode) {
+  if (makedirs(path, mode)) {
+    perror(path);
+    exit(1);
+  }
+}
+
 int Launch(void) {
   size_t got;
   ssize_t rc;
+  errno_t err;
   int ws, pid;
   uint64_t us;
   gotchld = 0;
-  if (pipe2(pipefds, O_CLOEXEC) == -1) exit(errno);
+
+  if (pipe2(pipefds, O_CLOEXEC) == -1) {
+    perror("pipe2");
+    exit(1);
+  }
+
+  posix_spawnattr_init(&spawnattr);
+  posix_spawnattr_setsigmask(&spawnattr, &savemask);
+  SetCpuLimit(cpuquota);
+  SetFszLimit(fszquota);
+  SetMemLimit(memquota);
+  SetStkLimit(stkquota);
+  SetProLimit(proquota);
+
+  posix_spawn_file_actions_init(&spawnfila);
+  if (stdoutmustclose)
+    posix_spawn_file_actions_adddup2(&spawnfila, pipefds[1], 1);
+  posix_spawn_file_actions_adddup2(&spawnfila, pipefds[1], 2);
+
   clock_gettime(CLOCK_MONOTONIC, &start);
   if (timeout > 0) {
     timer.it_value.tv_sec = timeout;
     timer.it_interval.tv_sec = timeout;
     setitimer(ITIMER_REAL, &timer, 0);
   }
-  pid = vfork();
 
-#if 0
-  int fd;
-  size_t n;
-  char b[1024], *p;
-  size_t t = strlen(cmd) + 1 + TallyArgs(args.p) + 9 + TallyArgs(env.p) + 9;
-  n = ksnprintf(b, sizeof(b), "%ld %s %s\n", t, cmd, outpath);
-  fd = open("o/argmax.txt", O_APPEND | O_CREAT | O_WRONLY, 0644);
-  write(fd, b, n);
-  close(fd);
-#endif
-
-  if (!pid) {
-    SetCpuLimit(cpuquota);
-    SetFszLimit(fszquota);
-    SetMemLimit(memquota);
-    SetProLimit(proquota);
-    if (stdoutmustclose) dup2(pipefds[1], 1);
-    dup2(pipefds[1], 2);
-    sigprocmask(SIG_SETMASK, &savemask, 0);
-    execve(cmd, args.p, env.p);
-    _Exit(127);
+  err = posix_spawn(&pid, cmd, &spawnfila, &spawnattr, args.p, env.p);
+  if (err) {
+    tinyprint(2, program_invocation_short_name, ": failed to spawn ", cmd, ": ",
+              strerror(err), " (see --strace for further details)\n", NULL);
+    exit(1);
   }
+
+  signal(SIGINT, SIG_IGN);
+  signal(SIGQUIT, SIG_IGN);
+  posix_spawn_file_actions_destroy(&spawnfila);
+  posix_spawnattr_destroy(&spawnattr);
   close(pipefds[1]);
+
   for (;;) {
-    if (gotchld) {
-      rc = 0;
-      break;
-    }
     if (gotalrm) {
       PrintRed();
       appends(&output, "\n\n`");
@@ -707,48 +765,93 @@ void ReportResources(void) {
   appendw(&output, '\n');
 }
 
-bool IsNativeExecutable(const char *path) {
+bool MovePreservingDestinationInode(const char *from, const char *to) {
   bool res;
-  char buf[4];
-  int got, fd;
-  res = false;
-  if ((fd = open(path, O_RDONLY)) != -1) {
-    if ((got = read(fd, buf, 4)) == 4) {
-      if (IsWindows()) {
-        res = READ16LE(buf) == READ16LE("MZ");
-      } else if (IsXnu()) {
-        res = READ32LE(buf) == 0xFEEDFACEu + 1;
-      } else {
-        res = READ32LE(buf) == READ32LE("\177ELF");
-      }
-    }
-    close(fd);
+  ssize_t rc;
+  size_t remain;
+  struct stat st;
+  int fdin, fdout;
+  if ((fdin = open(from, O_RDONLY)) == -1) {
+    return false;
   }
+  fstat(fdin, &st);
+  if ((fdout = creat(to, st.st_mode)) == -1) {
+    close(fdin);
+    return false;
+  }
+  fadvise(fdin, 0, st.st_size, MADV_SEQUENTIAL);
+  ftruncate(fdout, st.st_size);
+  for (res = true, remain = st.st_size; remain;) {
+    rc = copy_file_range(fdin, 0, fdout, 0, remain, 0);
+    if (rc != -1) {
+      remain -= rc;
+    } else if (errno == EXDEV || errno == ENOSYS) {
+      if (lseek(fdin, 0, SEEK_SET) == -1) {
+        res = false;
+        break;
+      }
+      if (lseek(fdout, 0, SEEK_SET) == -1) {
+        res = false;
+        break;
+      }
+      res = copyfd(fdin, fdout, -1) != -1;
+      break;
+    } else {
+      res = false;
+      break;
+    }
+  }
+  close(fdin);
+  close(fdout);
   return res;
 }
 
+char *MakeTmpOut(const char *path) {
+  int c;
+  char *p = tmpout;
+  char *e = tmpout + sizeof(tmpout) - 1;
+  g_tmpout_original = path;
+  p = stpcpy(p, __get_tmpdir());
+  while ((c = *path++)) {
+    if (c == '/') c = '_';
+    if (p == e) {
+      tinyprint(2, program_invocation_short_name,
+                ": fatal error: MakeTmpOut() generated temporary filename "
+                "that's too long: ",
+                tmpout, "\n", NULL);
+      exit(1);
+    }
+    *p++ = c;
+  }
+  *p = 0;
+  g_tmpout = tmpout;
+  return tmpout;
+}
+
 int main(int argc, char *argv[]) {
-  int columns;
   uint64_t us;
   bool isineditor;
   size_t i, j, n, m;
   bool isproblematic;
+  char *s, *q, **envp;
   int ws, opt, exitcode;
-  char *s, *p, *q, **envp;
+
+#ifndef NDEBUG
+  ShowCrashReports();
+#endif
 
   mode = firstnonnull(getenv("MODE"), MODE);
 
-  /*
-   * parse prefix arguments
-   */
+  // parse prefix arguments
   verbose = 4;
   timeout = 90;                 /* secs */
-  cpuquota = 16;                /* secs */
+  cpuquota = 32;                /* secs */
   proquota = 2048;              /* procs */
+  stkquota = 8 * 1024 * 1024;   /* bytes */
   fszquota = 256 * 1000 * 1000; /* bytes */
   memquota = 512 * 1024 * 1024; /* bytes */
   if ((s = getenv("V"))) verbose = atoi(s);
-  while ((opt = getopt(argc, argv, "hnstvA:C:F:L:M:O:P:T:V:")) != -1) {
+  while ((opt = getopt(argc, argv, "hnstvwA:C:F:L:M:O:P:T:V:S:")) != -1) {
     switch (opt) {
       case 'n':
         exit(0);
@@ -767,6 +870,9 @@ int main(int argc, char *argv[]) {
       case 't':
         touchtarget = true;
         break;
+      case 'w':
+        noworkaround = true;
+        break;
       case 'L':
         timeout = atoi(optarg);
         break;
@@ -777,7 +883,7 @@ int main(int argc, char *argv[]) {
         ccversion = atoi(optarg);
         break;
       case 'P':
-        proquota = sizetol(optarg, 1024);
+        proquota = atoi(optarg);
         break;
       case 'F':
         fszquota = sizetol(optarg, 1000);
@@ -785,28 +891,30 @@ int main(int argc, char *argv[]) {
       case 'M':
         memquota = sizetol(optarg, 1024);
         break;
+      case 'S':
+        stkquota = sizetol(optarg, 1024);
+        break;
       case 'O':
         outquota = sizetol(optarg, 1024);
         break;
       case 'h':
-        fputs(MANUAL, stdout);
+        tinyprint(1, MANUAL, NULL);
         exit(0);
       default:
-        fputs(MANUAL, stderr);
+        tinyprint(2, MANUAL, NULL);
         exit(1);
     }
   }
   if (optind == argc) {
-    fputs("error: missing arguments\n", stderr);
+    tinyprint(2, program_invocation_short_name, ": missing arguments\n", NULL);
     exit(1);
   }
 
-  /*
-   * extend limits for slow UBSAN in particular
-   */
+  // extend limits for slow UBSAN in particular
   if (!strcmp(mode, "dbg") || !strcmp(mode, "ubsan")) {
     cpuquota *= 2;
     fszquota *= 2;
+    stkquota *= 2;
     memquota *= 2;
     timeout *= 2;
   }
@@ -817,10 +925,10 @@ int main(int argc, char *argv[]) {
   }
 
   s = basename(strdup(cmd));
-  if (strstr(s, "gcc")) {
+  if (strstr(s, "gcc") || strstr(s, "g++")) {
     iscc = true;
     isgcc = true;
-  } else if (strstr(s, "clang")) {
+  } else if (strstr(s, "clang") || strstr(s, "clang++")) {
     iscc = true;
     isclang = true;
   } else if (strstr(s, "ld.bfd")) {
@@ -831,21 +939,49 @@ int main(int argc, char *argv[]) {
     ispkg = true;
   }
 
-  /*
-   * ingest arguments
-   */
+  // ingest arguments
   for (i = optind; i < argc; ++i) {
+
+    // replace output filename argument
+    //
+    // some commands (e.g. ar) don't use the `-o PATH` notation. in that
+    // case we assume the output path was passed to compile.com -TTARGET
+    // which means we can replace the appropriate command line argument.
+    if (!noworkaround &&  //
+        !movepath &&      //
+        !outpath &&       //
+        target &&         //
+        !strcmp(target, argv[i])) {
+      AddArg(MakeTmpOut(argv[i]));
+      outpath = target;
+      movepath = target;
+      MovePreservingDestinationInode(target, tmpout);
+      continue;
+    }
+
+    /*
+     * capture arguments
+     */
     if (argv[i][0] != '-') {
       AddArg(argv[i]);
       continue;
     }
+
+    /*
+     * capture flags
+     */
     if (startswith(argv[i], "-o")) {
       if (!strcmp(argv[i], "-o")) {
-        AddArg(argv[i]);
-        AddArg((outpath = argv[++i]));
+        outpath = argv[++i];
       } else {
-        AddArg(argv[i]);
         outpath = argv[i] + 2;
+      }
+      AddArg("-o");
+      if (noworkaround) {
+        AddArg(outpath);
+      } else {
+        movepath = outpath;
+        AddArg(MakeTmpOut(outpath));
       }
       continue;
     }
@@ -901,6 +1037,112 @@ int main(int argc, char *argv[]) {
       if (isgcc) {
         AddArg(argv[i]);
       }
+
+#ifdef __x86_64__
+    } else if (!strcmp(argv[i], "-march=native")) {
+      const struct X86ProcessorModel *model;
+      if (X86_HAVE(XOP)) AddArg("-mxop");
+      if (X86_HAVE(SSE4A)) AddArg("-msse4a");
+      if (X86_HAVE(SSE3)) AddArg("-msse3");
+      if (X86_HAVE(SSSE3)) AddArg("-mssse3");
+      if (X86_HAVE(SSE4_1)) AddArg("-msse4.1");
+      if (X86_HAVE(SSE4_2)) AddArg("-msse4.2");
+      if (X86_HAVE(AVX)) AddArg("-mavx");
+      if (X86_HAVE(AVX2)) {
+        AddArg("-mavx2");
+        if (isgcc) {
+          AddArg("-msse2avx");
+          AddArg("-Wa,-msse2avx");
+        }
+      }
+      if (X86_HAVE(AVX512F)) AddArg("-mavx512f");
+      if (X86_HAVE(AVX512PF)) AddArg("-mavx512pf");
+      if (X86_HAVE(AVX512ER)) AddArg("-mavx512er");
+      if (X86_HAVE(AVX512CD)) AddArg("-mavx512cd");
+      if (X86_HAVE(AVX512VL)) AddArg("-mavx512vl");
+      if (X86_HAVE(AVX512BW)) AddArg("-mavx512bw");
+      if (X86_HAVE(AVX512DQ)) AddArg("-mavx512dq");
+      if (X86_HAVE(AVX512IFMA)) AddArg("-mavx512ifma");
+      if (X86_HAVE(AVX512VBMI)) AddArg("-mavx512vbmi");
+      if (X86_HAVE(SHA)) AddArg("-msha");
+      if (X86_HAVE(AES)) AddArg("-maes");
+      if (X86_HAVE(VAES)) AddArg("-mvaes");
+      if (X86_HAVE(PCLMUL)) AddArg("-mpclmul");
+      if (X86_HAVE(FSGSBASE)) AddArg("-mfsgsbase");
+      if (X86_HAVE(F16C)) AddArg("-mf16c");
+      if (X86_HAVE(FMA)) AddArg("-mfma");
+      if (X86_HAVE(POPCNT)) AddArg("-mpopcnt");
+      if (X86_HAVE(BMI)) AddArg("-mbmi");
+      if (X86_HAVE(BMI2)) AddArg("-mbmi2");
+      if (X86_HAVE(ADX)) AddArg("-madx");
+      if (X86_HAVE(FXSR)) AddArg("-mfxsr");
+      if ((model = getx86processormodel(kX86ProcessorModelKey))) {
+        switch (model->march) {
+          case X86_MARCH_CORE2:
+            AddArg("-march=core2");
+            break;
+          case X86_MARCH_NEHALEM:
+            AddArg("-march=nehalem");
+            break;
+          case X86_MARCH_WESTMERE:
+            AddArg("-march=westmere");
+            break;
+          case X86_MARCH_SANDYBRIDGE:
+            AddArg("-march=sandybridge");
+            break;
+          case X86_MARCH_IVYBRIDGE:
+            AddArg("-march=ivybridge");
+            break;
+          case X86_MARCH_HASWELL:
+            AddArg("-march=haswell");
+            break;
+          case X86_MARCH_BROADWELL:
+            AddArg("-march=broadwell");
+            break;
+          case X86_MARCH_SKYLAKE:
+          case X86_MARCH_KABYLAKE:
+            AddArg("-march=skylake");
+            break;
+          case X86_MARCH_CANNONLAKE:
+            AddArg("-march=cannonlake");
+            break;
+          case X86_MARCH_ICELAKE:
+            if (model->grade >= X86_GRADE_SERVER) {
+              AddArg("-march=icelake-server");
+            } else {
+              AddArg("-march=icelake-client");
+            }
+            break;
+          case X86_MARCH_TIGERLAKE:
+            AddArg("-march=tigerlake");
+            break;
+          case X86_MARCH_BONNELL:
+          case X86_MARCH_SALTWELL:
+            AddArg("-march=bonnell");
+            break;
+          case X86_MARCH_SILVERMONT:
+          case X86_MARCH_AIRMONT:
+            AddArg("-march=silvermont");
+            break;
+          case X86_MARCH_GOLDMONT:
+            AddArg("-march=goldmont");
+            break;
+          case X86_MARCH_GOLDMONTPLUS:
+            AddArg("-march=goldmont-plus");
+            break;
+          case X86_MARCH_TREMONT:
+            AddArg("-march=tremont");
+            break;
+          case X86_MARCH_KNIGHTSLANDING:
+            AddArg("-march=knl");
+            break;
+          case X86_MARCH_KNIGHTSMILL:
+            AddArg("-march=knm");
+            break;
+        }
+      }
+#endif /* __x86_64__ */
+
     } else if (!strcmp(argv[i], "-fsanitize=address")) {
       if (isgcc && ccversion >= 6) wantasan = true;
     } else if (!strcmp(argv[i], "-fsanitize=undefined")) {
@@ -921,11 +1163,13 @@ int main(int argc, char *argv[]) {
     } else if (startswith(argv[i], "-fsanitize=implicit") &&
                strstr(argv[i], "integer")) {
       if (isgcc) AddArg(argv[i]);
+    } else if (strstr(argv[i], "stack-protector")) {
+      if (isclang || (isgcc && ccversion >= 6)) {
+        AddArg(argv[i]);
+      }
     } else if (startswith(argv[i], "-fvect-cost") ||
                startswith(argv[i], "-mstringop") ||
-               startswith(argv[i], "-gz") ||
-               strstr(argv[i], "stack-protector") ||
-               strstr(argv[i], "sanitize") ||
+               startswith(argv[i], "-gz") || strstr(argv[i], "sanitize") ||
                startswith(argv[i], "-fvect-cost") ||
                startswith(argv[i], "-fvect-cost")) {
       if (isgcc && ccversion >= 6) {
@@ -959,9 +1203,7 @@ int main(int argc, char *argv[]) {
     exit(7);
   }
 
-  /*
-   * append special args
-   */
+  // append special args
   if (iscc) {
     if (isclang) {
       AddArg("-Wno-unused-command-line-argument");
@@ -1017,9 +1259,7 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  /*
-   * scrub environment for determinism and great justice
-   */
+  // scrub environment for determinism and great justice
   for (envp = environ; *envp; ++envp) {
     if (startswith(*envp, "MODE=")) {
       mode = *envp + 5;
@@ -1031,65 +1271,70 @@ int main(int argc, char *argv[]) {
   AddEnv("LC_ALL=C");
   AddEnv("SOURCE_DATE_EPOCH=0");
 
-  /*
-   * ensure output directory exists
-   */
+  // ensure output directory exists
   if (outpath) {
     outdir = xdirname(outpath);
     if (!isdirectory(outdir)) {
-      makedirs(outdir, 0755);
+      MakeDirs(outdir, 0755);
     }
   }
 
-  /*
-   * make sense of standard i/o file descriptors
-   * we want to permit pipelines but prevent talking to terminal
-   */
+  // make sense of standard i/o file descriptors
+  // we want to permit pipelines but prevent talking to terminal
   stdoutmustclose = fstat(1, &st) == -1 || S_ISCHR(st.st_mode);
   if (fstat(0, &st) == -1 || S_ISCHR(st.st_mode)) {
     close(0);
     open("/dev/null", O_RDONLY);
   }
 
-  /*
-   * SIGINT (CTRL-C) and SIGQUIT (CTRL-\) are delivered to process group
-   * so the correct thing to do is to do nothing, and wait for the child
-   * to die as a result of those signals. SIGPIPE shouldn't happen until
-   * the very end since we buffer so it is safe to let it kill the prog.
-   * Most importantly we need SIGCHLD to interrupt the read() operation!
-   */
-  sigfillset(&mask);
-  sigdelset(&mask, SIGILL);
-  sigdelset(&mask, SIGBUS);
-  sigdelset(&mask, SIGPIPE);
-  sigdelset(&mask, SIGALRM);
-  sigdelset(&mask, SIGSEGV);
-  sigdelset(&mask, SIGCHLD);
+  // SIGINT (CTRL-C) and SIGQUIT (CTRL-\) are delivered to the child
+  // process, so we should ignore it and wait for the child to die.
+  // SIGPIPE shouldn't happen until the very end since we buffer so it
+  // is safe to let it kill the prog.
+  sigemptyset(&mask);
+  sigaddset(&mask, SIGINT);
+  sigaddset(&mask, SIGQUIT);
   sigprocmask(SIG_BLOCK, &mask, &savemask);
+
+  // we want SIGCHLD to interrupt the read() operation
   sigemptyset(&sa.sa_mask);
   sa.sa_flags = SA_NOCLDSTOP | SA_SIGINFO;
   sa.sa_sigaction = OnChld;
-  if (sigaction(SIGCHLD, &sa, 0) == -1) exit(83);
+  sigaction(SIGCHLD, &sa, 0);
+
+  // set a death clock if requested
   if (timeout > 0) {
     sa.sa_flags = 0;
     sa.sa_handler = OnAlrm;
     sigaction(SIGALRM, &sa, 0);
   }
 
-  /*
-   * run command
-   */
+  // run command
   ws = Launch();
 
-  /*
-   * propagate exit
-   */
+  // propagate exit
   if (ws != -1) {
     if (WIFEXITED(ws)) {
       if (!(exitcode = WEXITSTATUS(ws)) || exitcode == 254) {
         if (touchtarget && target) {
-          makedirs(xdirname(target), 0755);
-          touch(target, 0644);
+          MakeDirs(xdirname(target), 0755);
+          if (touch(target, 0644)) {
+            exitcode = 90;
+            appends(&output, "\nfailed to touch output file\n");
+          }
+        }
+        if (movepath) {
+          if (!MovePreservingDestinationInode(tmpout, movepath)) {
+            unlink(tmpout);
+            exitcode = 90;
+            appends(&output, "\nfailed to move output file\n");
+            appends(&output, tmpout);
+            appends(&output, "\n");
+            appends(&output, movepath);
+            appends(&output, "\n");
+          } else {
+            unlink(tmpout);
+          }
         }
       } else {
         appendw(&output, '\n');
@@ -1134,9 +1379,7 @@ int main(int argc, char *argv[]) {
     exitcode = 89;
   }
 
-  /*
-   * describe command that was run
-   */
+  // describe command that was run
   if (!exitcode || exitcode == 254) {
     if (exitcode == 254) {
       exitcode = 0;
@@ -1161,24 +1404,21 @@ int main(int argc, char *argv[]) {
       if (!outpath) outpath = shortened;
       n = strlen(action);
       appends(&command, action);
-      if (n < 15) {
-        while (n++ < 15) {
-          appendw(&command, ' ');
-        }
-      } else {
-        appendw(&command, ' ');
-        ++n;
-      }
+      do appendw(&command, ' '), ++n;
+      while (n < 15);
       appends(&command, outpath);
       n += strlen(outpath);
-      appendw(&command, '\r');
       m = GetTerminalWidth();
       if (m > 3 && n > m) {
         appendd(&output, command, m - 3);
         appendw(&output, READ32LE("..."));
       } else {
+        if (n < m && (__nocolor || !ischardev(2))) {
+          while (n < m) appendw(&command, ' '), ++n;
+        }
         appendd(&output, command, n);
       }
+      appendw(&output, m > 0 ? '\r' : '\n');
     } else {
       n = 0;
       if (verbose >= 3) {
@@ -1290,9 +1530,7 @@ int main(int argc, char *argv[]) {
     ReportResources();
   }
 
-  /*
-   * flush output
-   */
+  // flush output
   if (WriteAllUntilSignalledOrError(2, output, appendz(output).i) == -1) {
     if (errno == EINTR) {
       s = "notice: compile.com output truncated\n";

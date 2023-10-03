@@ -7,11 +7,14 @@
 #define SECCOMP_MODE_STRICT   1
 #define SECCOMP_MODE_FILTER   2
 
+#define PR_CAPBSET_READ 23
+#define PR_CAPBSET_DROP 24
+
 #define PR_SET_NO_NEW_PRIVS 38
 #define PR_GET_NO_NEW_PRIVS 39
 
 #define PR_SET_NAME 15
-#define PR_GET_NAME 0x10
+#define PR_GET_NAME 16
 
 #define PR_GET_TSC     25
 #define PR_SET_TSC     26
@@ -73,8 +76,6 @@
 #define PR_SET_MM_EXE_FILE          13
 #define PR_SET_MM_MAP               14
 #define PR_SET_MM_MAP_SIZE          15
-#define PR_CAPBSET_READ             23
-#define PR_CAPBSET_DROP             24
 #define PR_GET_TSC                  25
 #define PR_SET_TSC                  26
 #define PR_GET_SECUREBITS           27
@@ -96,7 +97,13 @@
 #define PR_CAP_AMBIENT              47
 #define PR_GET_SPECULATION_CTRL     52
 #define PR_SET_SPECULATION_CTRL     53
+#define PR_SET_TAGGED_ADDR_CTRL     55
+#define PR_GET_TAGGED_ADDR_CTRL     56
+#define PR_SET_IO_FLUSHER           57
+#define PR_GET_IO_FLUSHER           58
 #define PR_SET_PTRACER              0x59616d61
 #define PR_SET_PTRACER_ANY          -1
+#define PR_SET_VMA                  0x53564d41
+#define PR_SET_VMA_ANON_NAME        0
 
 #endif /* COSMOPOLITAN_LIBC_SYSV_CONSTS_PR_H_ */

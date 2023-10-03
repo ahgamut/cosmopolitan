@@ -16,22 +16,23 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
-#include "libc/log/libfatal.internal.h"
 #include "libc/runtime/memtrack.internal.h"
+#include "libc/sysv/consts/at.h"
 #include "libc/sysv/consts/o.h"
 
-privileged void PrintSystemMappings(int outfd) {
+void PrintSystemMappings(int outfd) {
   int infd;
   ssize_t rc;
   char buf[64];
   if (!IsWindows()) {
-    if ((infd = __sysv_open("/proc/self/maps", O_RDONLY, 0)) >= 0) {
-      __sysv_write(outfd, "\n", 1);
-      while ((rc = __sysv_read(infd, buf, sizeof(buf))) > 0) {
-        __sysv_write(outfd, buf, rc);
+    if ((infd = __sys_openat(AT_FDCWD, "/proc/self/maps", O_RDONLY, 0)) >= 0) {
+      sys_write(outfd, "\n", 1);
+      while ((rc = sys_read(infd, buf, sizeof(buf))) > 0) {
+        sys_write(outfd, buf, rc);
       }
     }
-    __sysv_close(infd);
+    sys_close(infd);
   }
 }

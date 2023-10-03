@@ -22,22 +22,23 @@
 #include "dsp/tty/quant.h"
 #include "dsp/tty/tty.h"
 #include "libc/assert.h"
-#include "libc/bits/bits.h"
-#include "libc/bits/safemacros.internal.h"
 #include "libc/calls/calls.h"
-#include "libc/calls/ioctl.h"
 #include "libc/calls/struct/stat.h"
 #include "libc/calls/struct/winsize.h"
+#include "libc/calls/termios.h"
 #include "libc/dce.h"
+#include "libc/errno.h"
 #include "libc/fmt/conv.h"
+#include "libc/intrin/bits.h"
+#include "libc/intrin/safemacros.internal.h"
 #include "libc/limits.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
 #include "libc/macros.internal.h"
 #include "libc/math.h"
+#include "libc/mem/gc.internal.h"
 #include "libc/mem/mem.h"
-#include "libc/rand/rand.h"
-#include "libc/runtime/gc.internal.h"
+#include "libc/stdio/rand.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/ex.h"
@@ -49,7 +50,7 @@
 #include "libc/sysv/consts/prot.h"
 #include "libc/sysv/consts/termios.h"
 #include "libc/x/x.h"
-#include "third_party/getopt/getopt.h"
+#include "third_party/getopt/getopt.internal.h"
 #include "third_party/stb/stb_image.h"
 #include "tool/viz/lib/graphic.h"
 
@@ -174,8 +175,8 @@ static void GetOpts(int *argc, char *argv[]) {
   if (!g_flags.full && (!g_flags.width || !g_flags.width)) {
     ws.ws_col = 80;
     ws.ws_row = 24;
-    if (ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) != -1 ||
-        ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) != -1) {
+    if (tcgetwinsize(STDIN_FILENO, &ws) != -1 ||
+        tcgetwinsize(STDOUT_FILENO, &ws) != -1) {
       g_flags.width = ws.ws_col * (1 + !g_flags.half);
       g_flags.height = ws.ws_row * 2;
     }
@@ -319,7 +320,7 @@ static void ProcessImage(long yn, long xn, unsigned char RGB[3][yn][xn]) {
 void WithImageFile(const char *path,
                    void fn(long yn, long xn, unsigned char RGB[3][yn][xn])) {
   struct stat st;
-  void *map, *data, *data2;
+  void *map, *data;
   int fd, yn, xn, cn, dyn, dxn, syn, sxn;
   CHECK_NE(-1, (fd = open(path, O_RDONLY)), "%s", path);
   CHECK_NE(-1, fstat(fd, &st));

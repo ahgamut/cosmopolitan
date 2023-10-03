@@ -13,10 +13,10 @@
 	Terse mode output, getopt() command line processing,
 	optional stdin input, and HTML documentation added in
 	October 1998.
-	
+
 	Documentation for the -t (terse output) option added
 	in July 2006.
-	
+
 	Replaced table look-up for chi square to probability
 	conversion with algorithmic computation in January 2008.
 
@@ -27,10 +27,10 @@
 
 #include "libc/calls/calls.h"
 #include "libc/math.h"
-#include "libc/rand/rand.h"
+#include "libc/stdio/rand.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
-#include "third_party/getopt/getopt.h"
+#include "third_party/getopt/getopt.internal.h"
 
 #define UPDATE  "January 28th, 2008"
 

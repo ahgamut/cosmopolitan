@@ -16,7 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/alg/arraylist2.internal.h"
+#include "libc/mem/arraylist2.internal.h"
 #include "third_party/chibicc/chibicc.h"
 
 static const char kBoolStr[2][6] = {"false", "true"};
@@ -189,7 +189,6 @@ static void PrintNode(FILE *f, int l, const char *s, Node *n) {
     PrintInt(f, l + 2, "end: ", n->end);
     PrintMember(f, l + 2, "member: ", n->member);
     PrintObj(f, l + 2, "var: ", n->var);
-    PrintNode(f, l + 2, "overflow: ", n->overflow);
     PrintInt(f, l + 2, "val: ", n->val);
     if (n->fval) PrintLine(f, l + 2, "fval: %Lf", n->fval);
     PrintLine(f, l, "}");

@@ -16,22 +16,18 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/alg/alg.h"
 #include "libc/assert.h"
-#include "libc/bits/bits.h"
+#include "libc/calls/blockcancel.internal.h"
 #include "libc/calls/calls.h"
-#include "libc/calls/strace.internal.h"
 #include "libc/dce.h"
-#include "libc/elf/def.h"
-#include "libc/elf/scalar.h"
-#include "libc/elf/struct/phdr.h"
-#include "libc/elf/struct/shdr.h"
-#include "libc/elf/struct/sym.h"
+#include "libc/elf/tinyelf.internal.h"
 #include "libc/errno.h"
-#include "libc/intrin/kprintf.h"
+#include "libc/intrin/bits.h"
+#include "libc/intrin/strace.internal.h"
 #include "libc/limits.h"
 #include "libc/log/libfatal.internal.h"
 #include "libc/macros.internal.h"
+#include "libc/mem/alg.h"
 #include "libc/runtime/internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/runtime/symbols.internal.h"
@@ -41,72 +37,7 @@
 #include "libc/sysv/consts/prot.h"
 #include "libc/sysv/errfuns.h"
 
-#define GetStr(tab, rva)     ((char *)(tab) + (rva))
-#define GetSection(e, s)     ((void *)((intptr_t)(e) + (size_t)(s)->sh_offset))
-#define GetShstrtab(e)       GetSection(e, GetShdr(e, (e)->e_shstrndx))
-#define GetSectionName(e, s) GetStr(GetShstrtab(e), (s)->sh_name)
-#define GetPhdr(e, i)                            \
-  ((Elf64_Phdr *)((intptr_t)(e) + (e)->e_phoff + \
-                  (size_t)(e)->e_phentsize * (i)))
-#define GetShdr(e, i)                            \
-  ((Elf64_Shdr *)((intptr_t)(e) + (e)->e_shoff + \
-                  (size_t)(e)->e_shentsize * (i)))
-
-static char *GetStrtab(Elf64_Ehdr *e, size_t *n) {
-  char *name;
-  Elf64_Half i;
-  Elf64_Shdr *shdr;
-  for (i = 0; i < e->e_shnum; ++i) {
-    shdr = GetShdr(e, i);
-    if (shdr->sh_type == SHT_STRTAB) {
-      name = GetSectionName(e, GetShdr(e, i));
-      if (name && !__strcmp(name, ".strtab")) {
-        if (n) *n = shdr->sh_size;
-        return GetSection(e, shdr);
-      }
-    }
-  }
-  return 0;
-}
-
-static Elf64_Sym *GetSymtab(Elf64_Ehdr *e, Elf64_Xword *n) {
-  Elf64_Half i;
-  Elf64_Shdr *shdr;
-  for (i = e->e_shnum; i > 0; --i) {
-    shdr = GetShdr(e, i - 1);
-    if (shdr->sh_type == SHT_SYMTAB) {
-      if (shdr->sh_entsize != sizeof(Elf64_Sym)) continue;
-      if (n) *n = shdr->sh_size / shdr->sh_entsize;
-      return GetSection(e, shdr);
-    }
-  }
-  return 0;
-}
-
-static void GetImageRange(Elf64_Ehdr *elf, intptr_t *x, intptr_t *y) {
-  unsigned i;
-  Elf64_Phdr *phdr;
-  intptr_t start, end, pstart, pend;
-  start = INTPTR_MAX;
-  end = 0;
-  for (i = 0; i < elf->e_phnum; ++i) {
-    phdr = GetPhdr(elf, i);
-    if (phdr->p_type != PT_LOAD) continue;
-    pstart = phdr->p_vaddr;
-    pend = phdr->p_vaddr + phdr->p_memsz;
-    if (pstart < start) start = pstart;
-    if (pend > end) end = pend;
-  }
-  if (x) *x = start;
-  if (y) *y = end;
-}
-
-/**
- * Maps debuggable binary into memory and indexes symbol addresses.
- *
- * @return object freeable with CloseSymbolTable(), or NULL w/ errno
- */
-struct SymbolTable *OpenSymbolTable(const char *filename) {
+static struct SymbolTable *OpenSymbolTableImpl(const char *filename) {
   int fd;
   void *map;
   long *stp;
@@ -120,12 +51,12 @@ struct SymbolTable *OpenSymbolTable(const char *filename) {
   ptrdiff_t names_offset, name_base_offset, stp_offset;
   map = MAP_FAILED;
   if ((fd = open(filename, O_RDONLY)) == -1) return 0;
-  if ((filesize = getfiledescriptorsize(fd)) == -1) goto SystemError;
+  if ((filesize = lseek(fd, 0, SEEK_END)) == -1) goto SystemError;
   if (filesize > INT_MAX) goto RaiseE2big;
   if (filesize < 64) goto RaiseEnoexec;
   elf = map = mmap(0, filesize, PROT_READ, MAP_PRIVATE, fd, 0);
   if (map == MAP_FAILED) goto SystemError;
-  if (READ32LE(map) != READ32LE("\177ELF")) goto RaiseEnoexec;
+  if (READ32LE((char *)map) != READ32LE("\177ELF")) goto RaiseEnoexec;
   if (!(name_base = GetStrtab(map, &m))) goto RaiseEnobufs;
   if (!(symtab = GetSymtab(map, &n))) goto RaiseEnobufs;
   tsz = 0;
@@ -165,12 +96,18 @@ struct SymbolTable *OpenSymbolTable(const char *filename) {
     x = sym->st_value - t->addr_base;
     stp[m++] = (unsigned long)x << 32 | i;
   }
-  longsort(stp, m);
+  _longsort(stp, m);
   for (j = i = 0; i < m; ++i) {
     sym = symtab + (stp[i] & 0x7fffffff);
     x = stp[i] >> 32;
-    if (j && x == t->symbols[j - 1].x) --j;
-    if (j && t->symbols[j - 1].y >= x) t->symbols[j - 1].y = x - 1;
+    if (j && x == t->symbols[j - 1].x) {
+      // when two symbols have an identical address value, favor the
+      // symbol that was defined earlier in the elf data structures.
+      continue;
+    }
+    if (j && t->symbols[j - 1].y >= x) {
+      t->symbols[j - 1].y = x - 1;
+    }
     t->names[j] = sym->st_name;
     t->symbols[j].x = x;
     if (sym->st_size) {
@@ -200,4 +137,17 @@ SystemError:
   }
   close(fd);
   return 0;
+}
+
+/**
+ * Maps debuggable binary into memory and indexes symbol addresses.
+ *
+ * @return object freeable with CloseSymbolTable(), or NULL w/ errno
+ */
+struct SymbolTable *OpenSymbolTable(const char *filename) {
+  struct SymbolTable *st;
+  BLOCK_CANCELLATIONS;
+  st = OpenSymbolTableImpl(filename);
+  ALLOW_CANCELLATIONS;
+  return st;
 }

@@ -18,17 +18,23 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/stat.h"
-#include "libc/fmt/fmt.h"
+#include "libc/errno.h"
 #include "libc/fmt/itoa.h"
-#include "libc/rand/rand.h"
+#include "libc/limits.h"
 #include "libc/runtime/runtime.h"
+#include "libc/stdio/rand.h"
+#include "libc/stdio/stdio.h"
 #include "libc/sysv/consts/at.h"
 #include "libc/sysv/consts/s.h"
 #include "libc/testlib/testlib.h"
 
-char testlib_enable_tmp_setup_teardown;
 char p[2][PATH_MAX];
 struct stat st;
+
+void SetUpOnce(void) {
+  testlib_enable_tmp_setup_teardown();
+  ASSERT_SYS(0, 0, pledge("stdio rpath wpath cpath fattr", 0));
+}
 
 TEST(symlink, enoent) {
   ASSERT_SYS(ENOENT, -1, symlink("o/foo", ""));

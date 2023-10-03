@@ -17,6 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/nexgen32e/nexgen32e.h"
+#include "libc/str/str.h"
 #include "libc/testlib/ezbench.h"
 #include "libc/testlib/testlib.h"
 
@@ -25,5 +26,6 @@ TEST(memrchr, test) {
 }
 
 BENCH(memrchr, bench) {
-  EZBENCH2("memrchr", donothing, EXPROPRIATE(memrchr("yo.hi.there", '.', 11)));
+  EZBENCH2("memrchr", donothing,
+           __expropriate(memrchr("yo.hi.there", '.', 11)));
 }

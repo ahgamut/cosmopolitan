@@ -19,11 +19,10 @@
 #include "libc/stdio/stdio.h"
 
 /**
- * Clears error state on stream.
+ * Clears eof and error state indicators on stream.
  *
  * @param f is file object stream pointer
  * @see	clearerr_unlocked()
- * @threadsafe
  */
 void clearerr(FILE *f) {
   flockfile(f);

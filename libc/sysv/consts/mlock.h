@@ -1,18 +1,17 @@
 #ifndef COSMOPOLITAN_LIBC_SYSV_CONSTS_MLOCK_H_
 #define COSMOPOLITAN_LIBC_SYSV_CONSTS_MLOCK_H_
-#include "libc/runtime/symbolic.h"
 #if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 
-extern const long MCL_CURRENT;
-extern const long MCL_FUTURE;
-extern const long MCL_ONFAULT;
+extern const int MCL_CURRENT;
+extern const int MCL_FUTURE;
+extern const int MCL_ONFAULT;
 
 COSMOPOLITAN_C_END_
 #endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
 
-#define MCL_CURRENT LITERALLY(1)
-#define MCL_FUTURE  LITERALLY(2)
-#define MCL_ONFAULT SYMBOLIC(MCL_ONFAULT)
+#define MCL_CURRENT 1
+#define MCL_FUTURE  2
+#define MCL_ONFAULT MCL_ONFAULT
 
 #endif /* COSMOPOLITAN_LIBC_SYSV_CONSTS_MLOCK_H_ */

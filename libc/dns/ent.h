@@ -1,10 +1,14 @@
 #ifndef COSMOPOLITAN_LIBC_DNS_ENT_H_
 #define COSMOPOLITAN_LIBC_DNS_ENT_H_
 #include "libc/dns/dns.h"
+
+#define HOST_NOT_FOUND 1
+#define TRY_AGAIN      2
+#define NO_RECOVERY    3
+#define NO_DATA        4
+
 #if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
-
-extern int h_errno;
 
 struct netent {
   char *n_name;     /* official network name */
@@ -35,6 +39,10 @@ struct servent {
   char *s_proto;    /* protocol to use */
 };
 
+extern int h_errno;
+void herror(const char *);
+const char *hstrerror(int);
+
 struct netent *getnetent(void);
 struct netent *getnetbyname(const char *);
 struct netent *getnetbyaddr(uint32_t, int);
@@ -49,7 +57,7 @@ void endprotoent(void);
 
 struct hostent *gethostent(void);
 struct hostent *gethostbyname(const char *);
-struct hostent *gethostbyaddr(const void *, socklen_t, int);
+struct hostent *gethostbyaddr(const void *, uint32_t, int);
 void sethostent(int);
 void endhostent(void);
 

@@ -16,8 +16,11 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/stdckdint.h"
 #include "libc/str/str.h"
 
 wchar_t *wmemcpy(wchar_t *dest, const wchar_t *src, size_t count) {
-  return memcpy(dest, src, count * sizeof(wchar_t));
+  size_t bytes;
+  if (ckd_mul(&bytes, count, sizeof(wchar_t))) bytes = -1;
+  return memcpy(dest, src, bytes);
 }

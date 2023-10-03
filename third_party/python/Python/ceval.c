@@ -5,12 +5,14 @@
 │ https://docs.python.org/3/license.html                                       │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #define PY_LOCAL_AGGRESSIVE
-#include "libc/bits/likely.h"
+#include "third_party/python/Include/ceval.h"
+#include "libc/errno.h"
+#include "libc/intrin/likely.h"
+#include "libc/runtime/stack.h"
 #include "third_party/python/Include/abstract.h"
 #include "third_party/python/Include/boolobject.h"
 #include "third_party/python/Include/bytesobject.h"
 #include "third_party/python/Include/cellobject.h"
-#include "third_party/python/Include/ceval.h"
 #include "third_party/python/Include/classobject.h"
 #include "third_party/python/Include/code.h"
 #include "third_party/python/Include/descrobject.h"
@@ -655,8 +657,7 @@ _Py_CheckRecursiveCall(const char *where)
     PyThreadState *t;
     const char *rsp, *bot;
     rsp = __builtin_frame_address(0);
-    asm(".weak\tape_stack_vaddr\n\t"
-        "movabs\t$ape_stack_vaddr+32768,%0" : "=r"(bot));
+    bot = (const char *)GetStackAddr() + 32768;
     if (rsp > bot) {
         t = PyThreadState_GET();
         _Py_CheckRecursionLimit = recursion_limit;
@@ -3622,7 +3623,7 @@ _PyEval_EvalFrameDefault(PyFrameObject *f, int throwflag)
 
         /* This should never be reached. Every opcode should end with DISPATCH()
            or goto error. */
-        unreachable;
+        __builtin_unreachable();
 
 error:
         COLD_LABEL;
@@ -5352,6 +5353,9 @@ dtrace_function_entry(PyFrameObject *f)
     char* filename;
     char* funcname;
     int lineno;
+    (void)filename;
+    (void)funcname;
+    (void)lineno;
     filename = PyUnicode_AsUTF8(f->f_code->co_filename);
     funcname = PyUnicode_AsUTF8(f->f_code->co_name);
     lineno = PyCode_Addr2Line(f->f_code, f->f_lasti);
@@ -5364,6 +5368,9 @@ dtrace_function_return(PyFrameObject *f)
     char* filename;
     char* funcname;
     int lineno;
+    (void)filename;
+    (void)funcname;
+    (void)lineno;
     filename = PyUnicode_AsUTF8(f->f_code->co_filename);
     funcname = PyUnicode_AsUTF8(f->f_code->co_name);
     lineno = PyCode_Addr2Line(f->f_code, f->f_lasti);

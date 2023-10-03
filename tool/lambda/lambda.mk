@@ -16,21 +16,19 @@ TOOL_LAMBDA_BINS =						\
 	$(TOOL_LAMBDA_COMS:%=%.dbg)
 
 TOOL_LAMBDA_DIRECTDEPS =					\
+	LIBC_CALLS						\
+	LIBC_FMT						\
 	LIBC_INTRIN						\
 	LIBC_LOG						\
 	LIBC_MEM						\
-	LIBC_CALLS						\
+	LIBC_NEXGEN32E						\
 	LIBC_RUNTIME						\
-	LIBC_UNICODE						\
-	LIBC_FMT						\
+	LIBC_STDIO						\
 	LIBC_STR						\
 	LIBC_SYSV						\
-	LIBC_STDIO						\
 	LIBC_X							\
-	LIBC_STUBS						\
-	LIBC_NEXGEN32E						\
-	TOOL_LAMBDA_LIB						\
-	THIRD_PARTY_GETOPT
+	THIRD_PARTY_GETOPT					\
+	TOOL_LAMBDA_LIB
 
 TOOL_LAMBDA_DEPS :=						\
 	$(call uniq,$(foreach x,$(TOOL_LAMBDA_DIRECTDEPS),$($(x))))
@@ -47,8 +45,8 @@ o/$(MODE)/tool/lambda/%.com.dbg:				\
 		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
 
-o/$(MODE)/tool/lambda/tromp.o:					\
-		OVERRIDE_CFLAGS +=				\
+o/$(MODE)/tool/lambda/tromp.o: private				\
+		CFLAGS +=					\
 			-w
 
 $(TOOL_LAMBDA_OBJS):						\

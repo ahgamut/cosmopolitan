@@ -31,7 +31,6 @@ TEST_LIBC_STR_CHECKS =							\
 	$(TEST_LIBC_STR_SRCS_TEST_CC:%.cc=o/$(MODE)/%.com.runs)
 
 TEST_LIBC_STR_DIRECTDEPS =						\
-	LIBC_ALG							\
 	LIBC_CALLS							\
 	LIBC_FMT							\
 	LIBC_INTRIN							\
@@ -39,22 +38,20 @@ TEST_LIBC_STR_DIRECTDEPS =						\
 	LIBC_TINYMATH							\
 	LIBC_MEM							\
 	LIBC_NEXGEN32E							\
-	LIBC_RAND							\
 	LIBC_RUNTIME							\
 	LIBC_STDIO							\
 	LIBC_STR							\
-	LIBC_STUBS							\
 	LIBC_SYSV							\
 	LIBC_SYSV_CALLS							\
 	LIBC_TESTLIB							\
-	LIBC_UNICODE							\
 	LIBC_X								\
-	LIBC_ZIPOS							\
+	THIRD_PARTY_COMPILER_RT						\
 	THIRD_PARTY_MBEDTLS						\
 	THIRD_PARTY_REGEX						\
 	THIRD_PARTY_ZLIB						\
 	THIRD_PARTY_LIBCXX						\
-	THIRD_PARTY_SMALLZ4
+	THIRD_PARTY_SMALLZ4						\
+	THIRD_PARTY_VQSORT
 
 TEST_LIBC_STR_DEPS :=							\
 	$(call uniq,$(foreach x,$(TEST_LIBC_STR_DIRECTDEPS),$($(x))))
@@ -63,8 +60,8 @@ o/$(MODE)/test/libc/str/str.pkg:					\
 		$(TEST_LIBC_STR_OBJS)					\
 		$(foreach x,$(TEST_LIBC_STR_DIRECTDEPS),$($(x)_A).pkg)
 
-o/$(MODE)/test/libc/str/tpenc_test.o:					\
-		OVERRIDE_CFLAGS +=					\
+o/$(MODE)/test/libc/str/tpenc_test.o: private				\
+		CFLAGS +=						\
 			$(TRADITIONAL)
 
 o/$(MODE)/test/libc/str/%.com.dbg:					\
@@ -76,22 +73,12 @@ o/$(MODE)/test/libc/str/%.com.dbg:					\
 		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
 
-o/$(MODE)/test/libc/str/blake2.com.dbg:					\
-		$(TEST_LIBC_STR_DEPS)					\
-		o/$(MODE)/test/libc/str/blake2.o			\
-		o/$(MODE)/test/libc/str/blake2b256_tests.txt.zip.o	\
-		o/$(MODE)/test/libc/str/str.pkg				\
-		$(LIBC_TESTMAIN)					\
-		$(CRT)							\
-		$(APE_NO_MODIFY_SELF)
-	@$(APELINK)
+$(TEST_LIBC_STR_OBJS): private						\
+		DEFAULT_CCFLAGS +=					\
+			-fno-builtin
 
-$(TEST_LIBC_STR_OBJS):							\
-	DEFAULT_CCFLAGS +=						\
-		-fno-builtin
-
-o/$(MODE)/test/libc/str/memmove_test.o:					\
-		OVERRIDE_CFLAGS +=					\
+o/$(MODE)/test/libc/str/memmove_test.o: private				\
+		CFLAGS +=						\
 			-O2 -D_FORTIFY_SOURCE=2
 
 .PHONY: o/$(MODE)/test/libc/str

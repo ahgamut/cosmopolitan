@@ -1,11 +1,13 @@
+#include "third_party/chibicc/chibicc.h"
 #include "libc/calls/calls.h"
+#include "libc/calls/struct/sigaction.h"
 #include "libc/calls/struct/siginfo.h"
 #include "libc/calls/ucontext.h"
-#include "libc/intrin/kprintf.h"
-#include "libc/runtime/gc.internal.h"
+#include "libc/fmt/libgen.h"
+#include "libc/mem/gc.internal.h"
 #include "libc/runtime/runtime.h"
-#include "libc/x/x.h"
-#include "third_party/chibicc/chibicc.h"
+#include "libc/sysv/consts/sig.h"
+#include "libc/x/xasprintf.h"
 
 asm(".ident\t\"\\n\\n\
 chibicc (MIT/ISC License)\\n\
@@ -378,9 +380,9 @@ static char *replace_extn(char *tmpl, char *extn) {
 }
 
 static char *create_tmpfile(void) {
-  char *path = xjoinpaths(kTmpPath, "chibicc-XXXXXX");
+  char *path = xjoinpaths(__get_tmpdir(), "chibicc-XXXXXX");
   int fd = mkstemp(path);
-  if (fd == -1) error("mkstemp failed: %s", strerror(errno));
+  if (fd == -1) error("%s: mkstemp failed: %s", path, strerror(errno));
   close(fd);
   static int len = 2;
   chibicc_tmpfiles = realloc(chibicc_tmpfiles, sizeof(char *) * len);
@@ -422,7 +424,7 @@ static bool NeedsShellQuotes(const char *s) {
 
 static bool run_subprocess(char **argv) {
   int rc, ws;
-  size_t i, j, n;
+  size_t i, j;
   if (opt_verbose) {
     for (i = 0; argv[i]; i++) {
       fputc(' ', stderr);
@@ -666,7 +668,6 @@ static void run_linker(StringArray *inputs, char *output) {
   strarray_push(&arr, "--gc-sections");
   strarray_push(&arr, "--build-id=none");
   strarray_push(&arr, "--no-dynamic-linker");
-  strarray_push(&arr, xasprintf("-Ttext-segment=%#x", IMAGE_BASE_VIRTUAL));
   /* strarray_push(&arr, "-T"); */
   /* strarray_push(&arr, LDS); */
   /* strarray_push(&arr, APE); */
@@ -682,12 +683,14 @@ static void run_linker(StringArray *inputs, char *output) {
   handle_exit(run_subprocess(arr.data));
 }
 
-static void OnCtrlC(int sig, siginfo_t *si, ucontext_t *ctx) {
+static void OnCtrlC(int sig, siginfo_t *si, void *ctx) {
   exit(1);
 }
 
 int chibicc(int argc, char **argv) {
+#ifndef NDEBUG
   ShowCrashReports();
+#endif
   atexit(chibicc_cleanup);
   sigaction(SIGINT, &(struct sigaction){.sa_sigaction = OnCtrlC}, NULL);
   for (int i = 1; i < argc; i++) {

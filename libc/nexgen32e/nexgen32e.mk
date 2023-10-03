@@ -27,9 +27,6 @@ LIBC_NEXGEN32E_A_CHECKS =				\
 	$(LIBC_NEXGEN32E_A).pkg				\
 	$(LIBC_NEXGEN32E_A_HDRS:%=o/$(MODE)/%.ok)
 
-LIBC_NEXGEN32E_A_DIRECTDEPS =				\
-	LIBC_STUBS
-
 LIBC_NEXGEN32E_A_DEPS :=				\
 	$(call uniq,$(foreach x,$(LIBC_NEXGEN32E_A_DIRECTDEPS),$($(x))))
 
@@ -42,10 +39,57 @@ $(LIBC_NEXGEN32E_A).pkg:				\
 		$(LIBC_NEXGEN32E_A_OBJS)		\
 		$(foreach x,$(LIBC_NEXGEN32E_A_DIRECTDEPS),$($(x)_A).pkg)
 
-o/$(MODE)/libc/nexgen32e/threaded.o:			\
-		OVERRIDE_CFLAGS +=			\
-			$(NO_MAGIC)			\
-			-fno-sanitize=all
+o/$(MODE)/libc/nexgen32e/envp.o				\
+o/$(MODE)/libc/nexgen32e/argc2.o			\
+o/$(MODE)/libc/nexgen32e/argv2.o			\
+o/$(MODE)/libc/nexgen32e/auxv2.o			\
+o/$(MODE)/libc/nexgen32e/cescapec.o			\
+o/$(MODE)/libc/nexgen32e/crc32init.o			\
+o/$(MODE)/libc/nexgen32e/environ2.o			\
+o/$(MODE)/libc/nexgen32e/kbase36.o			\
+o/$(MODE)/libc/nexgen32e/ktens.o			\
+o/$(MODE)/libc/nexgen32e/ktolower.o			\
+o/$(MODE)/libc/nexgen32e/ktoupper.o			\
+o/$(MODE)/libc/nexgen32e/runlevel.o			\
+o/$(MODE)/libc/nexgen32e/pid.o				\
+o/$(MODE)/libc/nexgen32e/program_invocation_name2.o	\
+o/$(MODE)/libc/nexgen32e/threaded.o: private		\
+		CFLAGS +=				\
+			$(NO_MAGIC)
+
+# these assembly files are safe to build on aarch64
+o/$(MODE)/libc/nexgen32e/gc.o: libc/nexgen32e/gc.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/nexgen32e/zip.o: libc/nexgen32e/zip.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/nexgen32e/mcount.o: libc/nexgen32e/mcount.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/nexgen32e/ksha256.o: libc/nexgen32e/ksha256.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/nexgen32e/ksha512.o: libc/nexgen32e/ksha512.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/nexgen32e/kcp437.o: libc/nexgen32e/kcp437.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/nexgen32e/kreversebits.o: libc/nexgen32e/kreversebits.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/nexgen32e/ktensindex.o: libc/nexgen32e/ktensindex.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/nexgen32e/longjmp.o: libc/nexgen32e/longjmp.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/nexgen32e/setjmp.o: libc/nexgen32e/setjmp.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/nexgen32e/missingno.o: libc/nexgen32e/missingno.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/nexgen32e/khalfcache3.o: libc/nexgen32e/khalfcache3.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/nexgen32e/gclongjmp.o: libc/nexgen32e/gclongjmp.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/nexgen32e/checkstackalign.o: libc/nexgen32e/checkstackalign.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/nexgen32e/blink_xnu_aarch64.o: libc/nexgen32e/blink_xnu_aarch64.S ape/blink-xnu-aarch64.gz
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
+o/$(MODE)/libc/nexgen32e/blink_linux_aarch64.o: libc/nexgen32e/blink_linux_aarch64.S ape/blink-linux-aarch64.gz
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
 
 LIBC_NEXGEN32E_LIBS = $(foreach x,$(LIBC_NEXGEN32E_ARTIFACTS),$($(x)))
 LIBC_NEXGEN32E_SRCS = $(foreach x,$(LIBC_NEXGEN32E_ARTIFACTS),$($(x)_SRCS))

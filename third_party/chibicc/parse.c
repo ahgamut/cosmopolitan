@@ -22,9 +22,13 @@
 #include "libc/log/log.h"
 #include "libc/mem/mem.h"
 #include "libc/nexgen32e/ffs.h"
+#include "libc/stdio/stdio.h"
 #include "libc/testlib/testlib.h"
+#include "libc/x/xasprintf.h"
 #include "third_party/chibicc/chibicc.h"
 #include "third_party/chibicc/kw.h"
+
+#define IMPLICIT_FUNCTIONS
 
 typedef struct InitDesg InitDesg;
 typedef struct Initializer Initializer;
@@ -554,7 +558,7 @@ static Token *thing_attributes(Token *tok, void *arg) {
   if (consume_attribute(&tok, tok, "noinline") ||
       consume_attribute(&tok, tok, "const") ||
       consume_attribute(&tok, tok, "pure") ||
-      consume_attribute(&tok, tok, "noclone") ||
+      consume_attribute(&tok, tok, "dontclone") ||
       consume_attribute(&tok, tok, "may_alias") ||
       consume_attribute(&tok, tok, "warn_unused_result") ||
       consume_attribute(&tok, tok, "flatten") ||
@@ -664,7 +668,7 @@ static Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
     INT128 = 1 << 19,
   };
   unsigned char kw;
-  Type *ty = copy_type(ty_int);
+  Type *ty = copy_type(ty_long);  // [jart] use long as implicit type
   int counter = 0;
   bool is_const = false;
   bool is_atomic = false;
@@ -2432,7 +2436,6 @@ static Node *logor(Token **rest, Token *tok) {
 
 // logand = binor ("&&" binor)*
 static Node *logand(Token **rest, Token *tok) {
-  Token *start = tok;
   Node *node = binor(&tok, tok);
   while (EQUAL(tok, "&&")) {
     Token *start = tok;
@@ -2625,27 +2628,6 @@ static Node *new_sub(Node *lhs, Node *rhs, Token *tok) {
 
 static Node *new_mul(Node *lhs, Node *rhs, Token *tok) {
   return new_binary(ND_MUL, lhs, rhs, tok);
-}
-
-static Node *builtin_overflow(Token **rest, Token *tok,
-                              Node *new_op(Node *, Node *, Token *)) {
-  Token *start = tok;
-  tok = skip(tok->next, '(');
-  Node *lhs = assign(&tok, tok);
-  tok = skip(tok, ',');
-  Node *rhs = assign(&tok, tok);
-  tok = skip(tok, ',');
-  Node *dst = assign(&tok, tok);
-  *rest = skip(tok, ')');
-  Node *node = new_op(lhs, rhs, start);
-  add_type(node);
-  add_type(dst);
-  if (!is_compatible(pointer_to(node->ty), dst->ty)) {
-    error_tok(start, "output pointer type incompatible");
-  }
-  node->overflow = dst;
-  node->ty = copy_type(ty_bool);
-  return node;
 }
 
 // add = mul ("+" mul | "-" mul)*
@@ -3374,32 +3356,6 @@ static Node *primary(Token **rest, Token *tok) {
       *rest = skip(tok, ')');
       return node;
     }
-    if (kw == KW___BUILTIN_ADD_OVERFLOW) {
-      return builtin_overflow(rest, tok, new_add);
-    }
-    if (kw == KW___BUILTIN_SUB_OVERFLOW) {
-      return builtin_overflow(rest, tok, new_sub);
-    }
-    if (kw == KW___BUILTIN_MUL_OVERFLOW) {
-      return builtin_overflow(rest, tok, new_mul);
-    }
-    if (kw == KW___BUILTIN_NEG_OVERFLOW) {
-      Token *start = tok;
-      tok = skip(tok->next, '(');
-      Node *lhs = assign(&tok, tok);
-      tok = skip(tok, ',');
-      Node *dst = assign(&tok, tok);
-      *rest = skip(tok, ')');
-      Node *node = new_unary(ND_NEG, lhs, start);
-      add_type(node);
-      add_type(dst);
-      if (!is_compatible(pointer_to(node->ty), dst->ty)) {
-        error_tok(start, "output pointer type incompatible");
-      }
-      node->overflow = dst;
-      node->ty = copy_type(ty_bool);
-      return node;
-    }
     if (kw == KW___BUILTIN_FPCLASSIFY) {
       Node *node = new_node(ND_FPCLASSIFY, tok);
       node->fpc = calloc(1, sizeof(FpClassify));
@@ -3507,14 +3463,17 @@ static Node *primary(Token **rest, Token *tok) {
   if (tok->kind == TK_IDENT) {
     // Variable or enum constant
     VarScope *sc = find_var(tok);
-    *rest = tok->next;
-#ifdef IMPLICIT_FUNCTIONS
+    // [jart] support implicit function declarations with `long` type
     if (!sc && EQUAL(tok->next, "(")) {
       Type *ty = func_type(ty_long);
       ty->is_variadic = true;
-      return new_var_node(new_gvar(strndup(tok->loc, tok->len), ty), tok);
+      Obj *fn = new_var(strndup(tok->loc, tok->len), ty);
+      fn->next = globals;
+      fn->is_function = true;
+      globals = fn;
+      sc = find_var(tok);
     }
-#endif
+    *rest = tok->next;
     // For "static inline" function
     if (sc && sc->var && sc->var->is_function) {
       if (current_fn) {

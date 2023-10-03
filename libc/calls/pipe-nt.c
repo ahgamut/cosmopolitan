@@ -19,7 +19,7 @@
 #include "libc/calls/internal.h"
 #include "libc/calls/state.internal.h"
 #include "libc/calls/syscall_support-nt.internal.h"
-#include "libc/intrin/spinlock.h"
+#include "libc/intrin/handlock.internal.h"
 #include "libc/nt/createfile.h"
 #include "libc/nt/enum/accessmask.h"
 #include "libc/nt/enum/creationdisposition.h"
@@ -35,14 +35,14 @@ textwindows int sys_pipe_nt(int pipefd[2], unsigned flags) {
   int64_t hin, hout;
   int reader, writer;
   char16_t pipename[64];
-  CreatePipeName(pipename);
+  __create_pipe_name(pipename);
   __fds_lock();
   if ((reader = __reservefd_unlocked(-1)) == -1) {
     __fds_unlock();
     return -1;
   }
   if ((writer = __reservefd_unlocked(-1)) == -1) {
-    __releasefd_unlocked(reader);
+    __releasefd(reader);
     __fds_unlock();
     return -1;
   }
@@ -53,17 +53,17 @@ textwindows int sys_pipe_nt(int pipefd[2], unsigned flags) {
   }
   __fds_unlock();
   hin = CreateNamedPipe(pipename, kNtPipeAccessInbound | kNtFileFlagOverlapped,
-                        mode, 1, PIPE_BUF, PIPE_BUF, 0, &kNtIsInheritable);
+                        mode, 1, PIPE_BUF, PIPE_BUF, 0, 0);
   __fds_lock();
   if (hin != -1) {
-    if ((hout = CreateFile(pipename, kNtGenericWrite, 0, &kNtIsInheritable,
-                           kNtOpenExisting, kNtFileFlagOverlapped, 0)) != -1) {
+    if ((hout = CreateFile(pipename, kNtGenericWrite, 0, 0, kNtOpenExisting,
+                           kNtFileFlagOverlapped, 0)) != -1) {
       g_fds.p[reader].kind = kFdFile;
-      g_fds.p[reader].flags = flags;
+      g_fds.p[reader].flags = O_RDONLY | flags;
       g_fds.p[reader].mode = 0010444;
       g_fds.p[reader].handle = hin;
       g_fds.p[writer].kind = kFdFile;
-      g_fds.p[writer].flags = flags;
+      g_fds.p[writer].flags = O_WRONLY | flags;
       g_fds.p[writer].mode = 0010222;
       g_fds.p[writer].handle = hout;
       pipefd[0] = reader;
@@ -74,8 +74,8 @@ textwindows int sys_pipe_nt(int pipefd[2], unsigned flags) {
       CloseHandle(hin);
     }
   }
-  __releasefd_unlocked(writer);
-  __releasefd_unlocked(reader);
+  __releasefd(writer);
+  __releasefd(reader);
   __fds_unlock();
   return -1;
 }

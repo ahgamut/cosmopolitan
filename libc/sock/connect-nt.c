@@ -17,6 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
+#include "libc/intrin/bsr.h"
 #include "libc/nt/winsock.h"
 #include "libc/sock/internal.h"
 #include "libc/sock/syscall_fd.internal.h"
@@ -25,8 +26,11 @@
 
 textwindows int sys_connect_nt(struct Fd *fd, const void *addr,
                                uint32_t addrsize) {
-  assert(fd->kind == kFdSocket);
+  struct SockFd *sockfd;
+  sockfd = (struct SockFd *)fd->extra;
+  npassert(fd->kind == kFdSocket);
   return __winsockblock(
-      fd->handle, FD_CONNECT_BIT,
-      WSAConnect(fd->handle, addr, addrsize, NULL, NULL, NULL, NULL));
+      fd->handle, _bsr(kNtFdConnect),
+      WSAConnect(fd->handle, addr, addrsize, NULL, NULL, NULL, NULL),
+      sockfd->rcvtimeo);
 }

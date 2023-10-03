@@ -16,8 +16,8 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/safemacros.internal.h"
-#include "libc/calls/strace.internal.h"
+#include "libc/intrin/getenv.internal.h"
+#include "libc/intrin/safemacros.internal.h"
 #include "libc/log/libfatal.internal.h"
 #include "libc/runtime/internal.h"
 #include "libc/runtime/runtime.h"
@@ -28,8 +28,8 @@
 textstartup int __strace_init(int argc, char **argv, char **envp, long *auxv) {
   /* asan isn't initialized yet at runlevel 300 */
   if (__intercept_flag(&argc, argv, "--strace") ||
-      __atoul(nulltoempty(__getenv(envp, "STRACE")))) {
-    ++__strace;
+      __atoul(nulltoempty(__getenv(envp, "STRACE").s))) {
+    strace_enabled(+1);
   }
   return (__argc = argc);
 }

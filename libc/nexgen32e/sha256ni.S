@@ -34,7 +34,7 @@
 #include "libc/macros.internal.h"
 
 .text
-.align 32
+.balign 32
 .ident "\n\
 Intel SHA-NI (BSD-3 License)\n\
 Copyright 2015 Intel Corporation\n\
@@ -75,14 +75,15 @@ Tim Chen <tim.c.chen@linux.intel.com>\n"
 //	    void sha256_transform_ni(uint32_t digest[static 8],
 //	                             const void *data,
 //	                             int32_t numBlocks);
-//	
+//
 //	@param	%rdi points to output digest
 //	@param	%rsi points to input data
 //	@param	%rdx is number of blocks to process
 //	@see	X86_HAVE(SHA)
+	.ftrace1
 sha256_transform_ni:
+	.ftrace2
 	.leafprologue
-	.profilable
 	shl	$6,NUM_BLKS			# convert to bytes
 	jz	.Ldone_hash
 	add	DATA_PTR,NUM_BLKS		# pointer to end of data
@@ -312,7 +313,7 @@ sha256_transform_ni:
 	.endfn	sha256_transform_ni,globl
 
 .section .rodata.cst16.PSHUFFLE_BYTE_FLIP_MASK,"aM",@progbits,16
-.align 16
+.balign 16
 PSHUFFLE_BYTE_FLIP_MASK:
 	.octa	0x0c0d0e0f08090a0b0405060700010203
 	.endobj	PSHUFFLE_BYTE_FLIP_MASK

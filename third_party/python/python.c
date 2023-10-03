@@ -4,10 +4,13 @@
 │ Python 3                                                                     │
 │ https://docs.python.org/3/license.html                                       │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/runtime/stack.h"
 #include "third_party/python/Include/yoink.h"
 #include "third_party/python/runpythonmodule.h"
 #include "tool/args/args.h"
 // clang-format off
+
+STATIC_STACK_ALIGN(GetStackSize());
 
 PYTHON_YOINK("xed");
 PYTHON_YOINK("xterm");
@@ -137,58 +140,58 @@ PYTHON_YOINK("encodings.utf_7");
 
 #ifndef TINY
 PYTHON_YOINK("pydoc_data.topics");
-STATIC_YOINK(".python/pydoc_data/_pydoc.css");
+__static_yoink(".python/pydoc_data/_pydoc.css");
 #endif
 
 /* todo(jart): delete nonessential yoinks */
 
-STATIC_YOINK("_PyImport_Inittab__bisect");
-STATIC_YOINK("_PyImport_Inittab__codecs_cn");
-STATIC_YOINK("_PyImport_Inittab__codecs_hk");
-STATIC_YOINK("_PyImport_Inittab__codecs_iso2022");
-STATIC_YOINK("_PyImport_Inittab__codecs_jp");
-STATIC_YOINK("_PyImport_Inittab__codecs_kr");
-STATIC_YOINK("_PyImport_Inittab__codecs_tw");
-STATIC_YOINK("_PyImport_Inittab__csv");
-STATIC_YOINK("_PyImport_Inittab__datetime");
-STATIC_YOINK("_PyImport_Inittab__decimal");
-STATIC_YOINK("_PyImport_Inittab__elementtree");
-STATIC_YOINK("_PyImport_Inittab__json");
-STATIC_YOINK("_PyImport_Inittab__lsprof");
-STATIC_YOINK("_PyImport_Inittab__multibytecodec");
-STATIC_YOINK("_PyImport_Inittab__multiprocessing");
-STATIC_YOINK("_PyImport_Inittab__opcode");
-STATIC_YOINK("_PyImport_Inittab__pickle");
-STATIC_YOINK("_PyImport_Inittab__posixsubprocess");
-STATIC_YOINK("_PyImport_Inittab__random");
-STATIC_YOINK("_PyImport_Inittab__socket");
-STATIC_YOINK("_PyImport_Inittab__sqlite3");
-STATIC_YOINK("_PyImport_Inittab__stat");
-STATIC_YOINK("_PyImport_Inittab__struct");
-STATIC_YOINK("_PyImport_Inittab__symtable");
-STATIC_YOINK("_PyImport_Inittab__testcapi");
-STATIC_YOINK("_PyImport_Inittab__tracemalloc");
-STATIC_YOINK("_PyImport_Inittab_array");
-STATIC_YOINK("_PyImport_Inittab_atexit");
-STATIC_YOINK("_PyImport_Inittab_audioop");
-STATIC_YOINK("_PyImport_Inittab_binascii");
-STATIC_YOINK("_PyImport_Inittab_cmath");
-STATIC_YOINK("_PyImport_Inittab_faulthandler");
-STATIC_YOINK("_PyImport_Inittab_fcntl");
-STATIC_YOINK("_PyImport_Inittab_fpectl");
-STATIC_YOINK("_PyImport_Inittab_grp");
-STATIC_YOINK("_PyImport_Inittab_math");
-STATIC_YOINK("_PyImport_Inittab_mmap");
-STATIC_YOINK("_PyImport_Inittab_parser");
-STATIC_YOINK("_PyImport_Inittab_pwd");
-STATIC_YOINK("_PyImport_Inittab_pyexpat");
-STATIC_YOINK("_PyImport_Inittab_resource");
-STATIC_YOINK("_PyImport_Inittab_select");
-STATIC_YOINK("_PyImport_Inittab_syslog");
-STATIC_YOINK("_PyImport_Inittab_termios");
-STATIC_YOINK("_PyImport_Inittab_time");
-STATIC_YOINK("_PyImport_Inittab_unicodedata");
-STATIC_YOINK("_PyImport_Inittab_zipimport");
+__static_yoink("_PyImport_Inittab__bisect");
+__static_yoink("_PyImport_Inittab__codecs_cn");
+__static_yoink("_PyImport_Inittab__codecs_hk");
+__static_yoink("_PyImport_Inittab__codecs_iso2022");
+__static_yoink("_PyImport_Inittab__codecs_jp");
+__static_yoink("_PyImport_Inittab__codecs_kr");
+__static_yoink("_PyImport_Inittab__codecs_tw");
+__static_yoink("_PyImport_Inittab__csv");
+__static_yoink("_PyImport_Inittab__datetime");
+__static_yoink("_PyImport_Inittab__decimal");
+__static_yoink("_PyImport_Inittab__elementtree");
+__static_yoink("_PyImport_Inittab__json");
+__static_yoink("_PyImport_Inittab__lsprof");
+__static_yoink("_PyImport_Inittab__multibytecodec");
+__static_yoink("_PyImport_Inittab__multiprocessing");
+__static_yoink("_PyImport_Inittab__opcode");
+__static_yoink("_PyImport_Inittab__pickle");
+__static_yoink("_PyImport_Inittab__posixsubprocess");
+__static_yoink("_PyImport_Inittab__random");
+__static_yoink("_PyImport_Inittab__socket");
+__static_yoink("_PyImport_Inittab__sqlite3");
+__static_yoink("_PyImport_Inittab__stat");
+__static_yoink("_PyImport_Inittab__struct");
+__static_yoink("_PyImport_Inittab__symtable");
+__static_yoink("_PyImport_Inittab__testcapi");
+__static_yoink("_PyImport_Inittab__tracemalloc");
+__static_yoink("_PyImport_Inittab_array");
+__static_yoink("_PyImport_Inittab_atexit");
+__static_yoink("_PyImport_Inittab_audioop");
+__static_yoink("_PyImport_Inittab_binascii");
+__static_yoink("_PyImport_Inittab_cmath");
+__static_yoink("_PyImport_Inittab_faulthandler");
+__static_yoink("_PyImport_Inittab_fcntl");
+__static_yoink("_PyImport_Inittab_fpectl");
+__static_yoink("_PyImport_Inittab_grp");
+__static_yoink("_PyImport_Inittab_math");
+__static_yoink("_PyImport_Inittab_mmap");
+__static_yoink("_PyImport_Inittab_parser");
+__static_yoink("_PyImport_Inittab_pwd");
+__static_yoink("_PyImport_Inittab_pyexpat");
+__static_yoink("_PyImport_Inittab_resource");
+__static_yoink("_PyImport_Inittab_select");
+__static_yoink("_PyImport_Inittab_syslog");
+__static_yoink("_PyImport_Inittab_termios");
+__static_yoink("_PyImport_Inittab_time");
+__static_yoink("_PyImport_Inittab_unicodedata");
+__static_yoink("_PyImport_Inittab_zipimport");
 
 PYTHON_YOINK("__future__");
 PYTHON_YOINK("_bootlocale");
@@ -226,7 +229,6 @@ PYTHON_YOINK("decimal");
 PYTHON_YOINK("difflib");
 PYTHON_YOINK("doctest");
 PYTHON_YOINK("dummy_threading");
-PYTHON_YOINK("threading");
 PYTHON_YOINK("enum");
 PYTHON_YOINK("filecmp");
 PYTHON_YOINK("fileinput");
@@ -306,7 +308,9 @@ PYTHON_YOINK("tabnanny");
 PYTHON_YOINK("tempfile");
 PYTHON_YOINK("textwrap");
 PYTHON_YOINK("this");
+PYTHON_YOINK("threading");
 PYTHON_YOINK("token");
+PYTHON_YOINK("tokenbucket");
 PYTHON_YOINK("tokenize");
 PYTHON_YOINK("trace");
 PYTHON_YOINK("traceback");
@@ -396,7 +400,7 @@ PYTHON_YOINK("email.parser");
 PYTHON_YOINK("email.policy");
 PYTHON_YOINK("email.quoprimime");
 PYTHON_YOINK("email.utils");
-STATIC_YOINK(".python/email/architecture.rst");
+__static_yoink(".python/email/architecture.rst");
 
 PYTHON_YOINK("importlib");
 PYTHON_YOINK("importlib.abc");
@@ -494,7 +498,29 @@ PYTHON_YOINK("smtplib");
 PYTHON_YOINK("nntplib");
 
 PYTHON_YOINK("asdl");
-#ifdef WITH_THREAD
+
+PYTHON_YOINK("_thread");
+PYTHON_YOINK("_thread.LockType");
+PYTHON_YOINK("_thread.RLock");
+PYTHON_YOINK("_thread.TIMEOUT_MAX");
+PYTHON_YOINK("_thread._count");
+PYTHON_YOINK("_thread._local");
+PYTHON_YOINK("_thread._set_sentinel");
+PYTHON_YOINK("_thread.allocate");
+PYTHON_YOINK("_thread.allocate_lock");
+PYTHON_YOINK("_thread.error");
+PYTHON_YOINK("_thread.exit");
+PYTHON_YOINK("_thread.exit_thread");
+PYTHON_YOINK("_thread.get_ident");
+PYTHON_YOINK("_thread.interrupt_main");
+PYTHON_YOINK("_thread.stack_size");
+PYTHON_YOINK("_thread.start_new");
+PYTHON_YOINK("_thread.start_new_thread");
+PYTHON_YOINK("concurrent");
+PYTHON_YOINK("concurrent.futures");
+PYTHON_YOINK("concurrent.futures._base");
+PYTHON_YOINK("concurrent.futures.process");
+PYTHON_YOINK("concurrent.futures.thread");
 PYTHON_YOINK("asynchat");
 PYTHON_YOINK("asyncore");
 PYTHON_YOINK("asyncio");
@@ -517,12 +543,8 @@ PYTHON_YOINK("asyncio.sslproto");
 PYTHON_YOINK("asyncio.streams");
 PYTHON_YOINK("asyncio.subprocess");
 PYTHON_YOINK("asyncio.tasks");
-PYTHON_YOINK("asyncio.test_utils");
 PYTHON_YOINK("asyncio.transports");
 PYTHON_YOINK("asyncio.unix_events");
-PYTHON_YOINK("asyncio.windows_events");
-PYTHON_YOINK("asyncio.windows_utils");
-#endif
 
 int
 main(int argc, char **argv)

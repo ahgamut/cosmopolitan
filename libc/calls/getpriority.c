@@ -17,25 +17,73 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
-#include "libc/calls/strace.internal.h"
 #include "libc/calls/syscall-nt.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
+#include "libc/dce.h"
+#include "libc/errno.h"
+#include "libc/intrin/asmflag.h"
+#include "libc/intrin/describeflags.internal.h"
+#include "libc/intrin/strace.internal.h"
+#include "libc/limits.h"
+#include "libc/sysv/errfuns.h"
 
 /**
  * Returns nice value of thing.
  *
- * @param which can be PRIO_PROCESS, PRIO_PGRP, PRIO_USER
+ * Since -1 might be a valid return value for this API, it's necessary
+ * to clear `errno` beforehand and see if it changed, in order to truly
+ * determine if an error happened.
+ *
+ * On Windows, there's only six priority classes. We define them as -16
+ * (realtime), -10 (high), -5 (above), 0 (normal), 5 (below), 15 (idle)
+ * which are the only values that'll roundtrip getpriority/setpriority.
+ *
+ * @param which can be one of:
+ *     - `PRIO_PROCESS` is supported universally
+ *     - `PRIO_PGRP` is supported on unix
+ *     - `PRIO_USER` is supported on unix
  * @param who is the pid, pgid, or uid (0 means current)
  * @return value ∈ [-NZERO,NZERO) or -1 w/ errno
- * @see setpriority(), nice()
+ * @raise EINVAL if `which` was invalid or unsupported
+ * @raise EPERM if access to process was denied
+ * @raise ESRCH if no such process existed
+ * @see setpriority()
  */
 int getpriority(int which, unsigned who) {
   int rc;
-  if (!IsWindows()) {
-    rc = sys_getpriority(which, who) - 20;
+#ifdef __x86_64__
+  char cf;
+  if (IsLinux()) {
+    asm volatile("syscall"
+                 : "=a"(rc)
+                 : "0"(140), "D"(which), "S"(who)
+                 : "rcx", "r11", "memory");
+    if (rc >= 0) {
+      rc = NZERO - rc;
+    } else {
+      errno = -rc;
+      rc = -1;
+    }
+  } else if (IsBsd()) {
+    asm volatile(CFLAG_ASM("syscall")
+                 : CFLAG_CONSTRAINT(cf), "=a"(rc)
+                 : "1"((IsXnu() ? 0x2000000 : 0) | 100), "D"(which), "S"(who)
+                 : "rcx", "rdx", "r8", "r9", "r10", "r11", "memory");
+    if (cf) {
+      errno = rc;
+      rc = -1;
+    }
+  } else if (IsWindows()) {
+    rc = sys_getpriority_nt(which, who);
   } else {
-    rc = sys_getsetpriority_nt(which, who, 0, sys_getpriority_nt);
+    rc = enosys();
   }
-  STRACE("getpriority(%d, %u) → %d% m", which, who, rc);
+#else
+  rc = sys_getpriority(which, who);
+  if (rc != -1) {
+    rc = NZERO - rc;
+  }
+#endif
+  STRACE("getpriority(%s, %u) → %d% m", DescribeWhichPrio(which), who, rc);
   return rc;
 }

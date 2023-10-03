@@ -1,4 +1,3 @@
-/* clang-format off */
 /* Job execution and handling for GNU Make.
 Copyright (C) 1988-2020 Free Software Foundation, Inc.
 This file is part of GNU Make.
@@ -21,9 +20,52 @@ this program.  If not, see <http://www.gnu.org/licenses/>.  */
 #include "third_party/make/filedef.h"
 #include "third_party/make/job.h"
 /**/
+#include "libc/assert.h"
+#include "libc/calls/calls.h"
+#include "libc/calls/pledge.h"
+#include "libc/calls/pledge.internal.h"
+#include "libc/calls/struct/bpf.internal.h"
+#include "libc/calls/struct/filter.internal.h"
+#include "libc/calls/struct/seccomp.internal.h"
+#include "libc/calls/struct/sysinfo.h"
+#include "libc/calls/struct/timeval.h"
+#include "libc/dce.h"
+#include "libc/elf/def.h"
+#include "libc/elf/elf.h"
+#include "libc/elf/struct/ehdr.h"
+#include "libc/elf/struct/phdr.h"
+#include "libc/fmt/conv.h"
+#include "libc/fmt/fmt.h"
+#include "libc/fmt/itoa.h"
+#include "libc/fmt/libgen.h"
+#include "libc/intrin/bits.h"
+#include "libc/intrin/promises.internal.h"
+#include "libc/intrin/safemacros.internal.h"
+#include "libc/log/backtrace.internal.h"
+#include "libc/log/log.h"
+#include "libc/log/rop.internal.h"
+#include "libc/macros.internal.h"
+#include "libc/math.h"
+#include "libc/nexgen32e/kcpuids.h"
+#include "libc/runtime/runtime.h"
+#include "libc/sock/sock.h"
+#include "libc/str/str.h"
+#include "libc/sysv/consts/audit.h"
+#include "libc/sysv/consts/map.h"
+#include "libc/sysv/consts/nrlinux.h"
+#include "libc/sysv/consts/o.h"
+#include "libc/sysv/consts/pr.h"
+#include "libc/sysv/consts/prot.h"
+#include "libc/sysv/consts/rlimit.h"
+#include "libc/sysv/consts/sig.h"
+#include "libc/sysv/errfuns.h"
+#include "libc/time/time.h"
+#include "libc/x/x.h"
 #include "third_party/make/commands.h"
+#include "third_party/make/dep.h"
 #include "third_party/make/os.h"
 #include "third_party/make/variable.h"
+// clang-format off
 
 #ifdef WINDOWS32
 const char *default_shell = "sh.exe";
@@ -212,6 +254,9 @@ is_bourne_compatible_shell (const char *path)
 {
   /* List of known POSIX (or POSIX-ish) shells.  */
   static const char *unix_shells[] = {
+    "build/bootstrap/cocmd.com",
+    "false",
+    "dash",
     "sh",
     "bash",
     "ksh",
@@ -334,6 +379,169 @@ child_error (struct child *child,
 }
 
 
+/* [jart] manage temporary directories per rule */
+
+bool
+parse_bool (const char *s)
+{
+  while (isspace (*s))
+    ++s;
+  if (isdigit (*s))
+    return !! atoi (s);
+  return _startswithi (s, "true");
+}
+
+const char *
+get_target_variable (const char *name,
+                     size_t length,
+                     struct file *file,
+                     const char *dflt)
+{
+  const struct variable *var;
+  if ((file &&
+       ((var = lookup_variable_in_set (name, length,
+                                       file->variables->set)) ||
+        (file->pat_variables &&
+         (var = lookup_variable_in_set (name, length,
+                                        file->pat_variables->set))))) ||
+      (var = lookup_variable (name, length)))
+    return variable_expand (var->value);
+  else
+    return dflt;
+}
+
+char *
+get_tmpdir (struct file *file)
+{
+  const char *tmpdir;
+  tmpdir = get_target_variable (STRING_SIZE_TUPLE ("TMPDIR"), file, 0);
+  if (!tmpdir) tmpdir = __get_tmpdir();
+  return strdup (tmpdir);
+}
+
+char *
+new_tmpdir (const char *tmp, struct file *file)
+{
+  char *tmpdir;
+  const char *s;
+  int c, e, i, j;
+  char cwd[PATH_MAX];
+  char path[PATH_MAX];
+
+  /* create temporary directory in tmp */
+  i = 0;
+
+  /* ensure tmpdir will be absolute */
+  if (tmp[0] != '/')
+    {
+      if (getcwd(cwd, sizeof(cwd)))
+        {
+          for (j = 0; cwd[j]; ++j)
+            if (i < PATH_MAX)
+              path[i++] = cwd[j];
+          if (i && path[i - 1] != '/')
+            if (i < PATH_MAX)
+              path[i++] = '/';
+        }
+      else
+        DB (DB_JOBS, (_("Failed to get current directory\n")));
+    }
+
+  /* copy old tmpdir */
+  for (j = 0; tmp[j]; ++j)
+    if (i < PATH_MAX)
+      path[i++] = tmp[j];
+
+  /* append slash */
+  if (i && path[i - 1] != '/')
+    if (i < PATH_MAX)
+      path[i++] = '/';
+
+  /* append target name safely */
+  for (j = 0; (c = file->name[j]); ++j)
+    {
+      if (isalnum(c))
+        c = tolower(c);
+      else
+        c = '_';
+      if (i < PATH_MAX)
+        path[i++] = c;
+    }
+
+  /* copy random template */
+  s = ".XXXXXX";
+  for (j = 0; s[j]; ++j)
+    if (i < PATH_MAX)
+      path[i++] = s[j];
+
+  /* add nul terminator */
+  if (i + 11 < PATH_MAX)
+    path[i] = 0;
+  else
+    {
+      DB (DB_JOBS, (_("Creating TMPDIR in %s for %s is too long\n"),
+                    tmp, file->name));
+      return 0;
+    }
+
+  /* create temp directory with random data */
+  e = errno;
+  if (!(tmpdir = mkdtemp (path)) && errno == ENOENT)
+    {
+      /* create parent directories if necessary */
+      char *dir;
+      errno = e;
+      dir = xstrdup (path);
+      if (!makedirs (dirname (dir), 0700))
+        tmpdir = mkdtemp (path);
+      free (dir);
+    }
+
+  /* returned string must be free'd */
+  if (tmpdir)
+    {
+      tmpdir = xstrdup (tmpdir);
+      DB (DB_JOBS, (_("Created TMPDIR %s\n"), path));
+    }
+  else
+    DB (DB_JOBS, (_("Creating TMPDIR %s failed %s\n"),
+                  path, strerror (errno)));
+
+  return tmpdir;
+}
+
+bool
+get_file_timestamp (struct file *file)
+{
+  int e;
+  struct stat st;
+  EINTRLOOP (e, stat (file->name, &st));
+  if (e == 0)
+    return FILE_TIMESTAMP_STAT_MODTIME (file->name, st);
+  else
+    return NONEXISTENT_MTIME;
+}
+
+void
+delete_tmpdir (struct child *c)
+{
+  if (!c->tmpdir) return;
+
+  DB (DB_JOBS, (_("Deleting TMPDIR %s\n"), c->tmpdir));
+
+  if (!isdirectory (c->tmpdir))
+    DB (DB_JOBS, (_("Warning TMPDIR %s doesn't exist\n"), c->tmpdir));
+
+  errno = 0;
+  if (rmrf (c->tmpdir))
+    DB (DB_JOBS, (_("Deleting TMPDIR %s failed %s\n"),
+                  c->tmpdir, strerror(errno)));
+
+  free (c->tmpdir);
+  c->tmpdir = 0;
+}
+
+
 /* Handle a dead child.  This handler may or may not ever be installed.
 
    If we're using the jobserver feature without pselect(), we need it.
@@ -584,7 +792,16 @@ reap_children (int block, int err)
               delete_on_error = f != 0 && f->is_target;
             }
           if (exit_sig != 0 || delete_on_error)
-            delete_child_targets (c);
+            {
+              delete_child_targets (c);
+              delete_tmpdir (c);
+            }
+          else if (c->file->touched &&
+                   c->file->touched != get_file_timestamp (c->file))
+            /* If file was created just so it could be sandboxed, then
+               delete that file even if .DELETE_ON_ERROR isn't used,
+               but only if the command hasn't modified it.  */
+            unlink (c->file->name);
         }
       else
         {
@@ -632,14 +849,20 @@ reap_children (int block, int err)
                 }
 
               if (c->file->update_status != us_success)
-                /* We failed to start the commands.  */
-                delete_child_targets (c);
+                {
+                  /* We failed to start the commands.  */
+                  delete_child_targets (c);
+                  delete_tmpdir (c);
+                }
             }
           else
-            /* There are no more commands.  We got through them all
-               without an unignored error.  Now the target has been
-               successfully updated.  */
-            c->file->update_status = us_success;
+            {
+              /* There are no more commands.  We got through them all
+                 without an unignored error.  Now the target has been
+                 successfully updated.  */
+              c->file->update_status = us_success;
+              delete_tmpdir (c);
+            }
         }
 
       /* When we get here, all the commands for c->file are finished.  */
@@ -743,6 +966,7 @@ free_child (struct child *child)
       free (child->environment);
     }
 
+  free (child->tmpdir);
   free (child->cmd_name);
   free (child);
 }
@@ -980,7 +1204,7 @@ start_job_command (struct child *child)
       parent_environ = environ;
       jobserver_pre_child (flags & COMMANDS_RECURSE);
       child->pid = child_execute_job ((struct childbase *)child,
-                                      child->good_stdin, argv);
+                                      child->good_stdin, argv, true);
       environ = parent_environ; /* Restore value child may have clobbered.  */
       jobserver_post_child (flags & COMMANDS_RECURSE);
     }
@@ -1076,10 +1300,12 @@ start_waiting_job (struct child *c)
 void
 new_job (struct file *file)
 {
+
   struct commands *cmds = file->cmds;
+  struct variable *var;
   struct child *c;
-  char **lines;
   unsigned int i;
+  char **lines;
 
   /* Let any previously decided-upon jobs that are waiting
      for the load to go down start before this new one.  */
@@ -1094,11 +1320,20 @@ new_job (struct file *file)
   /* Start the command sequence, record it in a new
      'struct child', and add that to the chain.  */
 
-  c = xcalloc (sizeof (struct child));
+  c = xcalloc (1, sizeof (struct child));
   output_init (&c->output);
 
   c->file = file;
   c->sh_batch_file = NULL;
+
+  /* [jart] manage temporary directories per rule */
+  if ((c->tmpdir = get_tmpdir (file)) &&
+      (c->tmpdir = new_tmpdir (c->tmpdir, file)))
+    {
+      var = define_variable_for_file ("TMPDIR", 6, c->tmpdir,
+                                      o_override, 0, file);
+      var->export = v_export;
+    }
 
   /* Cache dontcare flag because file->dontcare can be changed once we
      return. Check dontcare inheritance mechanism for details.  */
@@ -1416,82 +1651,11 @@ load_too_high (void)
      OK, I'm not sure exactly how to handle that, but for sure we need to
      clamp this value at the number of cores before this can be enabled.
    */
-#define PROC_FD_INIT -1
-  static int proc_fd = PROC_FD_INIT;
-
   double load, guess;
   time_t now;
 
-#ifdef WINDOWS32
-  /* sub_proc.c is limited in the number of objects it can wait for. */
-  if (process_table_full ())
-    return 1;
-#endif
-
   if (max_load_average < 0)
     return 0;
-
-  /* If we haven't tried to open /proc/loadavg, try now.  */
-#define LOADAVG "/proc/loadavg"
-  if (proc_fd == -2)
-    {
-      EINTRLOOP (proc_fd, open (LOADAVG, O_RDONLY));
-      if (proc_fd < 0)
-        DB (DB_JOBS, ("Using system load detection method.\n"));
-      else
-        {
-          DB (DB_JOBS, ("Using " LOADAVG " load detection method.\n"));
-          fd_noinherit (proc_fd);
-        }
-    }
-
-  /* Try to read /proc/loadavg if we managed to open it.  */
-  if (proc_fd >= 0)
-    {
-      int r;
-
-      EINTRLOOP (r, lseek (proc_fd, 0, SEEK_SET));
-      if (r >= 0)
-        {
-#define PROC_LOADAVG_SIZE 64
-          char avg[PROC_LOADAVG_SIZE+1];
-
-          EINTRLOOP (r, read (proc_fd, avg, PROC_LOADAVG_SIZE));
-          if (r >= 0)
-            {
-              const char *p;
-
-              /* The syntax of /proc/loadavg is:
-                    <1m> <5m> <15m> <running>/<total> <pid>
-                 The load is considered too high if there are more jobs
-                 running than the requested average.  */
-
-              avg[r] = '\0';
-              p = strchr (avg, ' ');
-              if (p)
-                p = strchr (p+1, ' ');
-              if (p)
-                p = strchr (p+1, ' ');
-
-              if (p && ISDIGIT(p[1]))
-                {
-                  int cnt = atoi (p+1);
-                  DB (DB_JOBS, ("Running: system = %d / make = %u (max requested = %f)\n",
-                                cnt, job_slots_used, max_load_average));
-                  return (double)cnt > max_load_average;
-                }
-
-              DB (DB_JOBS, ("Failed to parse " LOADAVG ": %s\n", avg));
-            }
-        }
-
-      /* If we 𝑔𝑜𝑡 𝑕𝑒𝑟𝑒, something went wrong.  Give up on this method.  */
-      if (r < 0)
-        DB (DB_JOBS, ("Failed to read " LOADAVG ": %s\n", strerror (errno)));
-
-      close (proc_fd);
-      proc_fd = -1;
-    }
 
   /* Find the real system load average.  */
   make_access ();
@@ -1564,17 +1728,159 @@ start_waiting_jobs (void)
 }
 
 
+bool
+get_perm_prefix (const char *path, char out_perm[5], const char **out_path)
+{
+  int c, n;
+  for (n = 0;;)
+    switch ((c = *path++)) {
+    case 'r':
+    case 'w':
+    case 'c':
+    case 'x':
+      out_perm[n++] = c;
+      out_perm[n] = 0;
+      break;
+    case ':':
+      if (n)
+        {
+          *out_path = path;
+          return true;
+        }
+      else
+        return false;
+    default:
+      return false;
+    }
+}
+
+/* Adds path to sandbox, returning true if found. */
+int
+Unveil (const char *path, const char *perm)
+{
+  int e;
+  char *fp[2];
+  char permprefix[5];
+
+  /* if path is like `rwcx:o/tmp` then `rwcx` will override perm */
+  if (path && get_perm_prefix (path, permprefix, &path))
+    perm = permprefix;
+
+  fp[0] = 0;
+  fp[1] = 0;
+  if (path && path[0] == '~' &&
+      (fp[1] = tilde_expand ((fp[0] = xstrdup (path)))))
+    path = fp[1];
+
+  DB (DB_JOBS, (_("Unveiling %s with permissions %s\n"), path, perm));
+
+  e = errno;
+  if (unveil (path, perm) != -1)
+    {
+      free(fp[0]);
+      free(fp[1]);
+      return 0;
+    }
+
+  /* path not found isn't really much of an error */
+  if (errno == ENOENT)
+    {
+      free(fp[0]);
+      free(fp[1]);
+      errno = e;
+      return 0;
+    }
+
+  /* otherwise fail */
+  OSS (error, NILF, "%s: unveil() failed %s", path, strerror (errno));
+  free(fp[0]);
+  free(fp[1]);
+  return -1;
+}
+
+int
+unveil_variable (const struct variable *var)
+{
+  char *val, *tok, *state, *start;
+  if (!var) return 0;
+  start = val = xstrdup (variable_expand (var->value));
+  while ((tok = strtok_r (start, " \t\r\n", &state)))
+    {
+      RETURN_ON_ERROR (Unveil (tok, "r"));
+      start = 0;
+    }
+  free(val);
+  return 0;
+ OnError:
+  return -1;
+}
+
+static int
+get_base_cpu_freq_mhz (void)
+{
+  return KCPUIDS(16H, EAX) & 0x7fff;
+}
+
+int
+set_limit (int r, long lo, long hi)
+{
+  struct rlimit old;
+  struct rlimit lim = {lo, hi};
+  if (!setrlimit (r, &lim))
+    return 0;
+  if (getrlimit (r, &old))
+    return -1;
+  lim.rlim_cur = MIN (lim.rlim_cur, old.rlim_max);
+  lim.rlim_max = MIN (lim.rlim_max, old.rlim_max);
+  return setrlimit (r, &lim);
+}
+
+static int
+set_cpu_limit (int secs)
+{
+  int mhz, lim;
+  if (secs <= 0) return 0;
+  if (!(mhz = get_base_cpu_freq_mhz())) return eopnotsupp();
+  lim = ceil(3100. / mhz * secs);
+  return set_limit (RLIMIT_CPU, lim, lim + 1);
+}
+
+static struct sysinfo g_sysinfo;
+
+__attribute__((__constructor__)) static void
+get_sysinfo (void)
+{
+  int e = errno;
+  sysinfo (&g_sysinfo);
+  errno = e;
+}
+
+static bool internet;
+static char *promises;
+
 /* POSIX:
    Create a child process executing the command in ARGV.
    Returns the PID or -1.  */
 pid_t
-child_execute_job (struct childbase *child, int good_stdin, char **argv)
+child_execute_job (struct childbase *child,
+                   int good_stdin,
+                   char **argv,
+                   bool is_build_rule)
 {
   const int fdin = good_stdin ? FD_STDIN : get_bad_stdin ();
+  struct dep *d;
+  bool strict;
+  bool sandboxed;
+  bool unsandboxed;
+  struct child *c;
+  unsigned long ipromises;
+  char pathbuf[PATH_MAX];
+  char outpathbuf[PATH_MAX];
   int fdout = FD_STDOUT;
   int fderr = FD_STDERR;
+  const char *s;
   pid_t pid;
-  int r;
+  int e, r;
 
   /* Divert child output if we want to capture it.  */
   if (child->output.syncout)
@@ -1585,7 +1891,7 @@ child_execute_job (struct childbase *child, int good_stdin, char **argv)
         fderr = child->output.err;
     }
 
-  pid = vfork();
+  pid = fork();
   if (pid != 0)
     return pid;
 
@@ -1595,6 +1901,407 @@ child_execute_job (struct childbase *child, int good_stdin, char **argv)
   /* Reset limits, if necessary.  */
   if (stack_limit.rlim_cur)
     setrlimit (RLIMIT_STACK, &stack_limit);
+
+  /* Tell build rules apart from $(shell foo).  */
+  if (is_build_rule) {
+    c = (struct child *)child;
+  } else {
+    c = 0;
+  }
+
+  if (c)
+    {
+      strict = parse_bool (get_target_variable
+                           (STRING_SIZE_TUPLE (".STRICT"),
+                            c->file, "0"));
+      internet = !strict ||
+                 parse_bool (get_target_variable
+                             (STRING_SIZE_TUPLE (".INTERNET"),
+                              c->file, "0"));
+      unsandboxed = !strict ||
+                    parse_bool (get_target_variable
+                                (STRING_SIZE_TUPLE (".UNSANDBOXED"),
+                                 c->file, "0"));
+    }
+  else
+    {
+      strict = false;
+      internet = true;
+      unsandboxed = true;
+    }
+
+  sandboxed = !unsandboxed;
+
+  if (sandboxed)
+    {
+      const char *ps;
+      ps = emptytonull (get_target_variable
+                        (STRING_SIZE_TUPLE (".PLEDGE"),
+                         c ? c->file : 0, 0));
+      promises = ps ? xstrdup (ps) : 0;
+      if (ParsePromises (promises, &ipromises))
+        {
+          OSS (error, NILF, "%s: invalid .PLEDGE string: %s",
+               argv[0], strerror (errno));
+          _Exit (127);
+        }
+    }
+  else
+    {
+      promises = NULL;
+      ipromises = 0;
+    }
+
+  DB (DB_JOBS, 
+      (_("Executing %s for %s%s%s%s\n"),
+       argv[0], c ? c->file->name : "$(shell)",
+       sandboxed ? " with sandboxing" : " without sandboxing",
+       strict ? " in .STRICT mode" : "",
+       internet ? " with internet access" : ""));
+
+#ifdef __x86_64__
+  /* [jart] Set cpu seconds quota.  */
+  if (RLIMIT_CPU < RLIM_NLIMITS &&
+      (s = get_target_variable (STRING_SIZE_TUPLE (".CPU"),
+                                c ? c->file : 0, 0)))
+    {
+      int secs;
+      secs = atoi (s);
+      if (!set_cpu_limit (secs))
+        DB (DB_JOBS, (_("Set cpu limit of %d seconds\n"), secs));
+      else
+        DB (DB_JOBS, (_("Failed to set CPU limit: %s\n"), strerror (errno)));
+    }
+#endif /* __x86_64__ */
+
+  /* [jart] Set virtual memory quota.  */
+  if (RLIMIT_AS < RLIM_NLIMITS &&
+      (s = get_target_variable (STRING_SIZE_TUPLE (".MEMORY"),
+                                c ? c->file : 0, 0)))
+    {
+      long bytes;
+      char buf[16];
+      errno = 0;
+      if (!strchr (s, '%'))
+        bytes = sizetol (s, 1024);
+      else
+        bytes = strtod (s, 0) / 100. * g_sysinfo.totalram;
+      if (bytes > 0)
+        {
+          if (!set_limit (RLIMIT_AS, bytes, bytes))
+            DB (DB_JOBS, (_("Set virtual memory limit of %sb\n"),
+                          (sizefmt (buf, bytes, 1024), buf)));
+          else
+            DB (DB_JOBS, (_("Failed to set virtual memory: %s\n"),
+                          strerror (errno)));
+        }
+      else if (errno)
+        {
+          OSS (error, NILF, "%s: .MEMORY invalid: %s",
+               argv[0], strerror (errno));
+          _Exit (127);
+        }
+    }
+
+  /* [jart] Set resident memory quota.  */
+  if (RLIMIT_RSS < RLIM_NLIMITS &&
+      (s = get_target_variable (STRING_SIZE_TUPLE (".RSS"),
+                                c ? c->file : 0, 0)))
+    {
+      long bytes;
+      char buf[16];
+      errno = 0;
+      if (!strchr (s, '%'))
+        bytes = sizetol (s, 1024);
+      else
+        bytes = strtod (s, 0) / 100. * g_sysinfo.totalram;
+      if (bytes > 0)
+        {
+          if (!set_limit (RLIMIT_RSS, bytes, bytes))
+            DB (DB_JOBS, (_("Set resident memory limit of %sb\n"),
+                          (sizefmt (buf, bytes, 1024), buf)));
+          else
+            DB (DB_JOBS, (_("Failed to set resident memory: %s\n"),
+                          strerror (errno)));
+        }
+      else if (errno)
+        {
+          OSS (error, NILF, "%s: .RSS invalid: %s",
+               argv[0], strerror (errno));
+          _Exit (127);
+        }
+    }
+
+  /* [jart] Set file size limit.  */
+  if (RLIMIT_FSIZE < RLIM_NLIMITS &&
+      (s = get_target_variable (STRING_SIZE_TUPLE (".FSIZE"),
+                                c ? c->file : 0, 0)))
+    {
+      long bytes;
+      char buf[16];
+      errno = 0;
+      if ((bytes = sizetol (s, 1000)) > 0)
+        {
+          if (!set_limit (RLIMIT_FSIZE, bytes, bytes * 1.5))
+            DB (DB_JOBS, (_("Set file size limit of %sb\n"),
+                          (sizefmt (buf, bytes, 1000), buf)));
+          else
+            DB (DB_JOBS, (_("Failed to set file size limit: %s\n"),
+                          strerror (errno)));
+        }
+      else if (errno)
+        {
+          OSS (error, NILF, "%s: .FSIZE invalid: %s",
+               argv[0], strerror (errno));
+          _Exit (127);
+        }
+    }
+
+  /* [jart] Set core dump limit.  */
+  if (RLIMIT_CORE < RLIM_NLIMITS &&
+      (s = get_target_variable (STRING_SIZE_TUPLE (".MAXCORE"),
+                                c ? c->file : 0, 0)))
+    {
+      long bytes;
+      char buf[16];
+      errno = 0;
+      if ((bytes = sizetol (s, 1000)) > 0)
+        {
+          if (!set_limit (RLIMIT_CORE, bytes, bytes))
+            DB (DB_JOBS, (_("Set core dump limit of %sb\n"),
+                          (sizefmt (buf, bytes, 1000), buf)));
+          else
+            DB (DB_JOBS, (_("Failed to set core dump limit: %s\n"),
+                          strerror (errno)));
+        }
+      else if (errno)
+        {
+          OSS (error, NILF, "%s: .MAXCORE invalid: %s",
+               argv[0], strerror (errno));
+          _Exit (127);
+        }
+    }
+
+  /* [jart] Set process limit.  */
+  if (RLIMIT_NPROC < RLIM_NLIMITS &&
+      (s = get_target_variable (STRING_SIZE_TUPLE (".NPROC"),
+                                c ? c->file : 0, 0)))
+    {
+      int procs;
+      if ((procs = atoi (s)) > 0)
+        {
+          if (!set_limit (RLIMIT_NPROC,
+                          procs + g_sysinfo.procs,
+                          procs + g_sysinfo.procs))
+            DB (DB_JOBS, (_("Set process limit to %d + %d preexisting\n"),
+                          procs, g_sysinfo.procs));
+          else
+            DB (DB_JOBS, (_("Failed to set process limit: %s\n"),
+                          strerror (errno)));
+        }
+    }
+
+  /* [jart] Set file descriptor limit.  */
+  if (RLIMIT_NOFILE < RLIM_NLIMITS &&
+      (s = get_target_variable (STRING_SIZE_TUPLE (".NOFILE"),
+                                c ? c->file : 0, 0)))
+    {
+      int fds;
+      if ((fds = atoi (s)) > 0)
+        {
+          if (!set_limit (RLIMIT_NOFILE, fds, fds))
+            DB (DB_JOBS, (_("Set file descriptor limit to %d\n"), fds));
+          else
+            DB (DB_JOBS, (_("Failed to set process limit: %s\n"),
+                          strerror (errno)));
+        }
+    }
+
+  /* [jart] Resolve command into executable path.  */
+  if (!strict || !sandboxed)
+    {
+      if ((s = commandv (argv[0], pathbuf, sizeof (pathbuf))))
+        argv[0] = (char *)s;
+      else
+        {
+          OSS (error, NILF, "%s: command not found on $PATH: %s",
+               argv[0], strerror (errno));
+          _Exit (127);
+        }
+    }
+
+  /* [jart] Sandbox build rule commands based on prerequisites.  */
+  if (c)
+    {
+      errno = 0;
+      if (sandboxed)
+        {
+          /*
+           * permit launching actually portable executables
+           *
+           * we assume launching make.com already did the expensive
+           * work of extracting the ape loader program, via /bin/sh
+           * and we won't need to do that again, since sys_execve()
+           * will pass ape binaries directly to the ape loader, but
+           * only if the ape loader exists on a well-known path.
+           */
+          e = errno;
+          DB (DB_JOBS, (_("Unveiling %s with permissions %s\n"),
+                        "/usr/bin/ape", "rx"));
+          if (unveil ("/usr/bin/ape", "rx") == -1)
+          {
+            char *s, *t;
+            errno = e;
+            if ((s = getenv ("TMPDIR")))
+            {
+              t = xjoinpaths (s, ".ape");
+              RETURN_ON_ERROR (Unveil (t, "rx"));
+              free (t);
+            }
+            if ((s = getenv ("HOME")))
+            {
+              t = xjoinpaths (s, ".ape");
+              RETURN_ON_ERROR (Unveil (t, "rx"));
+              free (t);
+            }
+          }
+
+          /* Unveil executable.  */
+          RETURN_ON_ERROR (Unveil (argv[0], "rx"));
+
+          /* Unveil temporary directory.  */
+          if (c->tmpdir)
+            RETURN_ON_ERROR (Unveil (c->tmpdir, "rwcx"));
+
+          /* Unveil .PLEDGE = vminfo.  */
+          if (promises && (~ipromises & (1ul << PROMISE_VMINFO)))
+            {
+              RETURN_ON_ERROR (Unveil ("/proc/stat", "r"));
+              RETURN_ON_ERROR (Unveil ("/proc/meminfo", "r"));
+              RETURN_ON_ERROR (Unveil ("/proc/cpuinfo", "r"));
+              RETURN_ON_ERROR (Unveil ("/proc/diskstats", "r"));
+              RETURN_ON_ERROR (Unveil ("/proc/self/maps", "r"));
+              RETURN_ON_ERROR (Unveil ("/sys/devices/system/cpu", "r"));
+            }
+
+          /* Unveil .PLEDGE = tty.  */
+          if (promises && (~ipromises & (1ul << PROMISE_TTY)))
+            {
+              RETURN_ON_ERROR (Unveil (ttyname(0), "rw"));
+              RETURN_ON_ERROR (Unveil ("/dev/tty", "rw"));
+              RETURN_ON_ERROR (Unveil ("/dev/console", "rw"));
+              RETURN_ON_ERROR (Unveil ("/etc/terminfo", "r"));
+              RETURN_ON_ERROR (Unveil ("/usr/lib/terminfo", "r"));
+              RETURN_ON_ERROR (Unveil ("/usr/share/terminfo", "r"));
+            }
+
+          /* Unveil .PLEDGE = dns.  */
+          if (promises && (~ipromises & (1ul << PROMISE_DNS)))
+            {
+              RETURN_ON_ERROR (Unveil ("/etc/hosts", "r"));
+              RETURN_ON_ERROR (Unveil ("/etc/hostname", "r"));
+              RETURN_ON_ERROR (Unveil ("/etc/services", "r"));
+              RETURN_ON_ERROR (Unveil ("/etc/protocols", "r"));
+              RETURN_ON_ERROR (Unveil ("/etc/resolv.conf", "r"));
+            }
+
+          /* Unveil .PLEDGE = inet.  */
+          if (promises && (~ipromises & (1ul << PROMISE_INET)))
+            RETURN_ON_ERROR (Unveil ("/etc/ssl/certs/ca-certificates.crt", "r"));
+
+          /* Unveil .PLEDGE = rpath.  */
+          if (promises && (~ipromises & (1ul << PROMISE_RPATH)))
+            RETURN_ON_ERROR (Unveil ("/proc/filesystems", "r"));
+
+          /*
+           * unveils target output file
+           *
+           * landlock operates per inode so it can't whitelist missing
+           * paths. so we create the output file manually, and prevent
+           * creation so that it can't be deleted by the command which
+           * must truncate when writing its output.
+           */
+          if (!c->file->phony &&
+              strlen(c->file->name) < PATH_MAX)
+            {
+              int fd, err;
+              if (c->file->last_mtime == NONEXISTENT_MTIME)
+                {
+                  strcpy (outpathbuf, c->file->name);
+                  err = errno;
+                  if (makedirs (dirname (outpathbuf), 0777) == -1)
+                    errno = err;
+                  fd = open (c->file->name, O_RDWR | O_CREAT, 0777);
+                  if (fd != -1)
+                    close (fd);
+                  else if (errno == EEXIST)
+                    errno = err;
+                  else
+                    {
+                      OSS (error, NILF, "%s: touch target failed %s",
+                           c->file->name, strerror (errno));
+                      _Exit (127);
+                    }
+                  c->file->touched = get_file_timestamp (c->file);
+                }
+              DB (DB_JOBS, (_("Unveiling %s with permissions %s\n"),
+                            c->file->name, "rwx"));
+              if (unveil (c->file->name, "rwx") && errno != ENOSYS)
+                {
+                  OSS (error, NILF, "%s: unveil target failed %s",
+                       c->file->name, strerror (errno));
+                  _Exit (127);
+                }
+            }
+
+          /*
+           * unveil target prerequisites
+           *
+           * directories get special treatment:
+           *
+           *   - libc/nt
+           *     shall unveil everything beneath dir
+           *
+           *   - libc/nt/
+           *     no sandboxing due to trailing slash
+           *     intended to be timestamp check only
+           */
+          for (d = c->file->deps; d; d = d->next)
+            {
+              size_t n;
+              n = strlen (d->file->name);
+              if (n && d->file->name[n - 1] == '/')
+                continue;
+              RETURN_ON_ERROR (Unveil (d->file->name, "rx"));
+              if (n > 4 && READ32LE(d->file->name + n - 4) == READ32LE(".com"))
+                {
+                  char *s = xstrcat (d->file->name, ".dbg");
+                  RETURN_ON_ERROR (Unveil (s, "rx"));
+                  free (s);
+                }
+            }
+
+          /* unveil explicit .UNVEIL entries */
+          RETURN_ON_ERROR
+            (unveil_variable
+             (lookup_variable
+              (STRING_SIZE_TUPLE (".UNVEIL"))));
+          RETURN_ON_ERROR
+            (unveil_variable
+             (lookup_variable_in_set
+              (STRING_SIZE_TUPLE (".UNVEIL"),
+               c->file->variables->set)));
+          if (c->file->pat_variables)
+            RETURN_ON_ERROR
+              (unveil_variable
+               (lookup_variable_in_set
+                (STRING_SIZE_TUPLE (".UNVEIL"),
+                 c->file->pat_variables->set)));
+
+          /* commit sandbox */
+          RETURN_ON_ERROR (Unveil (0, 0));
+        }
+    }
 
   /* For any redirected FD, dup2() it to the standard FD.
      They are all marked close-on-exec already.  */
@@ -1608,10 +2315,8 @@ child_execute_job (struct childbase *child, int good_stdin, char **argv)
   /* Run the command.  */
   exec_command (argv, child->environment);
 
-  if (pid < 0)
-    OSS (error, NILF, "%s: %s", argv[0], strerror (r));
-
-  return pid;
+ OnError:
+  _Exit (127);
 }
 
 
@@ -1623,12 +2328,27 @@ exec_command (char **argv, char **envp)
   /* Be the user, permanently.  */
   child_access ();
 
+  /* Restrict system calls.  */
+  if (promises)
+    {
+      __pledge_mode = PLEDGE_PENALTY_RETURN_EPERM;
+      DB (DB_JOBS, (_("Pledging %s\n"), promises));
+      promises = xstrcat (promises, " prot_exec exec");
+      if (pledge (promises, promises))
+        {
+          OSS (error, NILF, "pledge(%s) failed: %s",
+               promises, strerror (errno));
+          _Exit (127);
+        }
+    }
+
   /* Run the program.  */
   environ = envp;
   execvp (argv[0], argv);
 
   if(errno == ENOENT)
-    OSS (error, NILF, "%s: %s", argv[0], strerror (errno));
+    OSS (error, NILF, "%s: command doesn't exist: %s",
+         argv[0], strerror (errno));
   else if(errno == ENOEXEC)
   {
     /* The file was not a program.  Try it as a shell script.  */
@@ -1656,12 +2376,14 @@ exec_command (char **argv, char **envp)
     }
 
     execvp (shell, new_argv);
-    OSS (error, NILF, "%s: %s", new_argv[0], strerror (errno));
+    OSS (error, NILF, "%s: execvp shell failed: %s",
+         new_argv[0], strerror (errno));
   }
 
-  OSS (error, NILF, "%s: %s", argv[0], strerror (errno));
+  OSS (error, NILF, "%s: execv failed: %s",
+       argv[0], strerror (errno));
 
-  _exit (127);
+  _Exit (127);
 }
 
 
@@ -1688,36 +2410,6 @@ construct_command_argv_internal (char *line, char **restp, const char *shell,
                                  const char *shellflags, const char *ifs,
                                  int flags, char **batch_filename UNUSED)
 {
-#if defined (WINDOWS32)
-  /* We used to have a double quote (") in sh_chars_dos[] below, but
-     that caused any command line with quoted file names be run
-     through a temporary batch file, which introduces command-line
-     limit of 4K charcaters imposed by cmd.exe.  Since CreateProcess
-     can handle quoted file names just fine, removing the quote lifts
-     the limit from a very frequent use case, because using quoted
-     file names is commonplace on MS-Windows.  */
-  static const char *sh_chars_dos = "|&<>";
-  static const char *sh_cmds_dos[] =
-    { "assoc", "break", "call", "cd", "chcp", "chdir", "cls", "color", "copy",
-      "ctty", "date", "del", "dir", "echo", "echo.", "endlocal", "erase",
-      "exit", "for", "ftype", "goto", "if", "if", "md", "mkdir", "move",
-      "path", "pause", "prompt", "rd", "rem", "ren", "rename", "rmdir",
-      "set", "setlocal", "shift", "time", "title", "type", "ver", "verify",
-      "vol", ":", 0 };
-
-  static const char *sh_chars_sh = "#;\"*?[]&|<>(){}$`^";
-  static const char *sh_cmds_sh[] =
-    { "cd", "eval", "exec", "exit", "login", "logout", "set", "umask", "wait",
-      "while", "for", "case", "if", ":", ".", "break", "continue", "export",
-      "read", "readonly", "shift", "times", "trap", "switch", "test", "command",
-#ifdef BATCH_MODE_ONLY_SHELL
-      "echo",
-#endif
-      0 };
-
-  const char *sh_chars;
-  const char **sh_cmds;
-#else  /* must be UNIX-ish */
   static const char *sh_chars = "#;\"*?[]&|<>(){}$`^~!";
   static const char *sh_cmds[] =
     { ".", ":", "alias", "bg", "break", "case", "cd", "command", "continue",
@@ -1725,15 +2417,6 @@ construct_command_argv_internal (char *line, char **restp, const char *shell,
       "if", "jobs", "login", "logout", "read", "readonly", "return", "set",
       "shift", "test", "times", "trap", "type", "ulimit", "umask", "unalias",
       "unset", "wait", "while", 0 };
-
-# ifdef HAVE_DOS_PATHS
-  /* This is required if the MSYS/Cygwin ports (which do not define
-     WINDOWS32) are compiled with HAVE_DOS_PATHS defined, which uses
-     sh_chars_sh directly (see below).  The value must be identical
-     to that of sh_chars immediately above.  */
-  static const char *sh_chars_sh =  "#;\"*?[]&|<>(){}$`^~!";
-# endif  /* HAVE_DOS_PATHS */
-#endif
   size_t i;
   char *p;
 #ifndef NDEBUG
@@ -1745,20 +2428,6 @@ construct_command_argv_internal (char *line, char **restp, const char *shell,
   int instring, word_has_equals, seen_nonequals, last_argument_was_empty;
   char **new_argv = 0;
   char *argstr = 0;
-#ifdef WINDOWS32
-  int slow_flag = 0;
-
-  if (!unixy_shell)
-    {
-      sh_cmds = sh_cmds_dos;
-      sh_chars = sh_chars_dos;
-    }
-  else
-    {
-      sh_cmds = sh_cmds_sh;
-      sh_chars = sh_chars_sh;
-    }
-#endif /* WINDOWS32 */
 
   if (restp != NULL)
     *restp = NULL;
@@ -1775,47 +2444,8 @@ construct_command_argv_internal (char *line, char **restp, const char *shell,
   /* See if it is safe to parse commands internally.  */
   if (shell == 0)
     shell = default_shell;
-#ifdef WINDOWS32
-  else if (strcmp (shell, default_shell))
-  {
-    char *s1 = _fullpath (NULL, shell, 0);
-    char *s2 = _fullpath (NULL, default_shell, 0);
-
-    slow_flag = strcmp ((s1 ? s1 : ""), (s2 ? s2 : ""));
-
-    free (s1);
-    free (s2);
-  }
-  if (slow_flag)
-    goto slow;
-#else  /* not WINDOWS32 */
-#if defined (__MSDOS__) || defined (__EMX__)
-  else if (strcasecmp (shell, default_shell))
-    {
-      extern int _is_unixy_shell (const char *_path);
-
-      DB (DB_BASIC, (_("$SHELL changed (was '%s', now '%s')\n"),
-                     default_shell, shell));
-      unixy_shell = _is_unixy_shell (shell);
-      /* we must allocate a copy of shell: construct_command_argv() will free
-       * shell after this function returns.  */
-      default_shell = xstrdup (shell);
-    }
-  if (unixy_shell)
-    {
-      sh_chars = sh_chars_sh;
-      sh_cmds  = sh_cmds_sh;
-    }
-  else
-    {
-      sh_chars = sh_chars_dos;
-      sh_cmds  = sh_cmds_dos;
-    }
-#else  /* !__MSDOS__ */
-  else if (strcmp (shell, default_shell))
-    goto slow;
-#endif /* !__MSDOS__ && !__EMX__ */
-#endif /* not WINDOWS32 */
+  
+  /* [jart] remove code that forces slow path if not using /bin/sh */
 
   if (ifs)
     for (cap = ifs; *cap != '\0'; ++cap)
@@ -1887,14 +2517,6 @@ construct_command_argv_internal (char *line, char **restp, const char *shell,
              quotes have the same effect.  */
           else if (instring == '"' && strchr ("\\$`", *p) != 0 && unixy_shell)
             goto slow;
-#ifdef WINDOWS32
-          /* Quoted wildcard characters must be passed quoted to the
-             command, so give up the fast route.  */
-          else if (instring == '"' && strchr ("*?", *p) != 0 && !unixy_shell)
-            goto slow;
-          else if (instring == '"' && strncmp (p, "\\\"", 2) == 0)
-            *ap++ = *++p;
-#endif
           else
             *ap++ = *p;
         }
@@ -1933,30 +2555,8 @@ construct_command_argv_internal (char *line, char **restp, const char *shell,
                   while (ISBLANK (p[1]))
                     ++p;
               }
-#ifdef WINDOWS32
-            /* Backslash before whitespace is not special if our shell
-               is not Unixy.  */
-            else if (ISSPACE (p[1]) && !unixy_shell)
-              {
-                *ap++ = *p;
-                break;
-              }
-#endif
             else if (p[1] != '\0')
               {
-#ifdef HAVE_DOS_PATHS
-                /* Only remove backslashes before characters special to Unixy
-                   shells.  All other backslashes are copied verbatim, since
-                   they are probably DOS-style directory separators.  This
-                   still leaves a small window for problems, but at least it
-                   should work for the vast majority of naive users.  */
-                  if (p[1] != '\\' && p[1] != '\''
-                      && !ISSPACE (p[1])
-                      && strchr (sh_chars_sh, p[1]) == 0)
-                    /* back up one notch, to copy the backslash */
-                    --p;
-#endif  /* HAVE_DOS_PATHS */
-
                 /* Copy and skip the following char.  */
                 *ap++ = *++p;
               }
@@ -2006,12 +2606,6 @@ construct_command_argv_internal (char *line, char **restp, const char *shell,
                   {
                     if (streq (sh_cmds[j], new_argv[0]))
                       goto slow;
-#if defined(__EMX__) || defined(WINDOWS32)
-                    /* Non-Unix shells are case insensitive.  */
-                    if (!unixy_shell
-                        && strcasecmp (sh_cmds[j], new_argv[0]) == 0)
-                      goto slow;
-#endif
                   }
               }
 
@@ -2066,23 +2660,6 @@ construct_command_argv_internal (char *line, char **restp, const char *shell,
       free (new_argv);
     }
 
-#ifdef WINDOWS32
-  /*
-   * Not eating this whitespace caused things like
-   *
-   *    sh -c "\n"
-   *
-   * which gave the shell fits. I think we have to eat
-   * whitespace here, but this code should be considered
-   * suspicious if things start failing....
-   */
-
-  /* Make sure not to bother processing an empty line.  */
-  NEXT_TOKEN (line);
-  if (*line == '\0')
-    return 0;
-#endif /* WINDOWS32 */
-
   {
     /* SHELL may be a multi-word command.  Construct a command line
        "$(SHELL) $(.SHELLFLAGS) LINE", with all special chars in LINE escaped.
@@ -2093,9 +2670,6 @@ construct_command_argv_internal (char *line, char **restp, const char *shell,
     size_t shell_len = strlen (shell);
     size_t line_len = strlen (line);
     size_t sflags_len = shellflags ? strlen (shellflags) : 0;
-#ifdef WINDOWS32
-    char *command_ptr = NULL; /* used for batch_mode_shell mode */
-#endif
 
     /* In .ONESHELL mode we are allowed to throw the entire current
         recipe string at a single shell and trust that the user
@@ -2113,12 +2687,7 @@ construct_command_argv_internal (char *line, char **restp, const char *shell,
 
         /* Remove and ignore interior prefix chars [@+-] because they're
              meaningless given a single shell. */
-        if (is_bourne_compatible_shell (shell)
-#ifdef WINDOWS32
-            /* If we didn't find any sh.exe, don't behave is if we did!  */
-            && !no_default_sh_exe
-#endif
-            )
+        if (is_bourne_compatible_shell (shell))
           {
             const char *f = line;
             char *t = line;
@@ -2153,79 +2722,6 @@ construct_command_argv_internal (char *line, char **restp, const char *shell,
               }
             *t = '\0';
           }
-#ifdef WINDOWS32
-        else    /* non-Posix shell (cmd.exe etc.) */
-          {
-            const char *f = line;
-            char *t = line;
-            char *tstart = t;
-            int temp_fd;
-            FILE* batch = NULL;
-            int id = GetCurrentProcessId ();
-            PATH_VAR(fbuf);
-
-            /* Generate a file name for the temporary batch file.  */
-            sprintf (fbuf, "make%d", id);
-            *batch_filename = create_batch_file (fbuf, 0, &temp_fd);
-            DB (DB_JOBS, (_("Creating temporary batch file %s\n"),
-                          *batch_filename));
-
-            /* Create a FILE object for the batch file, and write to it the
-               commands to be executed.  Put the batch file in TEXT mode.  */
-            _setmode (temp_fd, _O_TEXT);
-            batch = _fdopen (temp_fd, "wt");
-            fputs ("@echo off\n", batch);
-            DB (DB_JOBS, (_("Batch file contents:\n\t@echo off\n")));
-
-            /* Copy the recipe, removing and ignoring interior prefix chars
-               [@+-]: they're meaningless in .ONESHELL mode.  */
-            while (*f != '\0')
-              {
-                /* This is the start of a new recipe line.  Skip whitespace
-                   and prefix characters but not newlines.  */
-                while (ISBLANK (*f) || *f == '-' || *f == '@' || *f == '+')
-                  ++f;
-
-                /* Copy until we get to the next logical recipe line.  */
-                while (*f != '\0')
-                  {
-                    /* Remove the escaped newlines in the command, and the
-                       blanks that follow them.  Windows shells cannot handle
-                       escaped newlines.  */
-                    if (*f == '\\' && f[1] == '\n')
-                      {
-                        f += 2;
-                        while (ISBLANK (*f))
-                          ++f;
-                      }
-                    *(t++) = *(f++);
-                    /* On an unescaped newline, we're done with this
-                       line.  */
-                    if (f[-1] == '\n')
-                      break;
-                  }
-                /* Write another line into the batch file.  */
-                if (t > tstart)
-                  {
-                    char c = *t;
-                    *t = '\0';
-                    fputs (tstart, batch);
-                    DB (DB_JOBS, ("\t%s", tstart));
-                    tstart = t;
-                    *t = c;
-                  }
-              }
-            DB (DB_JOBS, ("\n"));
-            fclose (batch);
-
-            /* Create an argv list for the shell command line that
-               will run the batch file.  */
-            new_argv = xmalloc (2 * sizeof (char *));
-            new_argv[0] = xstrdup (*batch_filename);
-            new_argv[1] = NULL;
-            return new_argv;
-          }
-#endif /* WINDOWS32 */
         /* Create an argv list for the shell command line.  */
         {
           int n = 0;

@@ -37,7 +37,7 @@ forceinline void ConvolveGradient(unsigned yn, unsigned xn,
   size_t size;
   unsigned y, x, i, j, k;
   float py[4], px[4], (*tmp)[yn][xn][4];
-  tmp = mapanon((size = ROUNDUP(sizeof(float) * 4 * xn * yn, FRAMESIZE)));
+  tmp = _mapanon((size = ROUNDUP(sizeof(float) * 4 * xn * yn, FRAMESIZE)));
   for (y = 0; y < yn - KW + 1; ++y) {
     for (x = 0; x < xn - KW + 1; ++x) {
       for (k = 0; k < 4; ++k) py[k] = 0;
@@ -69,7 +69,7 @@ void sobel(struct Graphic* g) {
            FLIP(BROADCAST(-2), BROADCAST(+0), BROADCAST(+2)),
            FLIP(BROADCAST(-1), BROADCAST(+0), BROADCAST(+1)));
   if (g->yn >= 3 && g->xn >= 3) {
-    ConvolveGradient(g->yn, g->xn, g->b.p, 3, &kSobelEmbossKernelY,
+    ConvolveGradient(g->yn, g->xn, g->b, 3, &kSobelEmbossKernelY,
                      &kSobelEmbossKernelX);
   }
 }

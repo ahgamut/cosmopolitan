@@ -21,6 +21,7 @@ this program.  If not, see <http://www.gnu.org/licenses/>.  */
 #include "third_party/make/commands.h"
 #include "third_party/make/dep.h"
 #include "third_party/make/variable.h"
+#include "libc/runtime/runtime.h"
 #include "third_party/make/debug.h"
 
 /* The test for circular dependencies is based on the 'updating' bit in
@@ -322,7 +323,8 @@ update_file (struct file *file, unsigned int depth)
       check_renamed (f);
 
       /* Clean up any alloca() used during the update.  */
-      alloca (0);
+      void *volatile wat = alloca (0);
+      (void)wat;
 
       /* If we got an error, don't bother with double_colon etc.  */
       if (new && !keep_going_flag)

@@ -1,6 +1,11 @@
 #include "libc/calls/weirdtypes.h"
+#include "libc/time/struct/tm.h"
 #include "libc/time/time.h"
 
+/**
+ * Represents time as string.
+ * @threadunsafe
+ */
 char *ctime(const time_t *timep) {
   /*
   ** Section 4.12.3.2 of X3.159-1989 requires that

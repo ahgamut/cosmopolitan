@@ -25,8 +25,7 @@ DSP_BMP_A_CHECKS =				\
 
 DSP_BMP_A_DIRECTDEPS =				\
 	LIBC_NEXGEN32E				\
-	LIBC_TINYMATH				\
-	LIBC_STUBS
+	LIBC_TINYMATH
 
 DSP_BMP_A_DEPS :=				\
 	$(call uniq,$(foreach x,$(DSP_BMP_A_DIRECTDEPS),$($(x))))
@@ -40,12 +39,12 @@ $(DSP_BMP_A).pkg:				\
 		$(foreach x,$(DSP_BMP_A_DIRECTDEPS),$($(x)_A).pkg)
 
 o/$(MODE)/dsp/bmp/float2short.o			\
-o/$(MODE)/dsp/bmp/scalevolume.o:		\
-		OVERRIDE_CFLAGS +=		\
+o/$(MODE)/dsp/bmp/scalevolume.o: private	\
+		CFLAGS +=			\
 			$(MATHEMATICAL)
 
-o/tiny/dsp/bmp/scalevolume.o:			\
-		OVERRIDE_CFLAGS +=		\
+o/tiny/dsp/bmp/scalevolume.o: private		\
+		CFLAGS +=			\
 			-Os
 
 DSP_BMP_LIBS = $(foreach x,$(DSP_BMP_ARTIFACTS),$($(x)))

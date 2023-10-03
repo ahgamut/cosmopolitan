@@ -16,7 +16,8 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/strace.internal.h"
+#include "tool/plinko/lib/printf.h"
+#include "libc/intrin/strace.internal.h"
 #include "libc/nexgen32e/rdtsc.h"
 #include "libc/runtime/runtime.h"
 #include "libc/str/str.h"
@@ -24,7 +25,6 @@
 #include "tool/plinko/lib/char.h"
 #include "tool/plinko/lib/plinko.h"
 #include "tool/plinko/lib/print.h"
-#include "tool/plinko/lib/printf.h"
 
 static inline long GetVarInt(va_list va, signed char t) {
   if (t <= 0) return va_arg(va, int);
@@ -32,7 +32,7 @@ static inline long GetVarInt(va_list va, signed char t) {
 }
 
 static int PrintStr(int fd, const char *s, int cols) {
-  int n, j, k = 0, i = 0;
+  int n, k = 0, i = 0;
   n = strlen(s);
   k += PrintIndent(fd, +cols - n);
   while (i < n) k += PrintChar(fd, s[i++]);
@@ -77,11 +77,11 @@ int Vfnprintf(const char *f, va_list va, int fd, int n) {
   const char *s;
   signed char type;
   char quot, ansi, gotr, pdot, zero;
-  int b, c, i, x, y, si, prec, cols, sign;
+  int b, c, x, y, si, prec, cols, sign;
   gotr = false;
   t = rdtsc();
-  --__ftrace;
-  --__strace;
+  ftrace_enabled(-1);
+  strace_enabled(-1);
   ++recursive;
   for (ansi = 0;;) {
     for (;;) {
@@ -118,7 +118,7 @@ int Vfnprintf(const char *f, va_list va, int fd, int n) {
           }
           break;
         default:
-          unreachable;
+          __builtin_unreachable();
       }
     EmitFormatByte:
       PrintChar(fd, c);
@@ -290,8 +290,8 @@ int Vfnprintf(const char *f, va_list va, int fd, int n) {
     }
   }
   --recursive;
-  ++__ftrace;
-  ++__strace;
+  ftrace_enabled(+1);
+  strace_enabled(+1);
   if (!recursive) {
     u = rdtsc();
     if (gotr) {

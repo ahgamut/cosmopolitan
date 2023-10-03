@@ -41,7 +41,7 @@ EXAMPLES_PACKAGE_LIB_A = o/$(MODE)/examples/package/lib/lib.a
 EXAMPLES_PACKAGE_LIB_ARTIFACTS += EXAMPLES_PACKAGE_LIB_A
 
 # Build configs might seem somewhat complicated. Rest assured they're
-# mostly maintainence free. That's largely thanks to how we wildcard.
+# mostly maintenance free. That's largely thanks to how we wildcard.
 EXAMPLES_PACKAGE_LIB_A_FILES := $(wildcard examples/package/lib/*)
 EXAMPLES_PACKAGE_LIB_A_HDRS = $(filter %.h,$(EXAMPLES_PACKAGE_LIB_A_FILES))
 
@@ -69,10 +69,9 @@ EXAMPLES_PACKAGE_LIB_A_CHECKS =					\
 # Lists packages whose symbols are or may be directly referenced here.
 # Note that linking stubs is always a good idea due to synthetic code.
 EXAMPLES_PACKAGE_LIB_A_DIRECTDEPS =				\
-	LIBC_STDIO						\
 	LIBC_INTRIN						\
 	LIBC_NEXGEN32E						\
-	LIBC_STUBS
+	LIBC_STDIO
 
 # Evaluates variable as set of transitive package dependencies.
 EXAMPLES_PACKAGE_LIB_A_DEPS :=					\
@@ -95,6 +94,10 @@ $(EXAMPLES_PACKAGE_LIB_A).pkg:					\
 
 # Invalidates objects in package when makefile is edited.
 $(EXAMPLES_PACKAGE_LIB_A_OBJS): examples/package/lib/build.mk
+
+# let these assembly objects build on aarch64
+o/$(MODE)/examples/package/lib/myasm.o: examples/package/lib/myasm.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
 
 EXAMPLES_PACKAGE_LIB_LIBS = $(foreach x,$(EXAMPLES_PACKAGE_LIB_ARTIFACTS),$($(x)))
 EXAMPLES_PACKAGE_LIB_SRCS = $(foreach x,$(EXAMPLES_PACKAGE_LIB_ARTIFACTS),$($(x)_SRCS))

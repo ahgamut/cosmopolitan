@@ -5,6 +5,7 @@
 /* IEEE Std 1003.1-2017 (Revision of IEEE Std 1003.1-2008)  */
 
 #define _POSIX_AIO_LISTIO_MAX               2
+#define _POSIX_CLOCKRES_MIN                 20000000
 #define _POSIX_AIO_MAX                      1
 #define _POSIX_ARG_MAX                      4096
 #define _POSIX_CHILD_MAX                    25
@@ -51,9 +52,5 @@
 #define _POSIX2_EXPR_NEST_MAX      32
 #define _POSIX2_LINE_MAX           2048
 #define _POSIX2_RE_DUP_MAX         255
-
-#define _XOPEN_IOV_MAX  16
-#define _XOPEN_NAME_MAX 255
-#define _XOPEN_PATH_MAX 1024
 
 #endif /* COSMOPOLITAN_LIBC_SYSV_CONSTS__POSIX_H_ */

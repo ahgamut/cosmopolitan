@@ -21,14 +21,14 @@
 
 	.macro	.e e s
 	.long	\e - kErrnoDocs
-	.long	1f - kErrnoDocs
+	.long	.L\@ - kErrnoDocs
 	.rodata.str1.1
-1:	.asciz	"\s"
+.L\@:	.asciz	"\s"
 	.previous
 	.endm
 
 	.section .rodata
-	.align 4
+	.balign 4
 	.underrun
 kErrnoDocs:
 	.e	EINVAL,"Invalid argument"
@@ -74,7 +74,6 @@ kErrnoDocs:
 	.e	ELOOP,"Too many symbolic links encountered"
 	.e	ENOMSG,"No message of desired type"
 	.e	EIDRM,"Identifier removed"
-	.e	ETIME,"Timer expired"
 	.e	EPROTO,"Protocol error"
 	.e	EOVERFLOW,"Value too large for defined data type"
 	.e	EILSEQ,"Illegal byte sequence"
@@ -103,6 +102,7 @@ kErrnoDocs:
 	.e	ESHUTDOWN,"Cannot send after transport endpoint shutdown"
 	.e	ETOOMANYREFS,"Too many references: cannot splice"
 	.e	ETIMEDOUT,"Connection timed out"
+	.e	ETIME,"Timer expired"
 	.e	ECONNREFUSED,"Connection refused"
 	.e	EHOSTDOWN,"Host is down"
 	.e	EHOSTUNREACH,"No route to host"
@@ -116,6 +116,7 @@ kErrnoDocs:
 	.e	ENOTRECOVERABLE,"State not recoverable"
 	.e	ENONET,"Machine is not on the network"
 	.e	ERESTART,"Interrupted system call should be restarted"
+	.e	EBADFD,"File descriptor in bad state"
 	.long	MAGNUM_TERMINATOR
 	.endobj	kErrnoDocs,globl,hidden
 	.overrun

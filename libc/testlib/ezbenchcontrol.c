@@ -16,16 +16,22 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/stdio/stdio.h"
+#include "libc/calls/calls.h"
+#include "libc/fmt/itoa.h"
+#include "libc/intrin/kprintf.h"
+#include "libc/runtime/runtime.h"
+#include "libc/str/str.h"
 #include "libc/testlib/ezbench.h"
 #include "libc/testlib/testlib.h"
 
 static bool once;
-static int64_t g_ezbenchcontrol;
+static double g_ezbenchcontrol;
 
-int64_t __testlib_ezbenchcontrol(void) {
+double __testlib_ezbenchcontrol(void) {
+  char host[64];
+  char ibuf[12];
+  int Core, Tries, Interrupts;
   if (!once) {
-    int Core, Tries, Interrupts;
     Tries = 0;
     do {
       __testlib_yield();
@@ -36,10 +42,13 @@ int64_t __testlib_ezbenchcontrol(void) {
     } while (++Tries < 10 && (__testlib_getcore() != Core &&
                               __testlib_getinterrupts() > Interrupts));
     if (Tries == 10) {
-      fputs("warning: failed to accurately benchmark control\n", stderr);
+      tinyprint(2, "warning: failed to accurately benchmark control\n");
     }
-    fprintf(stderr, "will subtract benchmark overhead of %ld cycles\n\n",
-            g_ezbenchcontrol);
+    strcpy(host, "unknown");
+    gethostname(host, 64);
+    FormatInt32(ibuf, g_ezbenchcontrol);
+    tinyprint(2, "benchmarks on ", host, " (", __describe_os(),
+              "; overhead of ", ibuf, " cycles)\n", NULL);
     once = true;
   }
   return g_ezbenchcontrol;

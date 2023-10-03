@@ -16,14 +16,16 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/bits.h"
+#include "libc/errno.h"
+#include "libc/intrin/bits.h"
 #include "libc/macros.internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
+#include "libc/str/tab.internal.h"
 #include "libc/sysv/consts/ex.h"
 #include "libc/sysv/consts/exit.h"
-#include "third_party/getopt/getopt.h"
+#include "third_party/getopt/getopt.internal.h"
 #include "third_party/xed/x86.h"
 #include "tool/decode/lib/idname.h"
 #include "tool/decode/lib/xederrors.h"
@@ -128,8 +130,11 @@ int main(int argc, char *argv[]) {
   for (k = 0, i = optind; i < argc; ++i) {
     CheckHex(argv[i]);
     for (j = 0; argv[i][j]; j += 2) {
-      if (++k > XED_MAX_INSTRUCTION_BYTES) ShowUsage(EX_DATAERR, stderr);
-      buf[k - 1] = hextoint(argv[i][j + 0]) << 4 | hextoint(argv[i][j + 1]);
+      if (++k > XED_MAX_INSTRUCTION_BYTES) {
+        ShowUsage(EX_DATAERR, stderr);
+      }
+      buf[k - 1] = kHexToInt[argv[i][j + 0] & 255] << 4 |
+                   kHexToInt[argv[i][j + 1] & 255];
     }
   }
 

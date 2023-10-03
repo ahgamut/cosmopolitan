@@ -1,2 +1,2 @@
 #include "libc/sysv/consts/syscon.internal.h"
-.syscon errno,EPROGMISMATCH,0,75,75,75,75,0
+.syscon errno,EPROGMISMATCH,303,303,75,75,75,75,75,595

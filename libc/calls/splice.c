@@ -19,56 +19,82 @@
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
+#include "libc/cosmo.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
+#include "libc/fmt/itoa.h"
+#include "libc/intrin/asan.internal.h"
+#include "libc/intrin/describeflags.internal.h"
+#include "libc/intrin/strace.internal.h"
+#include "libc/mem/alloca.h"
+#include "libc/str/str.h"
 #include "libc/sysv/errfuns.h"
 
-static ssize_t splicer(int infd, int64_t *inoffset, int outfd,
-                       int64_t *outoffset, size_t uptobytes, uint32_t flags,
-                       int64_t impl(int infd, int64_t *inoffset, int outfd,
-                                    int64_t *outoffset, size_t uptobytes,
-                                    uint32_t flags)) {
-  int olderr;
-  ssize_t transferred;
-  if (!uptobytes || flags == -1) return einval();
-  if (IsModeDbg() && uptobytes > 1) uptobytes >>= 1;
-  olderr = errno;
-  if (__isfdkind(infd, kFdZip) || __isfdkind(outfd, kFdZip) ||
-      (transferred =
-           impl(infd, inoffset, outfd, outoffset, uptobytes, flags)) == -1 &&
-          errno == ENOSYS) {
-    errno = olderr;
-    transferred = copyfd(infd, inoffset, outfd, outoffset, uptobytes, flags);
+static struct Splice {
+  _Atomic(uint32_t) once;
+  bool ok;
+} g_splice;
+
+static bool HasSplice(void) {
+  int e;
+  bool ok;
+  e = errno;
+  if (IsLinux()) {
+    // Our testing indicates splice() doesn't work as documneted on
+    // RHEL5 and RHEL7 so let's require a modern kernel to be safe.
+    // We choose close_range() for this since it's listed by pledge
+    ok = sys_close_range(-1, -2, 0) == -1 && errno == EINVAL;
+  } else {
+    ok = false;
   }
-  return transferred;
+  errno = e;
+  return ok;
+}
+
+static void splice_init(void) {
+  g_splice.ok = HasSplice();
 }
 
 /**
  * Transfers data to/from pipe.
  *
  * @param flags can have SPLICE_F_{MOVE,NONBLOCK,MORE,GIFT}
+ * @param opt_in_out_inoffset may be specified if `infd` isn't a pipe and is
+ *     used as both an input and output parameter for pread() behavior
+ * @param opt_in_out_outoffset may be specified if `outfd` isn't a pipe and is
+ *     used as both an input and output parameter for pwrite() behavior
  * @return number of bytes transferred, 0 on input end, or -1 w/ errno
+ * @raise EBADF if `infd` or `outfd` aren't open files or append-only
+ * @raise ENOTSUP if `infd` or `outfd` is a zip file descriptor
+ * @raise ESPIPE if an offset arg was specified for a pipe fd
+ * @raise EINVAL if offset was given for non-seekable device
+ * @raise EINVAL if file system doesn't support splice()
+ * @raise EFAULT if one of the pointers memory is bad
+ * @raise EINVAL if `flags` is invalid
+ * @raise ENOSYS if not Linux 5.9+
  * @see copy_file_range() for file ↔ file
  * @see sendfile() for seekable → socket
  */
-ssize_t splice(int infd, int64_t *inopt_out_inoffset, int outfd,
-               int64_t *inopt_out_outoffset, size_t uptobytes, uint32_t flags) {
-  return splicer(infd, inopt_out_inoffset, outfd, inopt_out_outoffset,
-                 uptobytes, flags, sys_splice);
-}
-
-/**
- * Transfers data between files.
- *
- * @param outfd should be a writable file, but not O_APPEND
- * @param flags is reserved for future use
- * @return number of bytes actually copied, or -1 w/ errno
- * @see sendfile() for seekable → socket
- * @see splice() for fd ↔ pipe
- */
-ssize_t copy_file_range(int infd, int64_t *inopt_out_inoffset, int outfd,
-                        int64_t *inopt_out_outoffset, size_t uptobytes,
-                        uint32_t flags) {
-  return splicer(infd, inopt_out_inoffset, outfd, inopt_out_outoffset,
-                 uptobytes, flags, sys_copy_file_range);
+ssize_t splice(int infd, int64_t *opt_in_out_inoffset, int outfd,
+               int64_t *opt_in_out_outoffset, size_t uptobytes,
+               uint32_t flags) {
+  ssize_t rc;
+  cosmo_once(&g_splice.once, splice_init);
+  if (!g_splice.ok) {
+    rc = enosys();
+  } else if (IsAsan() && ((opt_in_out_inoffset &&
+                           !__asan_is_valid(opt_in_out_inoffset, 8)) ||
+                          (opt_in_out_outoffset &&
+                           !__asan_is_valid(opt_in_out_outoffset, 8)))) {
+    rc = efault();
+  } else if (__isfdkind(infd, kFdZip) || __isfdkind(outfd, kFdZip)) {
+    rc = enotsup();
+  } else {
+    rc = sys_splice(infd, opt_in_out_inoffset, outfd, opt_in_out_outoffset,
+                    uptobytes, flags);
+  }
+  STRACE("splice(%d, %s, %d, %s, %'zu, %#x) → %'ld% m", infd,
+         DescribeInOutInt64(rc, opt_in_out_inoffset), outfd,
+         DescribeInOutInt64(rc, opt_in_out_outoffset), uptobytes, flags);
+  return rc;
 }

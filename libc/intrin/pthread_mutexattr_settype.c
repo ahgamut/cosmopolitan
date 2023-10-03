@@ -17,7 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/errno.h"
-#include "libc/intrin/pthread.h"
+#include "libc/thread/thread.h"
 
 /**
  * Sets mutex type.
@@ -30,12 +30,12 @@
  * @return 0 on success, or error on failure
  * @raises EINVAL if `type` is invalid
  */
-int(pthread_mutexattr_settype)(pthread_mutexattr_t *attr, int type) {
+errno_t pthread_mutexattr_settype(pthread_mutexattr_t *attr, int type) {
   switch (type) {
     case PTHREAD_MUTEX_NORMAL:
     case PTHREAD_MUTEX_RECURSIVE:
     case PTHREAD_MUTEX_ERRORCHECK:
-      attr->attr = type;
+      attr->_type = type;
       return 0;
     default:
       return EINVAL;

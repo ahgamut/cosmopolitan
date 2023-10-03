@@ -20,11 +20,12 @@
 #include "libc/calls/struct/sigaction.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
+#include "libc/mem/gc.internal.h"
 #include "libc/mem/mem.h"
-#include "libc/rand/rand.h"
-#include "libc/runtime/gc.internal.h"
 #include "libc/runtime/runtime.h"
+#include "libc/stdio/rand.h"
 #include "libc/stdio/stdio.h"
+#include "libc/str/str.h"
 #include "libc/sysv/consts/sig.h"
 #include "libc/testlib/testlib.h"
 #include "libc/time/time.h"
@@ -33,11 +34,18 @@
 
 FILE *f;
 char buf[512];
-char testlib_enable_tmp_setup_teardown;
+
+void SetUpOnce(void) {
+  testlib_enable_tmp_setup_teardown();
+}
 
 TEST(fwrite, test) {
   ASSERT_NE(NULL, (f = fopen(PATH, "wb")));
   EXPECT_EQ(-1, fgetc(f));
+  ASSERT_FALSE(feof(f));
+  ASSERT_EQ(EBADF, errno);
+  ASSERT_EQ(EBADF, ferror(f));
+  clearerr(f);
   EXPECT_EQ(5, fwrite("hello", 1, 5, f));
   EXPECT_EQ(5, ftell(f));
   EXPECT_NE(-1, fclose(f));
@@ -48,7 +56,6 @@ TEST(fwrite, test) {
   ASSERT_NE(NULL, (f = fopen(PATH, "a+b")));
   EXPECT_EQ(5, fwrite("hello", 1, 5, f));
   EXPECT_NE(-1, fclose(f));
-  if (IsWindows()) return;
   ASSERT_NE(NULL, (f = fopen(PATH, "r")));
   EXPECT_EQ(10, fread(buf, 1, 10, f));
   EXPECT_TRUE(!memcmp(buf, "hellohello", 10));
@@ -59,6 +66,7 @@ TEST(fwrite, testSmallBuffer) {
   ASSERT_NE(NULL, (f = fopen(PATH, "wb")));
   setbuffer(f, gc(malloc(1)), 1);
   EXPECT_EQ(-1, fgetc(f));
+  clearerr(f);
   EXPECT_EQ(5, fwrite("hello", 1, 5, f));
   EXPECT_EQ(5, ftell(f));
   EXPECT_NE(-1, fclose(f));
@@ -71,7 +79,6 @@ TEST(fwrite, testSmallBuffer) {
   setbuffer(f, gc(malloc(1)), 1);
   EXPECT_EQ(5, fwrite("hello", 1, 5, f));
   EXPECT_NE(-1, fclose(f));
-  if (IsWindows()) return;
   ASSERT_NE(NULL, (f = fopen(PATH, "r")));
   setbuffer(f, gc(malloc(1)), 1);
   EXPECT_EQ(10, fread(buf, 1, 10, f));
@@ -83,6 +90,7 @@ TEST(fwrite, testLineBuffer) {
   ASSERT_NE(NULL, (f = fopen(PATH, "wb")));
   setvbuf(f, NULL, _IOLBF, 64);
   EXPECT_EQ(-1, fgetc(f));
+  clearerr(f);
   EXPECT_EQ(5, fwrite("heyy\n", 1, 5, f));
   EXPECT_EQ(0, fread(buf, 0, 0, f));
   EXPECT_FALSE(feof(f));
@@ -99,7 +107,6 @@ TEST(fwrite, testLineBuffer) {
   setvbuf(f, NULL, _IOLBF, 64);
   EXPECT_EQ(5, fwrite("heyy\n", 1, 5, f));
   EXPECT_NE(-1, fclose(f));
-  if (IsWindows()) return;
   ASSERT_NE(NULL, (f = fopen(PATH, "r")));
   setvbuf(f, NULL, _IOLBF, 64);
   EXPECT_EQ(10, fread(buf, 1, 10, f));
@@ -111,6 +118,7 @@ TEST(fwrite, testNoBuffer) {
   ASSERT_NE(NULL, (f = fopen(PATH, "wb")));
   setvbuf(f, NULL, _IONBF, 64);
   EXPECT_EQ(-1, fgetc(f));
+  clearerr(f);
   EXPECT_EQ(5, fwrite("heyy\n", 1, 5, f));
   EXPECT_EQ(5, ftell(f));
   EXPECT_NE(-1, fclose(f));
@@ -123,7 +131,6 @@ TEST(fwrite, testNoBuffer) {
   setvbuf(f, NULL, _IONBF, 64);
   EXPECT_EQ(5, fwrite("heyy\n", 1, 5, f));
   EXPECT_NE(-1, fclose(f));
-  if (IsWindows()) return;
   ASSERT_NE(NULL, (f = fopen(PATH, "r")));
   setvbuf(f, NULL, _IONBF, 64);
   EXPECT_EQ(10, fread(buf, 1, 10, f));
@@ -136,7 +143,7 @@ void MeatyReadWriteTest(void) {
   char *mem, *buf;
   n = 8 * 1024 * 1024;
   buf = gc(malloc(n));
-  mem = rngset(gc(malloc(n)), n, rand64, -1);
+  mem = rngset(gc(malloc(n)), n, _rand64, -1);
   ASSERT_NE(NULL, (f = fopen(PATH, "wb")));
   setbuffer(f, gc(malloc(4 * 1000 * 1000)), 4 * 1000 * 1000);
   EXPECT_EQ(n, fwrite(mem, 1, n, f));
@@ -165,7 +172,7 @@ TEST(fwrite, signalStorm) {
   if (!pid) {
     do {
       ASSERT_NE(-1, kill(getppid(), SIGINT));
-      usleep(1);
+      usleep(25);
     } while (!gotsigint);
     _exit(0);
   }

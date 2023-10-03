@@ -16,24 +16,26 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/bits.h"
-#include "libc/bits/popcnt.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/stat.h"
 #include "libc/elf/def.h"
 #include "libc/fmt/conv.h"
+#include "libc/intrin/bits.h"
+#include "libc/intrin/bsr.h"
+#include "libc/intrin/popcnt.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
 #include "libc/macros.internal.h"
 #include "libc/mem/mem.h"
-#include "libc/nexgen32e/bsr.h"
 #include "libc/nexgen32e/crc32.h"
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
+#include "libc/str/tab.internal.h"
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/s.h"
 #include "libc/x/x.h"
+#include "libc/x/xasprintf.h"
 #include "third_party/chibicc/file.h"
 #include "third_party/gdtoa/gdtoa.h"
 #include "tool/build/lib/elfwriter.h"
@@ -773,7 +775,7 @@ static void Tokenize(struct As *a, int path) {
 
 static int GetSymbol(struct As *a, int name) {
   struct HashEntry *p;
-  unsigned i, j, k, n, m, h, n2;
+  unsigned i, j, k, n, m, h;
   if (!(h = crc32c(0, a->slices.p[name].p, a->slices.p[name].n))) h = 1;
   n = a->symbolindex.n;
   i = 0;
@@ -930,7 +932,6 @@ static int NewBinary(struct As *a, enum ExprKind k, int lhs, int rhs) {
 //         | symbol
 //         | reference
 static int ParsePrimary(struct As *a, int *rest, int i) {
-  int e;
   if (IsInt(a, i)) {
     *rest = i + 1;
     return NewPrimary(a, EX_INT, a->ints.p[a->things.p[i].i]);
@@ -1653,7 +1654,8 @@ static int SymbolType(struct As *a, struct Slice s) {
   }
 }
 
-static int GrabSection(struct As *a, int name, int flags, int type) {
+static int GrabSection(struct As *a, int name, int flags, int type, int group,
+                       int comdat) {
   int i;
   for (i = 0; i < a->sections.n; ++i) {
     if (!strcmp(a->strings.p[name], a->strings.p[a->sections.p[i].name])) {
@@ -1664,7 +1666,7 @@ static int GrabSection(struct As *a, int name, int flags, int type) {
 }
 
 static void OnSection(struct As *a, struct Slice s) {
-  int name, flags, type;
+  int name, flags, type, group = -1, comdat = -1;
   name = SliceDup(a, GetSlice(a));
   if (startswith(a->strings.p[name], ".text")) {
     flags = SHF_ALLOC | SHF_EXECINSTR;
@@ -1685,9 +1687,17 @@ static void OnSection(struct As *a, struct Slice s) {
     if (IsComma(a)) {
       ++a->i;
       type = SectionType(a, GetSlice(a));
+      if (IsComma(a)) {
+        ++a->i;
+        group = SectionType(a, GetSlice(a));
+        if (IsComma(a)) {
+          ++a->i;
+          comdat = SectionType(a, GetSlice(a));
+        }
+      }
     }
   }
-  SetSection(a, GrabSection(a, name, flags, type));
+  SetSection(a, GrabSection(a, name, flags, type, group, comdat));
 }
 
 static void OnPushsection(struct As *a, struct Slice s) {
@@ -1705,7 +1715,7 @@ static void OnIdent(struct As *a, struct Slice s) {
   struct Slice arg;
   int comment, oldsection;
   comment = GrabSection(a, StrDup(a, ".comment"), SHF_MERGE | SHF_STRINGS,
-                        SHT_PROGBITS);
+                        SHT_PROGBITS, -1, -1);
   oldsection = a->section;
   a->section = comment;
   arg = GetSlice(a);
@@ -1754,7 +1764,7 @@ static void OnSize(struct As *a, struct Slice s) {
 }
 
 static void OnEqu(struct As *a, struct Slice s) {
-  int i, j;
+  int i;
   i = GetSymbol(a, a->things.p[a->i++].i);
   ConsumeComma(a);
   a->symbols.p[i].offset = GetInt(a);
@@ -1883,7 +1893,7 @@ static bool Prefix(struct As *a, const char *p, int n) {
     l = 0;
     r = ARRAYLEN(kPrefix) - 1;
     while (l <= r) {
-      m = (l + r) >> 1;
+      m = (l & r) + ((l ^ r) >> 1);  // floor((a+b)/2)
       y = READ64BE(kPrefix[m]);
       if (x < y) {
         r = m - 1;
@@ -1908,7 +1918,7 @@ static bool FindReg(const char *p, int n, struct Reg *out_reg) {
     l = 0;
     r = ARRAYLEN(kRegs) - 1;
     while (l <= r) {
-      m = (l + r) >> 1;
+      m = (l & r) + ((l ^ r) >> 1);  // floor((a+b)/2)
       y = READ64BE(kRegs[m].s);
       if (x < y) {
         r = m - 1;
@@ -1956,15 +1966,17 @@ static int RemoveRexw(int x) {
 
 static int GetRegisterReg(struct As *a) {
   int reg;
-  struct Slice wut;
-  if ((reg = FindRegReg(GetSlice(a))) == -1) InvalidRegister(a);
+  if ((reg = FindRegReg(GetSlice(a))) == -1) {
+    InvalidRegister(a);
+  }
   return reg;
 }
 
 static int GetRegisterRm(struct As *a) {
   int reg;
-  struct Slice wut;
-  if ((reg = FindRegRm(GetSlice(a))) == -1) InvalidRegister(a);
+  if ((reg = FindRegRm(GetSlice(a))) == -1) {
+    InvalidRegister(a);
+  }
   return reg;
 }
 
@@ -1981,7 +1993,7 @@ static int ParseModrm(struct As *a, int *disp) {
                │││││├──────┐├┐├─┐├─┐
   0b00000000000000000000000000000000*/
   struct Slice str;
-  int reg, scale, modrm = 0;
+  int reg, modrm = 0;
   if (!ConsumeSegment(a) && IsRegister(a, a->i)) {
     *disp = 0;
     modrm = GetRegisterRm(a) | ISREG;
@@ -2016,7 +2028,7 @@ static int ParseModrm(struct As *a, int *disp) {
         if (((reg & 070) >> 3) == 2) modrm |= HASASZ;  // asz
         if (IsComma(a)) {
           ++a->i;
-          modrm |= (bsr(GetInt(a)) & 3) << 6;
+          modrm |= (_bsr(GetInt(a)) & 3) << 6;
         }
       }
       ConsumePunct(a, ')');
@@ -2046,12 +2058,12 @@ static void EmitImm(struct As *a, int reg, int imm) {
 }
 
 static void EmitModrm(struct As *a, int reg, int modrm, int disp) {
-  int relo, mod, rm;
+  int relo, mod;
   void (*emitter)(struct As *, uint128_t);
   reg &= 7;
   reg <<= 3;
   if (modrm & ISREG) {
-    EmitByte(a, 0300 | reg | modrm & 7);
+    EmitByte(a, 0300 | reg | (modrm & 7));
   } else {
     if (modrm & ISRIP) {
       EmitByte(a, 005 | reg);
@@ -2337,7 +2349,7 @@ static dontinline void OpXadd(struct As *a) {
 }
 
 static dontinline int OpF6Impl(struct As *a, struct Slice s, int reg) {
-  int modrm, imm, disp;
+  int modrm, disp;
   modrm = ParseModrm(a, &disp);
   reg |= GetOpSize(a, s, modrm, 1) << 3;
   EmitRexOpModrm(a, 0xF6, reg, modrm, disp, 1);
@@ -2631,7 +2643,6 @@ static void OnPush(struct As *a, struct Slice s) {
 }
 
 static void OnRdpid(struct As *a, struct Slice s) {
-  int modrm, disp;
   EmitVarword(a, 0xf30fc7);
   EmitByte(a, 0370 | GetRegisterReg(a));
 }
@@ -2689,6 +2700,8 @@ static void OnFile(struct As *a, struct Slice s) {
   struct Slice path;
   fileno = GetInt(a);
   path = GetSlice(a);
+  (void)fileno;
+  (void)path;
   // TODO: DWARF
 }
 
@@ -2696,6 +2709,8 @@ static void OnLoc(struct As *a, struct Slice s) {
   int fileno, lineno;
   fileno = GetInt(a);
   lineno = GetInt(a);
+  (void)fileno;
+  (void)lineno;
   // TODO: DWARF
 }
 
@@ -2751,7 +2766,7 @@ static void OnFxch(struct As *a, struct Slice s) {
   int rm;
   rm = !IsSemicolon(a) ? GetRegisterRm(a) : 1;
   EmitByte(a, 0xD9);
-  EmitByte(a, 0310 | rm & 7);
+  EmitByte(a, 0310 | (rm & 7));
 }
 
 static void OnBswap(struct As *a, struct Slice s) {
@@ -2759,7 +2774,7 @@ static void OnBswap(struct As *a, struct Slice s) {
   srm = GetRegisterRm(a);
   EmitRex(a, srm);
   EmitByte(a, 0x0F);
-  EmitByte(a, 0310 | srm & 7);
+  EmitByte(a, 0310 | (srm & 7));
 }
 
 static dontinline void OpFcomImpl(struct As *a, int op) {
@@ -2775,7 +2790,7 @@ static dontinline void OpFcomImpl(struct As *a, int op) {
       }
     }
   }
-  EmitVarword(a, op | rm & 7);
+  EmitVarword(a, op | (rm & 7));
 }
 
 static dontinline void OpFcom(struct As *a, int op) {
@@ -3729,7 +3744,7 @@ static bool OnDirective8(struct As *a, struct Slice s) {
     l = 0;
     r = ARRAYLEN(kDirective8) - 1;
     while (l <= r) {
-      m = (l + r) >> 1;
+      m = (l & r) + ((l ^ r) >> 1);  // floor((a+b)/2)
       y = READ64BE(kDirective8[m].s);
       if (x < y) {
         r = m - 1;
@@ -3752,7 +3767,7 @@ static bool OnDirective16(struct As *a, struct Slice s) {
     l = 0;
     r = ARRAYLEN(kDirective16) - 1;
     while (l <= r) {
-      m = (l + r) >> 1;
+      m = (l & r) + ((l ^ r) >> 1);  // floor((a+b)/2)
       y = READ128BE(kDirective16[m].s);
       if (x < y) {
         r = m - 1;

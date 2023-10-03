@@ -22,12 +22,12 @@
 #define UINT64_C(c) c##UL
 #endif
 
-#if __SIZEOF_INTMAX__ == 16
-#define INT128_C(c)  ((intmax_t)(c))
-#define UINT128_C(c) ((uintmax_t)(c))
-#elif __SIZEOF_INTMAX__ == 8
-#define INT128_C(c)  __INT64_C(c)
-#define UINT128_C(c) __UINT64_C(c)
+#if UINTPTR_MAX == UINT64_MAX
+#define INTMAX_C(c)  c##L
+#define UINTMAX_C(c) c##UL
+#else
+#define INTMAX_C(c)  c##LL
+#define UINTMAX_C(c) c##ULL
 #endif
 
 #endif /* COSMOPOLITAN_LIBC_LITERAL_H_ */

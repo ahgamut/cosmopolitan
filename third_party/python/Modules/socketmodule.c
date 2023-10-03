@@ -4,8 +4,8 @@
 │ Python 3                                                                     │
 │ https://docs.python.org/3/license.html                                       │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "third_party/python/Modules/socketmodule.h"
 #include "libc/calls/calls.h"
-#include "libc/calls/ioctl.h"
 #include "libc/calls/weirdtypes.h"
 #include "libc/dce.h"
 #include "libc/dns/dns.h"
@@ -15,6 +15,7 @@
 #include "libc/nt/version.h"
 #include "libc/runtime/runtime.h"
 #include "libc/sock/sock.h"
+#include "libc/sock/struct/pollfd.h"
 #include "libc/sysv/consts/af.h"
 #include "libc/sysv/consts/f.h"
 #include "libc/sysv/consts/fileno.h"
@@ -49,11 +50,11 @@
 #include "third_party/python/Include/pyerrors.h"
 #include "third_party/python/Include/pymacro.h"
 #include "third_party/python/Include/pymem.h"
+#include "third_party/python/Include/pythread.h"
 #include "third_party/python/Include/structmember.h"
 #include "third_party/python/Include/tupleobject.h"
 #include "third_party/python/Include/warnings.h"
 #include "third_party/python/Include/yoink.h"
-#include "third_party/python/Modules/socketmodule.h"
 #include "third_party/python/pyconfig.h"
 /* clang-format off */
 
@@ -76,7 +77,6 @@ PYTHON_PROVIDE("_socket.AF_NETBEUI");
 PYTHON_PROVIDE("_socket.AF_NETROM");
 PYTHON_PROVIDE("_socket.AF_PACKET");
 PYTHON_PROVIDE("_socket.AF_PPPOX");
-PYTHON_PROVIDE("_socket.AF_RDS");
 PYTHON_PROVIDE("_socket.AF_ROSE");
 PYTHON_PROVIDE("_socket.AF_ROUTE");
 PYTHON_PROVIDE("_socket.AF_SECURITY");
@@ -687,7 +687,6 @@ internal_setblocking(PySocketSockObject *s, int block)
 #endif
 #if !defined(MS_WINDOWS) \
     && !((defined(HAVE_SYS_IOCTL_H) && defined(FIONBIO)))
-    int delay_flag, new_delay_flag;
 #endif
 #ifdef SOCK_NONBLOCK
     if (block)
@@ -5655,7 +5654,7 @@ socket_inet_aton(PyObject *self, PyObject *args)
 #ifdef HAVE_INET_ATON
 
 #ifdef USE_INET_ATON_WEAKLINK
-    if (inet_aton != NULL) {
+    if (__veil("r", inet_aton) != NULL) {
 #endif
     if (inet_aton(ip_addr, &buf))
         return PyBytes_FromStringAndSize((char *)(&buf),
@@ -6665,7 +6664,6 @@ PyInit__socket(void)
 
     if (AF_CAN) PyModule_AddIntMacro(m, AF_CAN); /* Controller Area Network */
     if (PF_CAN) PyModule_AddIntMacro(m, PF_CAN);
-    if (AF_RDS) PyModule_AddIntMacro(m, AF_RDS); /* Reliable Datagram Sockets */
     if (PF_RDS) PyModule_AddIntMacro(m, PF_RDS);
     if (AF_PACKET) PyModule_AddIntMacro(m, AF_PACKET);
     if (PF_PACKET) PyModule_AddIntMacro(m, PF_PACKET);
@@ -6761,7 +6759,6 @@ PyInit__socket(void)
     PyModule_AddIntMacro(m, SO_DEBUG);
     PyModule_AddIntMacro(m, SO_ACCEPTCONN);
     if (SO_REUSEADDR) PyModule_AddIntMacro(m, SO_REUSEADDR);
-    if (SO_EXCLUSIVEADDRUSE) PyModule_AddIntMacro(m, SO_EXCLUSIVEADDRUSE);
     PyModule_AddIntMacro(m, SO_KEEPALIVE);
     PyModule_AddIntMacro(m, SO_DONTROUTE);
     PyModule_AddIntMacro(m, SO_BROADCAST);
@@ -6777,17 +6774,6 @@ PyInit__socket(void)
     PyModule_AddIntMacro(m, SO_RCVTIMEO);
     PyModule_AddIntMacro(m, SO_ERROR);
     PyModule_AddIntMacro(m, SO_TYPE);
-    if (SO_SETFIB) PyModule_AddIntMacro(m, SO_SETFIB);
-    if (SO_PASSCRED) PyModule_AddIntMacro(m, SO_PASSCRED);
-    if (SO_PEERCRED) PyModule_AddIntMacro(m, SO_PEERCRED);
-    if (LOCAL_PEERCRED) PyModule_AddIntMacro(m, LOCAL_PEERCRED);
-    if (SO_PASSSEC) PyModule_AddIntMacro(m, SO_PASSSEC);
-    if (SO_PEERSEC) PyModule_AddIntMacro(m, SO_PEERSEC);
-    if (SO_BINDTODEVICE) PyModule_AddIntMacro(m, SO_BINDTODEVICE);
-    if (SO_PRIORITY) PyModule_AddIntMacro(m, SO_PRIORITY);
-    if (SO_MARK) PyModule_AddIntMacro(m, SO_MARK);
-    if (SO_DOMAIN) PyModule_AddIntMacro(m, SO_DOMAIN);
-    if (SO_PROTOCOL) PyModule_AddIntMacro(m, SO_PROTOCOL);
 
     /* Maximum number of connections for "listen" */
     PyModule_AddIntConstant(m, "SOMAXCONN", 0x80);
@@ -6916,12 +6902,10 @@ PyInit__socket(void)
 #endif
 
     PyModule_AddIntMacro(m, IPPROTO_IP);
-    PyModule_AddIntMacro(m, IPPROTO_HOPOPTS);
     PyModule_AddIntMacro(m, IPPROTO_ICMP);
     PyModule_AddIntMacro(m, IPPROTO_TCP);
     PyModule_AddIntMacro(m, IPPROTO_UDP);
     PyModule_AddIntMacro(m, IPPROTO_RAW);
-    PyModule_AddIntMacro(m, IPPROTO_IGMP);
 #ifdef IPPROTO_GGP
     if (IPPROTO_GGP) PyModule_AddIntMacro(m, IPPROTO_GGP);
 #endif
@@ -7200,7 +7184,12 @@ PyInit__socket(void)
     return m;
 }
 
-_Section(".rodata.pytab.1") const struct _inittab _PyImport_Inittab__socket = {
+#ifdef __aarch64__
+_Section(".rodata.pytab.1 //")
+#else
+_Section(".rodata.pytab.1")
+#endif
+ const struct _inittab _PyImport_Inittab__socket = {
     "_socket",
     PyInit__socket,
 };

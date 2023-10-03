@@ -16,36 +16,95 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/safemacros.internal.h"
 #include "libc/calls/calls.h"
+#include "libc/calls/struct/sigaction.h"
 #include "libc/calls/struct/stat.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
-#include "libc/runtime/gc.internal.h"
+#include "libc/intrin/safemacros.internal.h"
+#include "libc/limits.h"
+#include "libc/mem/gc.internal.h"
+#include "libc/nexgen32e/vendor.internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
+#include "libc/str/str.h"
+#include "libc/sysv/consts/o.h"
+#include "libc/sysv/consts/sig.h"
 #include "libc/testlib/testlib.h"
 #include "libc/x/x.h"
 
-int64_t fd;
 struct stat st;
-const char *path;
+
+void SetUpOnce(void) {
+  testlib_enable_tmp_setup_teardown();
+  ASSERT_SYS(0, 0, pledge("stdio rpath wpath cpath", 0));
+}
+
+TEST(ftruncate, ebadf) {
+  ASSERT_SYS(EBADF, -1, ftruncate(-1, 0));
+  ASSERT_SYS(EBADF, -1, ftruncate(+3, 0));
+}
+
+TEST(ftruncate, negativeLength_einval) {
+  ASSERT_SYS(0, 3, creat("foo", 0755));
+  ASSERT_SYS(EINVAL, -1, ftruncate(3, -1));
+  ASSERT_SYS(0, 0, close(3));
+}
+
+TEST(ftruncate, doesntHaveWritePermission_einval) {
+  ASSERT_SYS(0, 3, creat("foo", 0755));
+  ASSERT_SYS(0, 5, write(3, "hello", 5));
+  ASSERT_SYS(0, 0, close(3));
+  ASSERT_SYS(0, 3, open("foo", O_RDONLY));
+  ASSERT_SYS(EINVAL, -1, ftruncate(3, 0));
+  ASSERT_SYS(0, 0, close(3));
+}
+
+TEST(ftruncate, pipeFd_einval) {
+  int fds[2];
+  ASSERT_SYS(0, 0, pipe(fds));
+  ASSERT_SYS(EINVAL, -1, ftruncate(3, 0));
+  EXPECT_SYS(0, 0, close(4));
+  EXPECT_SYS(0, 0, close(3));
+}
+
+TEST(ftruncate, efbig) {
+  // FreeBSD and RHEL7 return 0 (why??)
+  if (IsLinux() || IsFreebsd()) return;
+  sighandler_t old = signal(SIGXFSZ, SIG_IGN);
+  ASSERT_SYS(0, 3, creat("foo", 0755));
+  ASSERT_SYS(IsWindows() ? EINVAL : EFBIG, -1, ftruncate(3, INT64_MAX));
+  ASSERT_SYS(0, 0, close(3));
+  signal(SIGXFSZ, old);
+}
 
 TEST(ftruncate, test) {
-  mkdir("o", 0755);
-  mkdir("o/tmp", 0755);
-  path = gc(xasprintf("o/tmp/%s.%d",
-                      firstnonnull(program_invocation_short_name, "unknown"),
-                      getpid()));
-  ASSERT_NE(-1, (fd = creat(path, 0755)));
-  ASSERT_EQ(5, write(fd, "hello", 5));
-  errno = 31337;
-  ASSERT_NE(-1, ftruncate(fd, 31337));
-  EXPECT_EQ(31337, errno);
-  ASSERT_EQ(5, write(fd, "world", 5));
-  ASSERT_NE(-1, close(fd));
-  ASSERT_NE(-1, stat(path, &st));
-  ASSERT_EQ(31337, st.st_size);
-  ASSERT_BINEQ(u"helloworld", gc(xslurp(path, 0)));
-  unlink(path);
+  char got[512], want[512] = "helloworld";  // tests zero-extending
+  ASSERT_SYS(0, 3, open("foo", O_CREAT | O_TRUNC | O_RDWR, 0755));
+  ASSERT_SYS(0, 5, write(3, "hello", 5));
+  ASSERT_SYS(0, 0, ftruncate(3, 8192));
+  ASSERT_SYS(0, 5, lseek(3, 0, SEEK_CUR));  // doesn't change position
+  ASSERT_SYS(0, 5, write(3, "world", 5));
+  ASSERT_SYS(0, 0, fstat(3, &st));
+  ASSERT_EQ(8192, st.st_size);
+#if 0
+  if (!IsGenuineBlink()) {
+    if (IsWindows() || IsNetbsd() || IsOpenbsd()) {  //
+      ASSERT_EQ(8192 / 512, st.st_blocks);           // 8192 is physical size
+    } else if (IsFreebsd()) {                        //
+      ASSERT_EQ(512 / 512, st.st_blocks);            // 512 is physical size
+    } else if (IsLinux() || IsXnu()) {               //
+      ASSERT_EQ(4096 / 512, st.st_blocks);           // 4096 is physical size
+    } else {
+      notpossible;
+    }
+  }
+#endif
+  ASSERT_SYS(0, 512, pread(3, got, 512, 0));
+  ASSERT_EQ(0, memcmp(want, got, 512));
+  ASSERT_SYS(0, 0, ftruncate(3, 0));  // shrink file to be empty
+  ASSERT_SYS(0, 0, pread(3, got, 512, 0));
+  ASSERT_SYS(0, 0, read(3, got, 512));
+  ASSERT_SYS(0, 10, lseek(3, 0, SEEK_CUR));  // position stays past eof
+  ASSERT_SYS(0, 0, close(3));
 }

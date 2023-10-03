@@ -48,9 +48,8 @@
  */
 bool __nocolor;
 
-optimizesize textstartup noasan void __nocolor_init(int argc, char **argv,
-                                                    char **envp,
-                                                    intptr_t *auxv) {
+optimizesize textstartup void __nocolor_init(int argc, char **argv, char **envp,
+                                             intptr_t *auxv) {
   char *s;
   __nocolor = (IsWindows() && !IsAtLeastWindows10()) ||
               ((s = getenv("TERM")) && IsDumb(s));

@@ -16,8 +16,9 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/errno.h"
+#include "libc/calls/calls.h"
 #include "libc/intrin/kprintf.h"
+#include "libc/intrin/strace.internal.h"
 #include "libc/limits.h"
 #include "libc/log/check.h"
 #include "libc/mem/mem.h"
@@ -27,8 +28,47 @@
 #include "libc/str/str.h"
 #include "libc/testlib/testlib.h"
 
+#define OPEN_MAX 16
+
 #define I(x, y) \
   { x, y, 0, (y - x) * FRAMESIZE + FRAMESIZE }
+
+void SetUpOnce(void) {
+  ASSERT_SYS(0, 0, pledge("stdio rpath", 0));
+}
+
+bool AreMemoryIntervalsOk(const struct MemoryIntervals *mm) {
+  /* asan runtime depends on this function */
+  int i;
+  size_t wantsize;
+  for (i = 0; i < mm->i; ++i) {
+    if (mm->p[i].y < mm->p[i].x) {
+      STRACE("AreMemoryIntervalsOk() y should be >= x!");
+      return false;
+    }
+    wantsize = (size_t)(mm->p[i].y - mm->p[i].x) * FRAMESIZE;
+    if (!(wantsize < mm->p[i].size && mm->p[i].size <= wantsize + FRAMESIZE)) {
+      STRACE("AreMemoryIntervalsOk(%p) size is wrong!"
+             " %'zu not within %'zu .. %'zu",
+             (uintptr_t)mm->p[i].x << 16, mm->p[i].size, wantsize,
+             wantsize + FRAMESIZE);
+      return false;
+    }
+    if (i) {
+      if (mm->p[i].h != -1 || mm->p[i - 1].h != -1) {
+        if (mm->p[i].x <= mm->p[i - 1].y) {
+          return false;
+        }
+      } else {
+        if (!(mm->p[i - 1].y + 1 <= mm->p[i].x)) {
+          STRACE("AreMemoryIntervalsOk() out of order or overlap!");
+          return false;
+        }
+      }
+    }
+  }
+  return true;
+}
 
 static bool AreMemoryIntervalsEqual(const struct MemoryIntervals *mm1,
                                     const struct MemoryIntervals *mm2) {
@@ -71,8 +111,8 @@ static void RunTrackMemoryIntervalTest(const struct MemoryIntervals t[2], int x,
   struct MemoryIntervals *mm;
   mm = memcpy(memalign(64, sizeof(*t)), t, sizeof(*t));
   CheckMemoryIntervalsAreOk(mm);
-  CHECK_NE(-1, TrackMemoryInterval(mm, x, y, h, 0, 0, 0, 0, 0,
-                                   (y - x) * FRAMESIZE + FRAMESIZE));
+  CHECK_NE(-1, __track_memory(mm, x, y, h, 0, 0, 0, 0, 0,
+                              (y - x) * FRAMESIZE + FRAMESIZE));
   CheckMemoryIntervalsAreOk(mm);
   CheckMemoryIntervalsEqual(mm, t + 1);
   free(mm);
@@ -84,7 +124,7 @@ static int RunReleaseMemoryIntervalsTest(const struct MemoryIntervals t[2],
   struct MemoryIntervals *mm;
   mm = memcpy(memalign(64, sizeof(*t)), t, sizeof(*t));
   CheckMemoryIntervalsAreOk(mm);
-  if ((rc = ReleaseMemoryIntervals(mm, x, y, NULL)) != -1) {
+  if ((rc = __untrack_memory(mm, x, y, NULL)) != -1) {
     CheckMemoryIntervalsAreOk(mm);
     CheckMemoryIntervalsEqual(t + 1, mm);
   }
@@ -92,7 +132,7 @@ static int RunReleaseMemoryIntervalsTest(const struct MemoryIntervals t[2],
   return rc;
 }
 
-TEST(TrackMemoryInterval, TestEmpty) {
+TEST(__track_memory, TestEmpty) {
   static struct MemoryIntervals mm[2] = {
       {0, OPEN_MAX, 0, {}},
       {1, OPEN_MAX, 0, {{2, 2, 0, FRAMESIZE}}},
@@ -102,24 +142,24 @@ TEST(TrackMemoryInterval, TestEmpty) {
   RunTrackMemoryIntervalTest(mm, 2, 2, 0);
 }
 
-TEST(TrackMemoryInterval, TestFull) {
+TEST(__track_memory, TestFull) {
 #if 0  // TODO(jart): Find way to re-enable
   int i;
   struct MemoryIntervals *mm;
   mm = calloc(1, sizeof(struct MemoryIntervals));
   for (i = 0; i < mm->n; ++i) {
     CheckMemoryIntervalsAreOk(mm);
-    CHECK_NE(-1, TrackMemoryInterval(mm, i, i, i, 0, 0, 0, 0, 0, 0));
+    CHECK_NE(-1, __track_memory(mm, i, i, i, 0, 0, 0, 0, 0, 0));
     CheckMemoryIntervalsAreOk(mm);
   }
-  CHECK_EQ(-1, TrackMemoryInterval(mm, i, i, i, 0, 0, 0, 0, 0, 0));
+  CHECK_EQ(-1, __track_memory(mm, i, i, i, 0, 0, 0, 0, 0, 0));
   CHECK_EQ(ENOMEM, errno);
   CheckMemoryIntervalsAreOk(mm);
   free(mm);
 #endif
 }
 
-TEST(TrackMemoryInterval, TestAppend) {
+TEST(__track_memory, TestAppend) {
   static struct MemoryIntervals mm[2] = {
       {1, OPEN_MAX, 0, {I(2, 2)}},
       {1, OPEN_MAX, 0, {I(2, 3)}},
@@ -129,7 +169,7 @@ TEST(TrackMemoryInterval, TestAppend) {
   RunTrackMemoryIntervalTest(mm, 3, 3, 0);
 }
 
-TEST(TrackMemoryInterval, TestPrepend) {
+TEST(__track_memory, TestPrepend) {
   static struct MemoryIntervals mm[2] = {
       {1, OPEN_MAX, 0, {I(2, 2)}},
       {1, OPEN_MAX, 0, {I(1, 2)}},
@@ -139,7 +179,7 @@ TEST(TrackMemoryInterval, TestPrepend) {
   RunTrackMemoryIntervalTest(mm, 1, 1, 0);
 }
 
-TEST(TrackMemoryInterval, TestFillHole) {
+TEST(__track_memory, TestFillHole) {
   static struct MemoryIntervals mm[2] = {
       {4, OPEN_MAX, 0, {I(1, 1), I(3, 4), {5, 5, 1, FRAMESIZE}, I(6, 8)}},
       {3, OPEN_MAX, 0, {I(1, 4), {5, 5, 1, FRAMESIZE}, I(6, 8)}},
@@ -149,7 +189,7 @@ TEST(TrackMemoryInterval, TestFillHole) {
   RunTrackMemoryIntervalTest(mm, 2, 2, 0);
 }
 
-TEST(TrackMemoryInterval, TestAppend2) {
+TEST(__track_memory, TestAppend2) {
   static struct MemoryIntervals mm[2] = {
       {1, OPEN_MAX, 0, {I(2, 2)}},
       {2, OPEN_MAX, 0, {I(2, 2), {3, 3, 1, FRAMESIZE}}},
@@ -159,7 +199,7 @@ TEST(TrackMemoryInterval, TestAppend2) {
   RunTrackMemoryIntervalTest(mm, 3, 3, 1);
 }
 
-TEST(TrackMemoryInterval, TestPrepend2) {
+TEST(__track_memory, TestPrepend2) {
   static struct MemoryIntervals mm[2] = {
       {1, OPEN_MAX, 0, {I(2, 2)}},
       {2, OPEN_MAX, 0, {{1, 1, 1, FRAMESIZE}, I(2, 2)}},
@@ -169,7 +209,7 @@ TEST(TrackMemoryInterval, TestPrepend2) {
   RunTrackMemoryIntervalTest(mm, 1, 1, 1);
 }
 
-TEST(TrackMemoryInterval, TestFillHole2) {
+TEST(__track_memory, TestFillHole2) {
   static struct MemoryIntervals mm[2] = {
       {4,
        OPEN_MAX,
@@ -196,7 +236,7 @@ TEST(TrackMemoryInterval, TestFillHole2) {
   RunTrackMemoryIntervalTest(mm, 2, 2, 1);
 }
 
-TEST(FindMemoryInterval, Test) {
+TEST(__find_memory, Test) {
   static struct MemoryIntervals mm[1] = {
       {
           4,
@@ -211,19 +251,19 @@ TEST(FindMemoryInterval, Test) {
       },
   };
   mm[0].p = mm[0].s;
-  EXPECT_EQ(0, FindMemoryInterval(mm, 0));
-  EXPECT_EQ(0, FindMemoryInterval(mm, 1));
-  EXPECT_EQ(1, FindMemoryInterval(mm, 2));
-  EXPECT_EQ(1, FindMemoryInterval(mm, 3));
-  EXPECT_EQ(1, FindMemoryInterval(mm, 4));
-  EXPECT_EQ(2, FindMemoryInterval(mm, 5));
-  EXPECT_EQ(3, FindMemoryInterval(mm, 6));
-  EXPECT_EQ(3, FindMemoryInterval(mm, 7));
-  EXPECT_EQ(3, FindMemoryInterval(mm, 8));
-  EXPECT_EQ(4, FindMemoryInterval(mm, 9));
+  EXPECT_EQ(0, __find_memory(mm, 0));
+  EXPECT_EQ(0, __find_memory(mm, 1));
+  EXPECT_EQ(1, __find_memory(mm, 2));
+  EXPECT_EQ(1, __find_memory(mm, 3));
+  EXPECT_EQ(1, __find_memory(mm, 4));
+  EXPECT_EQ(2, __find_memory(mm, 5));
+  EXPECT_EQ(3, __find_memory(mm, 6));
+  EXPECT_EQ(3, __find_memory(mm, 7));
+  EXPECT_EQ(3, __find_memory(mm, 8));
+  EXPECT_EQ(4, __find_memory(mm, 9));
 }
 
-TEST(ReleaseMemoryIntervals, TestEmpty) {
+TEST(__untrack_memory, TestEmpty) {
   static struct MemoryIntervals mm[2] = {
       {0, OPEN_MAX, 0, {}},
       {0, OPEN_MAX, 0, {}},
@@ -233,7 +273,7 @@ TEST(ReleaseMemoryIntervals, TestEmpty) {
   EXPECT_NE(-1, RunReleaseMemoryIntervalsTest(mm, 2, 2));
 }
 
-TEST(ReleaseMemoryIntervals, TestRemoveElement_UsesInclusiveRange) {
+TEST(__untrack_memory, TestRemoveElement_UsesInclusiveRange) {
   static struct MemoryIntervals mm[2] = {
       {3, OPEN_MAX, 0, {I(0, 0), I(2, 2), I(4, 4)}},
       {2, OPEN_MAX, 0, {I(0, 0), I(4, 4)}},
@@ -243,7 +283,7 @@ TEST(ReleaseMemoryIntervals, TestRemoveElement_UsesInclusiveRange) {
   EXPECT_NE(-1, RunReleaseMemoryIntervalsTest(mm, 2, 2));
 }
 
-TEST(ReleaseMemoryIntervals, TestPunchHole) {
+TEST(__untrack_memory, TestPunchHole) {
   static struct MemoryIntervals mm[2] = {
       {1, OPEN_MAX, 0, {I(0, 9)}},
       {2, OPEN_MAX, 0, {I(0, 3), I(6, 9)}},
@@ -253,7 +293,7 @@ TEST(ReleaseMemoryIntervals, TestPunchHole) {
   EXPECT_NE(-1, RunReleaseMemoryIntervalsTest(mm, 4, 5));
 }
 
-TEST(ReleaseMemoryIntervals, TestShortenLeft) {
+TEST(__untrack_memory, TestShortenLeft) {
   if (IsWindows()) return;
   static struct MemoryIntervals mm[2] = {
       {1, OPEN_MAX, 0, {I(0, 9)}},
@@ -264,7 +304,7 @@ TEST(ReleaseMemoryIntervals, TestShortenLeft) {
   EXPECT_NE(-1, RunReleaseMemoryIntervalsTest(mm, 8, 9));
 }
 
-TEST(ReleaseMemoryIntervals, TestShortenRight) {
+TEST(__untrack_memory, TestShortenRight) {
   if (IsWindows()) return;
   static struct MemoryIntervals mm[2] = {
       {1, OPEN_MAX, 0, {I(0, 9)}},
@@ -275,7 +315,7 @@ TEST(ReleaseMemoryIntervals, TestShortenRight) {
   EXPECT_NE(-1, RunReleaseMemoryIntervalsTest(mm, 0, 2));
 }
 
-TEST(ReleaseMemoryIntervals, TestShortenLeft2) {
+TEST(__untrack_memory, TestShortenLeft2) {
   if (IsWindows()) return;
   static struct MemoryIntervals mm[2] = {
       {1, OPEN_MAX, 0, {I(0, 9)}},
@@ -286,7 +326,7 @@ TEST(ReleaseMemoryIntervals, TestShortenLeft2) {
   EXPECT_NE(-1, RunReleaseMemoryIntervalsTest(mm, 8, 11));
 }
 
-TEST(ReleaseMemoryIntervals, TestShortenRight2) {
+TEST(__untrack_memory, TestShortenRight2) {
   if (IsWindows()) return;
   static struct MemoryIntervals mm[2] = {
       {1, OPEN_MAX, 0, {I(0, 9)}},
@@ -297,7 +337,7 @@ TEST(ReleaseMemoryIntervals, TestShortenRight2) {
   EXPECT_NE(-1, RunReleaseMemoryIntervalsTest(mm, -3, 2));
 }
 
-TEST(ReleaseMemoryIntervals, TestZeroZero) {
+TEST(__untrack_memory, TestZeroZero) {
   static struct MemoryIntervals mm[2] = {
       {1, OPEN_MAX, 0, {I(3, 9)}},
       {1, OPEN_MAX, 0, {I(3, 9)}},
@@ -307,7 +347,7 @@ TEST(ReleaseMemoryIntervals, TestZeroZero) {
   EXPECT_NE(-1, RunReleaseMemoryIntervalsTest(mm, 0, 0));
 }
 
-TEST(ReleaseMemoryIntervals, TestNoopLeft) {
+TEST(__untrack_memory, TestNoopLeft) {
   static struct MemoryIntervals mm[2] = {
       {1, OPEN_MAX, 0, {I(3, 9)}},
       {1, OPEN_MAX, 0, {I(3, 9)}},
@@ -317,7 +357,7 @@ TEST(ReleaseMemoryIntervals, TestNoopLeft) {
   EXPECT_NE(-1, RunReleaseMemoryIntervalsTest(mm, 1, 2));
 }
 
-TEST(ReleaseMemoryIntervals, TestNoopRight) {
+TEST(__untrack_memory, TestNoopRight) {
   static struct MemoryIntervals mm[2] = {
       {1, OPEN_MAX, 0, {I(3, 9)}},
       {1, OPEN_MAX, 0, {I(3, 9)}},
@@ -327,7 +367,7 @@ TEST(ReleaseMemoryIntervals, TestNoopRight) {
   EXPECT_NE(-1, RunReleaseMemoryIntervalsTest(mm, 10, 10));
 }
 
-TEST(ReleaseMemoryIntervals, TestBigFree) {
+TEST(__untrack_memory, TestBigFree) {
   static struct MemoryIntervals mm[2] = {
       {2, OPEN_MAX, 0, {I(0, 3), I(6, 9)}},
       {0, OPEN_MAX, 0, {}},
@@ -337,7 +377,7 @@ TEST(ReleaseMemoryIntervals, TestBigFree) {
   EXPECT_NE(-1, RunReleaseMemoryIntervalsTest(mm, INT_MIN, INT_MAX));
 }
 
-TEST(ReleaseMemoryIntervals, TestWeirdGap) {
+TEST(__untrack_memory, TestWeirdGap) {
   static struct MemoryIntervals mm[2] = {
       {3, OPEN_MAX, 0, {I(10, 10), I(20, 20), I(30, 30)}},
       {2, OPEN_MAX, 0, {I(10, 10), I(30, 30)}},

@@ -23,20 +23,18 @@
 #include "libc/sysv/consts/o.h"
 #include "libc/testlib/testlib.h"
 
-#define PATH "o/vfork_test"
+void SetUpOnce(void) {
+  testlib_enable_tmp_setup_teardown();
+}
 
 TEST(vfork, test) {
   int fd;
   char buf[8] = {0};
-  mkdir("o", 0755);
-  ASSERT_NE(-1, (fd = open(PATH, O_RDWR | O_CREAT, 0644)));
+  ASSERT_NE(-1, (fd = open("vfork_test", O_RDWR | O_CREAT, 0644)));
   ASSERT_EQ(5, write(fd, "hello", 5));
   ASSERT_NE(-1, lseek(fd, 0, SEEK_SET));
   if (!vfork()) {
     EXPECT_EQ(5, pread(fd, buf, 5, 0));
-    /*
-     * TODO(jart): DOES PREAD IN CHILD REALLY CHANGE PARENT HANDLE POSITION?
-     */
     ASSERT_NE(-1, lseek(fd, 0, SEEK_SET));
     EXPECT_STREQ("hello", buf);
     EXPECT_NE(-1, close(fd));
@@ -47,5 +45,4 @@ TEST(vfork, test) {
   EXPECT_EQ(5, read(fd, buf, 5));
   EXPECT_STREQ("hello", buf);
   EXPECT_NE(-1, close(fd));
-  unlink(PATH);
 }

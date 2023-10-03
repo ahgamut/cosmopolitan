@@ -16,14 +16,16 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/calls/calls.h"
+#include "libc/mem/gc.h"
+#include "libc/mem/gc.internal.h"
 #include "libc/mem/mem.h"
-#include "libc/runtime/gc.internal.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
 #include "libc/testlib/ezbench.h"
 #include "libc/testlib/hyperion.h"
 #include "libc/testlib/testlib.h"
-#include "libc/x/x.h"
+#include "libc/x/xgetline.h"
 
 TEST(fgetln, test) {
   FILE *f;
@@ -60,7 +62,6 @@ TEST(fgetln, testEvilLastLine) {
 }
 
 TEST(fgetln, testReadingFromStdin_doesntLeakMemory) {
-  FILE *f;
   int oldstdin, pfds[2];
   oldstdin = dup(0);
   EXPECT_SYS(0, 0, pipe(pfds));

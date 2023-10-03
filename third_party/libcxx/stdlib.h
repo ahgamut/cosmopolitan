@@ -9,6 +9,14 @@
 
 #if defined(__need_malloc_and_calloc) || defined(_LIBCPP_STDLIB_INCLUDE_NEXT)
 
+#include "libc/stdio/rand.h"
+#include "libc/mem/mem.h"
+#include "libc/runtime/runtime.h"
+#include "libc/runtime/runtime.h"
+#include "libc/mem/alg.h"
+#include "libc/stdio/stdio.h"
+#include "libc/fmt/conv.h"
+
 #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
 #pragma GCC system_header
 #endif
@@ -17,10 +25,18 @@
 #undef _LIBCPP_STDLIB_INCLUDE_NEXT
 #endif
 
-#include "libc/isystem/stdlib.h"
-
 #elif !defined(_LIBCPP_STDLIB_H)
 #define _LIBCPP_STDLIB_H
+
+#include "third_party/libcxx/__config"
+
+#if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
+#pragma GCC system_header
+#endif
+
+#ifdef __cplusplus
+#include "third_party/libcxx/math.h"
+#endif // __cplusplus
 
 /*
     stdlib.h synopsis
@@ -87,17 +103,5 @@ void quick_exit(int status);                                              // C++
 void *aligned_alloc(size_t alignment, size_t size);                       // C11
 
 */
-
-#include "third_party/libcxx/__config"
-
-#if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
-#pragma GCC system_header
-#endif
-
-#include "libc/isystem/stdlib.h"
-
-#ifdef __cplusplus
-#include "third_party/libcxx/math.h"
-#endif // __cplusplus
 
 #endif // _LIBCPP_STDLIB_H

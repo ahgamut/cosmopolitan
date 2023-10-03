@@ -16,31 +16,60 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/safemacros.internal.h"
 #include "libc/calls/calls.h"
-#include "libc/fmt/fmt.h"
-#include "libc/macros.internal.h"
-#include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
-#include "libc/stdio/temp.h"
-#include "libc/str/str.h"
+#include "libc/temp.h"
 
 /**
- * Creates a temporary file.
+ * Opens stream backed by anonymous file, e.g.
  *
- * @see mkostempsm(), kTmpPath
+ *     FILE *f;
+ *     if (!(f = tmpfile())) {
+ *       perror("tmpfile");
+ *       exit(1);
+ *     }
+ *     // do stuff
+ *     fclose(f);
+ *
+ * This creates a secure temporary file inside $TMPDIR. If it isn't
+ * defined, then /tmp is used on UNIX and GetTempPath() is used on the
+ * New Technology. This resolution of $TMPDIR happens once in a ctor.
+ *
+ * Once fclose() is called, the returned file is guaranteed to be
+ * deleted automatically. On UNIX the file is unlink()'d before this
+ * function returns. On the New Technology it happens upon fclose().
+ *
+ * On newer Linux only (c. 2013) it's possible to turn the anonymous
+ * returned file back into a real file, by doing this:
+ *
+ *     linkat(AT_FDCWD, _gc(xasprintf("/proc/self/fd/%d", fileno(f))),
+ *            AT_FDCWD, "real.txt", AT_SYMLINK_FOLLOW)
+ *
+ * On the New Technology, temporary files created by this function
+ * should have better performance, because `kNtFileAttributeTemporary`
+ * asks the kernel to more aggressively cache and reduce i/o ops.
+ *
+ * Favor tmpfd() or tmpfile() over `open(O_TMPFILE)` because the latter
+ * is Linux-only and will cause open() failures on all other platforms.
+ *
+ * @see tmpfd() if you don't want to link stdio/malloc
+ * @raise ECANCELED if thread was cancelled in masked mode
+ * @raise EINTR if signal was delivered
+ * @cancellationpoint
+ * @asyncsignalsafe
+ * @vforksafe
  */
 FILE *tmpfile(void) {
   int fd;
-  char *tmp, *sep, tpl[PATH_MAX];
-  tmp = firstnonnull(getenv("TMPDIR"), kTmpPath);
-  sep = !isempty(tmp) && !endswith(tmp, "/") ? "/" : "";
-  if ((snprintf)(tpl, PATH_MAX, "%s%stmp.%s.XXXXXX", tmp, sep,
-                 firstnonnull(program_invocation_short_name, "unknown")) <=
-      PATH_MAX) {
-    if ((fd = mkostemps(tpl, 0, 0)) != -1) {
-      return fdopen(fd, "w+");
+  FILE *f;
+  if ((fd = tmpfd()) != -1) {
+    if ((f = fdopen(fd, "w+"))) {
+      return f;
+    } else {
+      close(fd);
+      return 0;
     }
+  } else {
+    return 0;
   }
-  return NULL;
 }

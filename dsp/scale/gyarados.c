@@ -21,14 +21,14 @@
 #include "dsp/core/ituround.h"
 #include "dsp/core/q.h"
 #include "dsp/core/twixt8.h"
+#include "libc/intrin/bsr.h"
 #include "libc/limits.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
 #include "libc/macros.internal.h"
 #include "libc/math.h"
+#include "libc/mem/gc.internal.h"
 #include "libc/mem/mem.h"
-#include "libc/nexgen32e/bsr.h"
-#include "libc/runtime/gc.internal.h"
 #include "libc/str/str.h"
 #include "libc/testlib/testlib.h"
 #include "libc/x/x.h"
@@ -82,7 +82,6 @@ static bool IsNormalized(int n, double A[n]) {
 }
 
 void FreeSamplingSolution(struct SamplingSolution *ss) {
-  long i;
   if (ss) {
     free(ss->indices);
     free(ss->weights);
@@ -93,7 +92,7 @@ void FreeSamplingSolution(struct SamplingSolution *ss) {
 struct SamplingSolution *ComputeSamplingSolution(long dn, long sn, double dar,
                                                  double off, double par) {
   double *fweights;
-  double sum, hw, w, x, f;
+  double sum, hw, x, f;
   short *weights, *indices;
   struct SamplingSolution *res;
   long j, i, k, n, min, max, s, N[6];
@@ -151,8 +150,8 @@ static void GyaradosImpl(long dyw, long dxw, int dst[dyw][dxw], long syw,
                          const short fyi[dyn][yfn], const short fyw[dyn][yfn],
                          const short fxi[dxn][xfn], const short fxw[dxn][xfn],
                          bool sharpen) {
-  long i, j;
-  int eax, dy, dx, sy, sx;
+  long i;
+  int eax, dy, dx, sx;
   for (sx = 0; sx < sxn; ++sx) {
     for (dy = 0; dy < dyn; ++dy) {
       for (eax = i = 0; i < yfn; ++i) {
@@ -203,8 +202,8 @@ void *Gyarados(long dyw, long dxw, int dst[dyw][dxw], long syw, long sxw,
       CHECK_LE(sxn, sxw);
       CHECK_LE(dyn, dyw);
       CHECK_LE(dxn, dxw);
-      CHECK_LT(bsrl(syn) + bsrl(sxn), 32);
-      CHECK_LT(bsrl(dyn) + bsrl(dxn), 32);
+      CHECK_LT(_bsrl(syn) + _bsrl(sxn), 32);
+      CHECK_LT(_bsrl(dyn) + _bsrl(dxn), 32);
       CHECK_LE(dyw, 0x7fff);
       CHECK_LE(dxw, 0x7fff);
       CHECK_LE(syw, 0x7fff);

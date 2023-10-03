@@ -16,28 +16,35 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/stdckdint.h"
 #include "libc/str/str.h"
-#include "net/http/http.h"
+#include "net/http/ip.h"
 
 /**
- * Parse IPv4 address.
+ * Parse IPv4 host address.
  *
  * @param n if -1 implies strlen
  * @return -1 on failure, otherwise 32-bit host-order unsigned integer
+ * @see ParseCidr()
  */
 int64_t ParseIp(const char *s, size_t n) {
+  int c, j;
   size_t i;
-  uint32_t x;
-  int b, c, j;
+  unsigned b, x;
+  bool dotted = false;
   if (n == -1) n = s ? strlen(s) : 0;
   if (!n) return -1;
   for (b = x = j = i = 0; i < n; ++i) {
     c = s[i] & 255;
     if (isdigit(c)) {
-      b *= 10;
-      b += c - '0';
+      if (ckd_mul(&b, b, 10) ||       //
+          ckd_add(&b, b, c - '0') ||  //
+          (b > 255 && dotted)) {
+        return -1;
+      }
     } else if (c == '.') {
       if (b > 255) return -1;
+      dotted = true;
       x <<= 8;
       x |= b;
       b = 0;

@@ -16,16 +16,15 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/str/str.h"
-#include "libc/sysv/consts/at.h"
+#include "libc/calls/struct/timeval.h"
 #include "libc/time/struct/utimbuf.h"
-#include "libc/time/time.h"
 
 /**
  * Changes last accessed/modified times on file.
  *
  * @param times if NULL means now
- * @return 0 on success or -1 w/ errno
+ * @return 0 on success, or -1 w/ errno
+ * @see utimensat() for modern version
  * @asyncsignalsafe
  */
 int utime(const char *path, const struct utimbuf *times) {

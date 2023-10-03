@@ -14,14 +14,18 @@
  *  See the License for the specific language governing permissions and
  *  limitations under the License.
  */
+#include "third_party/mbedtls/test/lib.h"
 #include "libc/assert.h"
-#include "libc/bits/bits.h"
-#include "libc/bits/safemacros.internal.h"
 #include "libc/calls/calls.h"
+#include "libc/calls/struct/timespec.h"
 #include "libc/dce.h"
+#include "libc/errno.h"
 #include "libc/fmt/conv.h"
 #include "libc/fmt/fmt.h"
-#include "libc/intrin/kprintf.h"
+#include "libc/intrin/bits.h"
+#include "libc/intrin/describebacktrace.internal.h"
+#include "libc/intrin/safemacros.internal.h"
+#include "libc/limits.h"
 #include "libc/log/backtrace.internal.h"
 #include "libc/log/check.h"
 #include "libc/log/libfatal.internal.h"
@@ -29,21 +33,23 @@
 #include "libc/mem/mem.h"
 #include "libc/nexgen32e/vendor.internal.h"
 #include "libc/nt/runtime.h"
-#include "libc/rand/rand.h"
 #include "libc/runtime/internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/runtime/symbols.internal.h"
-#include "libc/stdio/append.internal.h"
+#include "libc/stdio/append.h"
+#include "libc/stdio/rand.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/exit.h"
 #include "libc/sysv/consts/nr.h"
+#include "libc/temp.h"
+#include "libc/time/time.h"
 #include "libc/x/x.h"
+#include "libc/x/xasprintf.h"
 #include "third_party/mbedtls/config.h"
 #include "third_party/mbedtls/endian.h"
 #include "third_party/mbedtls/error.h"
 #include "third_party/mbedtls/platform.h"
-#include "third_party/mbedtls/test/lib.h"
 
 asm(".ident\t\"\\n\\n\
 Mbed TLS (Apache 2.0)\\n\
@@ -51,7 +57,7 @@ Copyright ARM Limited\\n\
 Copyright Mbed TLS Contributors\"");
 asm(".include \"libc/disclaimer.inc\"");
 
-STATIC_YOINK("zip_uri_support");
+__static_yoink("zipos");
 
 #if defined(MBEDTLS_PLATFORM_C)
 static mbedtls_platform_context platform_ctx;
@@ -74,22 +80,36 @@ struct Buffer {
 
 char *output;
 jmp_buf jmp_tmp;
-int option_verbose = 1;
+int option_verbose;
 mbedtls_test_info_t mbedtls_test_info;
-
-static uint64_t Rando(void) {
-  static uint64_t x = 0x18abac12f3191aed;
-  uint64_t z = (x += 0x9e3779b97f4a7c15);
-  z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9;
-  z = (z ^ (z >> 27)) * 0x94d049bb133111eb;
-  return z ^ (z >> 31);
-}
+static char tmpdir[PATH_MAX];
+static char third_party[PATH_MAX];
 
 int mbedtls_test_platform_setup(void) {
-  char *p;
   int ret = 0;
+  const char *s;
   static char mybuf[2][BUFSIZ];
   ShowCrashReports();
+  if ((s = getenv("TMPDIR"))) {
+    strlcpy(tmpdir, s, sizeof(tmpdir));
+    if (makedirs(tmpdir, 0755)) {
+      strcpy(tmpdir, "/tmp");
+    }
+  } else {
+    strcpy(tmpdir, "/tmp");
+  }
+  s = realpath("third_party/", third_party);
+  strlcat(tmpdir, "/mbedtls.XXXXXX", sizeof(tmpdir));
+  if (!mkdtemp(tmpdir)) {
+    perror(tmpdir);
+    exit(1);
+  }
+  if (chdir(tmpdir)) {
+    perror(tmpdir);
+    exit(2);
+  }
+  if (s) symlink(s, "third_party");
+  makedirs("o/tmp", 0755);
   setvbuf(stdout, mybuf[0], _IOLBF, BUFSIZ);
   setvbuf(stderr, mybuf[1], _IOLBF, BUFSIZ);
 #if defined(MBEDTLS_PLATFORM_C)
@@ -99,13 +119,20 @@ int mbedtls_test_platform_setup(void) {
 }
 
 void mbedtls_test_platform_teardown(void) {
+  rmrf(tmpdir);
 #if defined(MBEDTLS_PLATFORM_C)
   mbedtls_platform_teardown(&platform_ctx);
 #endif /* MBEDTLS_PLATFORM_C */
 }
 
 wontreturn void exit(int rc) {
-  if (rc) xwrite(1, output, appendz(output).i);
+  if (rc) {
+    fprintf(stderr, "mbedtls test exit() called with $?=%d bt %s\n", rc,
+            DescribeBacktrace(__builtin_frame_address(0)));
+  }
+  if (rc) {
+    xwrite(1, output, appendz(output).i);
+  }
   free(output);
   output = 0;
   __cxa_finalize(0);
@@ -127,7 +154,7 @@ int mbedtls_hardware_poll(void *wut, unsigned char *p, size_t n, size_t *olen) {
   size_t i, j;
   unsigned char b[8];
   for (i = 0; i < n; ++i) {
-    x = Rando();
+    x = lemur64();
     WRITE64LE(b, x);
     for (j = 0; j < 8 && i + j < n; ++j) {
       p[i + j] = b[j];
@@ -138,14 +165,15 @@ int mbedtls_hardware_poll(void *wut, unsigned char *p, size_t n, size_t *olen) {
 }
 
 int mbedtls_test_write(const char *fmt, ...) {
-  int i, n;
-  char *p;
+  int n;
   va_list va;
   va_start(va, fmt);
   if (option_verbose) {
     n = vfprintf(stderr, fmt, va);
   } else {
-    n = vappendf(&output, fmt, va);
+    char buf[512];
+    vsnprintf(buf, 512, fmt, va);
+    n = appends(&output, buf);
   }
   va_end(va);
   return n;
@@ -929,7 +957,7 @@ static void write_outcome_result(FILE *outcome_file, size_t unmet_dep_count,
  */
 int execute_tests(int argc, const char **argv, const char *default_filename) {
   /* Local Configurations and options */
-  long double t1, t2;
+  struct timespec t1, t2;
   const char *test_filename = NULL;
   const char **test_files = NULL;
   size_t testfile_count = 0;
@@ -1055,7 +1083,7 @@ int execute_tests(int argc, const char **argv, const char *default_filename) {
                               sizeof(params) / sizeof(params[0]));
       }
       // If there are no unmet dependencies execute the test
-      t1 = nowl();
+      t1 = timespec_real();
       if (unmet_dep_count == 0) {
         mbedtls_test_info_reset();
         function_id = strtoul(params[0], NULL, 10);
@@ -1066,7 +1094,7 @@ int execute_tests(int argc, const char **argv, const char *default_filename) {
           }
         }
       }
-      t2 = nowl();
+      t2 = timespec_real();
       write_outcome_result(outcome_file, unmet_dep_count, unmet_dependencies,
                            missing_unmet_dependencies, ret, &mbedtls_test_info);
       if (unmet_dep_count > 0 || ret == DISPATCH_UNSUPPORTED_SUITE) {
@@ -1086,7 +1114,7 @@ int execute_tests(int argc, const char **argv, const char *default_filename) {
         missing_unmet_dependencies = 0;
       } else if (ret == DISPATCH_TEST_SUCCESS) {
         if (mbedtls_test_info.result == MBEDTLS_TEST_RESULT_SUCCESS) {
-          WRITE("PASS (%,ldus)\n", (int64_t)((t2 - t1) * 1e6));
+          WRITE("PASS (%,ldus)\n", timespec_tomicros(timespec_sub(t2, t1)));
         } else if (mbedtls_test_info.result == MBEDTLS_TEST_RESULT_SKIPPED) {
           WRITE("----");
           total_skipped++;

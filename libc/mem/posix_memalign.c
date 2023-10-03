@@ -35,9 +35,9 @@
  * @param bytes is number of bytes to allocate
  * @return return 0 or EINVAL or ENOMEM w/o setting errno
  * @see memalign()
- * @threadsafe
+ * @returnserrno
  */
-int posix_memalign(void **pp, size_t alignment, size_t bytes) {
+errno_t posix_memalign(void **pp, size_t alignment, size_t bytes) {
   int e;
   void *m;
   size_t q, r;
@@ -46,11 +46,11 @@ int posix_memalign(void **pp, size_t alignment, size_t bytes) {
   if (!r && q && IS2POW(q)) {
     e = errno;
     m = memalign(alignment, bytes);
-    errno = e;
     if (m) {
       *pp = m;
       return 0;
     } else {
+      errno = e;
       return ENOMEM;
     }
   } else {

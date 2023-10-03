@@ -16,9 +16,11 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/likely.h"
+#include "libc/intrin/likely.h"
 #include "libc/limits.h"
+#include "libc/mem/mem.h"
 #include "libc/str/str.h"
+#include "libc/str/tab.internal.h"
 #include "libc/x/x.h"
 #include "net/http/escape.h"
 #include "net/http/url.h"
@@ -26,13 +28,12 @@
 struct UrlParser {
   char *p, *q;
   const char *s;
-  unsigned c, i, n;
-  char isform, islatin1, isopaque;
+  unsigned c, i, n, f;
 };
 
 static void EmitLatin1(char **p, int c) {
   (*p)[0] = 0300 | c >> 6;
-  (*p)[1] = 0200 | c & 077;
+  (*p)[1] = 0200 | (c & 077);
   *p += 2;
 }
 
@@ -97,7 +98,7 @@ static bool ParseScheme(struct UrlParser *u, struct Url *h) {
           return false;
         }
       } else {
-        u->isopaque = true;
+        u->f |= kUrlOpaque;
         return false;
       }
     } else if (u->c == '#' || u->c == '?') {
@@ -108,7 +109,7 @@ static bool ParseScheme(struct UrlParser *u, struct Url *h) {
     } else if (u->c == '%') {
       ParseEscape(u);
       return false;
-    } else if (u->c >= 0200 && u->islatin1) {
+    } else if (u->c >= 0200 && (u->f & kUrlLatin1)) {
       EmitLatin1(&u->p, u->c);
       return false;
     } else {
@@ -148,7 +149,7 @@ static void ParseAuthority(struct UrlParser *u, struct Url *h) {
       if (c) {
         h->user.p = u->q;
         h->user.n = c - 1 - u->q;
-        h->pass.p = c;
+        h->pass.p = (char *)c;
         h->pass.n = u->p - c;
         c = NULL;
         t = 1;
@@ -159,7 +160,7 @@ static void ParseAuthority(struct UrlParser *u, struct Url *h) {
       u->q = u->p;
     } else if (u->c == '%') {
       ParseEscape(u);
-    } else if (u->c >= 0200 && u->islatin1) {
+    } else if (u->c >= 0200 && (u->f & kUrlLatin1)) {
       EmitLatin1(&u->p, u->c);
     } else {
       *u->p++ = u->c;
@@ -168,7 +169,7 @@ static void ParseAuthority(struct UrlParser *u, struct Url *h) {
   if (t == 2) {
     h->host.p = u->q;
     h->host.n = c - 1 - u->q;
-    h->port.p = c;
+    h->port.p = (char *)c;
     h->port.n = u->p - c;
     c = NULL;
   } else {
@@ -186,11 +187,11 @@ static void ParsePath(struct UrlParser *u, struct UrlView *h) {
     u->c = u->s[u->i++] & 255;
     if (u->c == '#') {
       break;
-    } else if (u->c == '?' && !u->isopaque) {
+    } else if (u->c == '?' && !(u->f & kUrlOpaque)) {
       break;
     } else if (u->c == '%') {
       ParseEscape(u);
-    } else if (u->c >= 0200 && u->islatin1) {
+    } else if (u->c >= 0200 && (u->f & kUrlLatin1)) {
       EmitLatin1(&u->p, u->c);
     } else {
       *u->p++ = u->c;
@@ -211,7 +212,7 @@ static void ParseQuery(struct UrlParser *u, struct UrlParams *h) {
     } else if (u->c == '%') {
       ParseEscape(u);
     } else if (u->c == '+') {
-      *u->p++ = u->isform ? ' ' : '+';
+      *u->p++ = (u->f & kUrlPlus) ? ' ' : '+';
     } else if (u->c == '&') {
       EmitVal(u, h, t);
       t = false;
@@ -221,7 +222,7 @@ static void ParseQuery(struct UrlParser *u, struct UrlParams *h) {
       } else {
         *u->p++ = '=';
       }
-    } else if (u->c >= 0200 && u->islatin1) {
+    } else if (u->c >= 0200 && (u->f & kUrlLatin1)) {
       EmitLatin1(&u->p, u->c);
     } else {
       *u->p++ = u->c;
@@ -235,7 +236,7 @@ static void ParseFragment(struct UrlParser *u, struct UrlView *h) {
     u->c = u->s[u->i++] & 255;
     if (u->c == '%') {
       ParseEscape(u);
-    } else if (u->c >= 0200 && u->islatin1) {
+    } else if (u->c >= 0200 && (u->f & kUrlLatin1)) {
       EmitLatin1(&u->p, u->c);
     } else {
       *u->p++ = u->c;
@@ -244,28 +245,6 @@ static void ParseFragment(struct UrlParser *u, struct UrlView *h) {
   h->p = u->q;
   h->n = u->p - u->q;
   u->q = u->p;
-}
-
-static char *ParseUrlImpl(const char *s, size_t n, struct Url *h, bool latin1) {
-  char *m;
-  struct UrlParser u;
-  if (n == -1) n = s ? strlen(s) : 0;
-  u.i = 0;
-  u.c = 0;
-  u.s = s;
-  u.n = n;
-  u.isform = false;
-  u.isopaque = false;
-  u.islatin1 = latin1;
-  bzero(h, sizeof(*h));
-  if ((m = malloc(latin1 ? u.n * 2 : u.n))) {
-    u.q = u.p = m;
-    if (ParseScheme(&u, h)) ParseAuthority(&u, h);
-    if (u.c != '#' && u.c != '?') ParsePath(&u, &h->path);
-    if (u.c == '?') ParseQuery(&u, &h->params);
-    if (u.c == '#') ParseFragment(&u, &h->fragment);
-  }
-  return m;
 }
 
 /**
@@ -286,53 +265,49 @@ static char *ParseUrlImpl(const char *s, size_t n, struct Url *h, bool latin1) {
  * since it's the most non-deterministically defined field of them all.
  *
  * Please note this is a URL parser, not a URI parser. Which means we
- * support everything everything the URI spec says we should do except
- * for the things we won't do, like tokenizing path segments into an
- * array and then nesting another array beneath each of those for
- * storing semicolon parameters. So this parser won't make SIP easy.
- * What it can do is parse HTTP URLs and most URIs like s:opaque,
- * better in fact than most things which claim to be URI parsers.
+ * support everything the URI spec says we should do except for the
+ * things we won't do, like tokenizing path segments into an array
+ * and then nesting another array beneath each of those for storing
+ * semicolon parameters. So this parser won't make SIP easy. What it
+ * can do is parse HTTP URLs and most URIs like s:opaque, better in
+ * fact than most things which claim to be URI parsers.
  *
  * @param s is value like `/hi?x=y&z` or `http://a.example/hi#x`
  * @param n is byte length and -1 implies strlen
  * @param h is assumed to be uninitialized
+ * @param f is flags which may have:
+ *     - `FLAGS_PLUS` to turn `+` into space in query params
+ *     - `FLAGS_LATIN1` to transcode ISO-8859-1 input into UTF-8
  * @return memory backing UrlView needing free (and h.params.p too)
  * @see URI Generic Syntax RFC3986 RFC2396
  * @see EncodeUrl()
  */
-char *ParseUrl(const char *s, size_t n, struct Url *h) {
-  return ParseUrlImpl(s, n, h, false);
-}
-
-/**
- * Parses HTTP Request-URI.
- *
- * The input is ISO-8859-1 which is transcoded to UTF-8. Therefore we
- * assume percent-encoded bytes are expressed as UTF-8. Returned values
- * might contain things like NUL characters, C0, and C1 control codes.
- * UTF-8 isn't checked for validity and may contain overlong values.
- * Absent can be discerned from empty by checking if the pointer is set.
- *
- * There's no failure condition for this routine. This is a permissive
- * parser that doesn't impose character restrictions beyond what is
- * necessary for parsing. This doesn't normalize path segments like `.`
- * or `..`. Use IsAcceptablePath() to check for those.
- *
- * @param s is value like `/hi?x=y&z` or `http://a.example/hi#x`
- * @param n is byte length and -1 implies strlen
- * @param h is assumed to be uninitialized
- * @return memory backing UrlView needing free (and h.params.p too)
- */
-char *ParseRequestUri(const char *s, size_t n, struct Url *h) {
-  return ParseUrlImpl(s, n, h, true);
+char *ParseUrl(const char *s, size_t n, struct Url *h, int f) {
+  char *m;
+  struct UrlParser u;
+  if (n == -1) n = s ? strlen(s) : 0;
+  u.i = 0;
+  u.c = 0;
+  u.s = s;
+  u.n = n;
+  u.f = f;
+  bzero(h, sizeof(*h));
+  if ((m = malloc((f & kUrlLatin1) ? u.n * 2 : u.n))) {
+    u.q = u.p = m;
+    if (ParseScheme(&u, h)) ParseAuthority(&u, h);
+    if (u.c != '#' && u.c != '?') ParsePath(&u, &h->path);
+    if (u.c == '?') ParseQuery(&u, &h->params);
+    if (u.c == '#') ParseFragment(&u, &h->fragment);
+  }
+  return m;
 }
 
 /**
  * Parses HTTP POST key-value params.
  *
- * These are similar to the parameters found in a Request-URI. The main
- * difference is that `+` is translated into space here. The mime type
- * for this is application/x-www-form-urlencoded.
+ * These are similar to the parameters found in a Request-URI, except
+ * usually submitted via an HTTP POST request. We translate `+` into
+ * space. The mime type is application/x-www-form-urlencoded.
  *
  * This parser is charset agnostic. Returned values might contain things
  * like NUL characters, NUL, control codes, and non-canonical encodings.
@@ -355,9 +330,7 @@ char *ParseParams(const char *s, size_t n, struct UrlParams *h) {
   u.s = s;
   u.n = n;
   u.c = '?';
-  u.isform = true;
-  u.islatin1 = false;
-  u.isopaque = false;
+  u.f = kUrlPlus;
   if ((m = malloc(u.n))) {
     u.q = u.p = m;
     ParseQuery(&u, h);
@@ -397,9 +370,7 @@ char *ParseHost(const char *s, size_t n, struct Url *h) {
   u.c = 0;
   u.s = s;
   u.n = n;
-  u.isform = false;
-  u.islatin1 = true;
-  u.isopaque = false;
+  u.f = kUrlLatin1;
   if ((m = malloc(u.n * 2))) {
     u.q = u.p = m;
     ParseAuthority(&u, h);

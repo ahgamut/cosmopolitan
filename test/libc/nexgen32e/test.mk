@@ -25,22 +25,21 @@ TEST_LIBC_NEXGEN32E_CHECKS =					\
 	$(TEST_LIBC_NEXGEN32E_SRCS_TEST:%.c=o/$(MODE)/%.com.runs)
 
 TEST_LIBC_NEXGEN32E_DIRECTDEPS =				\
-	LIBC_ALG						\
 	LIBC_CALLS						\
 	LIBC_FMT						\
 	LIBC_INTRIN						\
 	LIBC_LOG						\
 	LIBC_MEM						\
 	LIBC_NEXGEN32E						\
-	LIBC_RAND						\
 	LIBC_RUNTIME						\
 	LIBC_STDIO						\
 	LIBC_STR						\
-	LIBC_STUBS						\
+	LIBC_SYSV						\
+	LIBC_THREAD						\
 	LIBC_TESTLIB						\
-	LIBC_UNICODE						\
 	LIBC_X							\
-	TOOL_VIZ_LIB
+	TOOL_VIZ_LIB						\
+	THIRD_PARTY_XED
 
 TEST_LIBC_NEXGEN32E_DEPS :=					\
 	$(call uniq,$(foreach x,$(TEST_LIBC_NEXGEN32E_DIRECTDEPS),$($(x))))
@@ -58,7 +57,14 @@ o/$(MODE)/test/libc/nexgen32e/%.com.dbg:			\
 		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
 
-$(TEST_LIBC_NEXGEN32E_OBJS):					\
+# we can't run this test on openbsd because rwx memory isn't allowed
+o/$(MODE)/test/libc/nexgen32e/stackrwx_test.com.ok:		\
+		o/$(MODE)/tool/build/runit.com			\
+		o/$(MODE)/tool/build/runitd.com			\
+		o/$(MODE)/test/libc/nexgen32e/stackrwx_test.com
+	@$(COMPILE) -wATEST -tT$@ $^ $(filter-out openbsd,$(HOSTS))
+
+$(TEST_LIBC_NEXGEN32E_OBJS): private				\
 	DEFAULT_CCFLAGS +=					\
 		-fno-builtin
 

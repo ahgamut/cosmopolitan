@@ -7,64 +7,27 @@
 │   • http://creativecommons.org/publicdomain/zero/1.0/            │
 ╚─────────────────────────────────────────────────────────────────*/
 #endif
-#include "libc/calls/calls.h"
-#include "libc/dce.h"
-#include "libc/intrin/kprintf.h"
-#include "libc/log/log.h"
-#include "libc/runtime/runtime.h"
-#include "libc/stdio/stdio.h"
 #include "libc/thread/thread.h"
-#include "libc/time/time.h"
+#include "libc/stdio/stdio.h"
 
-cthread_sem_t semaphore;
-_Thread_local int test_tls = 0x12345678;
+/**
+ * @fileoverview Basic POSIX Threads Example.
+ *
+ *     $ make -j8 o//examples/thread.com
+ *     $ o//examples/thread.com
+ *     hi there
+ *
+ */
 
-static void *worker(void *arg) {
-  int tid;
-  cthread_t self;
-  cthread_sem_signal(&semaphore);
-  self = cthread_self();
-  tid = self->tid;
-  printf("[%p] %d -> %#x\n", self, tid, test_tls);
-  if (test_tls != 0x12345678) {
-    printf(".tdata test #2 failed\n");
-  }
-  return (void *)4;
+void *worker(void *arg) {
+  fputs(arg, stdout);
+  return "there\n";
 }
 
 int main() {
-  int rc, tid;
-  void *exitcode;
-  cthread_t self, thread;
-
-  if (IsWindows() || IsXnu()) {
-    fprintf(stderr,
-            "error: can't run example\n"
-            "_Thread_local only works on Linux/FreeBSD/NetBSD/OpenBSD\n");
-    return 1;
-  }
-
-  self = cthread_self();
-  tid = self->tid;
-  printf("[%p] %d -> %#x\n", self, tid, test_tls);
-  if (test_tls != 0x12345678) {
-    printf(".tdata test #1 failed\n");
-  }
-  cthread_sem_init(&semaphore, 0);
-  rc = cthread_create(&thread, NULL, &worker, NULL);
-  if (rc == 0) {
-    cthread_sem_wait(&semaphore, 0, NULL);
-    printf("thread created: %p\n", thread);
-#if 1
-    cthread_join(thread, &exitcode);
-#else
-    exitcode = cthread_detach(thread);
-#endif
-    cthread_sem_signal(&semaphore);
-    cthread_sem_wait(&semaphore, 0, NULL);
-    printf("thread joined: %p -> %p\n", thread, exitcode);
-  } else {
-    fprintf(stderr, "ERROR: thread could not be started: %d\n", rc);
-  }
-  return 0;
+  void *result;
+  pthread_t id;
+  pthread_create(&id, 0, worker, "hi ");
+  pthread_join(id, &result);
+  fputs(result, stdout);
 }

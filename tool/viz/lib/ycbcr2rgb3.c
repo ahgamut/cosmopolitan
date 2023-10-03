@@ -25,19 +25,21 @@
 #include "dsp/core/illumination.h"
 #include "dsp/core/q.h"
 #include "dsp/scale/scale.h"
-#include "libc/bits/xmmintrin.internal.h"
+#include "libc/assert.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/sigset.h"
+#include "libc/calls/struct/timespec.h"
+#include "libc/intrin/bsr.h"
 #include "libc/intrin/pmulhrsw.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
 #include "libc/macros.internal.h"
 #include "libc/math.h"
+#include "libc/mem/gc.internal.h"
 #include "libc/mem/mem.h"
 #include "libc/nexgen32e/gc.internal.h"
 #include "libc/nexgen32e/nexgen32e.h"
 #include "libc/nexgen32e/x86feature.h"
-#include "libc/runtime/gc.internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/sig.h"
@@ -64,7 +66,7 @@ const double kSrgbToXyz[3][3] = {
 long magikarp_latency_;
 long gyarados_latency_;
 long ycbcr2rgb_latency_;
-long double magikarp_start_;
+struct timespec magikarp_start_;
 
 struct YCbCr {
   bool yonly;
@@ -80,6 +82,14 @@ struct YCbCr {
     struct SamplingSolution *cy, *cx;
   } luma, chroma;
 };
+
+static unsigned long roundup2pow(unsigned long x) {
+  return x > 1 ? 2ul << _bsrl(x - 1) : x ? 1 : 0;
+}
+
+static unsigned long rounddown2pow(unsigned long x) {
+  return x ? 1ul << _bsrl(x) : 0;
+}
 
 /**
  * Computes magnums for Y′CbCr decoding.
@@ -152,13 +162,16 @@ void YCbCrComputeCoefficients(int swing, double gamma,
 
 void YCbCrInit(struct YCbCr **ycbcr, bool yonly, int swing, double gamma,
                const double gamut[3], const double illuminant[3]) {
+  int i;
   if (!*ycbcr) *ycbcr = xcalloc(1, sizeof(struct YCbCr));
   (*ycbcr)->yonly = yonly;
   bzero((*ycbcr)->magnums, sizeof((*ycbcr)->magnums));
   bzero((*ycbcr)->lighting, sizeof((*ycbcr)->lighting));
   YCbCrComputeCoefficients(swing, gamma, gamut, illuminant, (*ycbcr)->magnums,
                            (*ycbcr)->lighting, (*ycbcr)->transfer[0]);
-  imapxlatab((*ycbcr)->transfer[1]);
+  for (i = 0; i < 256; ++i) {
+    (*ycbcr)->transfer[1][i] = i;
+  }
 }
 
 void YCbCrFree(struct YCbCr **ycbcr) {
@@ -226,7 +239,7 @@ void YCbCr2Rgb(long yn, long xn, unsigned char RGB[restrict 3][yn][xn],
                const unsigned char Cr[restrict cys][cxs], const int K[8][4],
                const int L[6][4], const unsigned char T[256]) {
   long i, j;
-  short y, u, v, r, g, b, A, B, C;
+  short y, u, v, r, g, b;
   for (i = 0; i < yn; ++i) {
     for (j = 0; j < xn; ++j) {
       y = T[Y[i][j]];
@@ -250,15 +263,14 @@ void YCbCrConvert(struct YCbCr *me, long yn, long xn,
                   const unsigned char Y[restrict yys][yxs], long cys, long cxs,
                   unsigned char Cb[restrict cys][cxs],
                   unsigned char Cr[restrict cys][cxs]) {
-  long double ts;
-  ts = nowl();
+  struct timespec ts = timespec_real();
   if (!me->yonly) {
     YCbCr2Rgb(yn, xn, RGB, yys, yxs, Y, cys, cxs, Cb, Cr, me->magnums,
               me->lighting, me->transfer[pf10_]);
   } else {
     Y2Rgb(yn, xn, RGB, yys, yxs, Y, me->magnums, me->transfer[pf10_]);
   }
-  ycbcr2rgb_latency_ = lroundl((nowl() - ts) * 1e6l);
+  ycbcr2rgb_latency_ = timespec_tomicros(timespec_sub(timespec_real(), ts));
 }
 
 void YCbCr2RgbScaler(struct YCbCr *me, long dyn, long dxn,
@@ -268,9 +280,8 @@ void YCbCr2RgbScaler(struct YCbCr *me, long dyn, long dxn,
                      unsigned char Cr[restrict cys][cxs], long yyn, long yxn,
                      long cyn, long cxn, double syn, double sxn, double pry,
                      double prx) {
-  long double ts;
-  long y, x, scyn, scxn;
-  double yry, yrx, cry, crx, yoy, yox, coy, cox, err, oy;
+  long scyn, scxn;
+  double yry, yrx, cry, crx, yoy, yox, coy, cox;
   scyn = syn * cyn / yyn;
   scxn = sxn * cxn / yxn;
   if (HALF(yxn) > dxn && HALF(scxn) > dxn) {
@@ -286,8 +297,8 @@ void YCbCr2RgbScaler(struct YCbCr *me, long dyn, long dxn,
                     Magkern2xY(cys, cxs, Cr, scyn, scxn), HALF(yyn), yxn,
                     HALF(cyn), scxn, syn / 2, sxn, pry, prx);
   } else {
-    magikarp_latency_ = lroundl((nowl() - magikarp_start_) * 1e6l);
-    ts = nowl();
+    struct timespec ts = timespec_real();
+    magikarp_latency_ = timespec_tomicros(timespec_sub(ts, magikarp_start_));
     yry = syn / dyn;
     yrx = sxn / dxn;
     cry = syn * cyn / yyn / dyn;
@@ -315,7 +326,7 @@ void YCbCr2RgbScaler(struct YCbCr *me, long dyn, long dxn,
                   me->chroma.cy, me->chroma.cx, false);
     GyaradosUint8(cys, cxs, Cr, cys, cxs, Cr, dyn, dxn, scyn, scxn, 0, 255,
                   me->chroma.cy, me->chroma.cx, false);
-    gyarados_latency_ = lround((nowl() - ts) * 1e6l);
+    gyarados_latency_ = timespec_tomicros(timespec_sub(timespec_real(), ts));
     YCbCrConvert(me, dyn, dxn, RGB, yys, yxs, Y, cys, cxs, Cb, Cr);
     INFOF("done");
   }
@@ -370,7 +381,7 @@ void *YCbCr2RgbScale(long dyn, long dxn,
   CHECK_LE(cyn, cys);
   CHECK_LE(cxn, cxs);
   INFOF("magikarp2x");
-  magikarp_start_ = nowl();
+  magikarp_start_ = timespec_real();
   minyys = MAX(ceil(syn), MAX(yyn, ceil(dyn * pry)));
   minyxs = MAX(ceil(sxn), MAX(yxn, ceil(dxn * prx)));
   mincys = MAX(cyn, ceil(dyn * pry));

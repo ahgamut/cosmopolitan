@@ -18,10 +18,10 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
-#include "libc/calls/strace.internal.h"
 #include "libc/calls/syscall-nt.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
+#include "libc/intrin/strace.internal.h"
 #include "libc/sysv/errfuns.h"
 
 /**
@@ -30,17 +30,29 @@
  * The `O_CLOEXEC` flag shall be cleared from the resulting file
  * descriptor; see dup3() to preserve it.
  *
+ * One use case for duplicating file descriptors is to be able to
+ * reassign an open()'d file or pipe() to the stdio of an executed
+ * subprocess. On Windows, in order for this to work, the subprocess
+ * needs to be a Cosmopolitan program that has socket() linked.
+ *
+ * Only small programs should duplicate sockets. That's because this
+ * implementation uses DuplicateHandle() on Windows, which Microsoft
+ * says might cause its resources to leak internally. Thus it likely
+ * isn't a good idea to design a server that does it a lot and lives
+ * a long time, without contributing a patch to this implementation.
+ *
  * @param fd remains open afterwards
  * @return some arbitrary new number for fd
- * @raise EOPNOTSUPP if zipos file
- * @raise EBADF if fd isn't open
+ * @raise EPERM if pledge() is in play without stdio
+ * @raise ENOTSUP if `fd` is a zip file descriptor
+ * @raise EBADF if `fd` is negative or not open
  * @asyncsignalsafe
  * @vforksafe
  */
 int dup(int fd) {
   int rc;
   if (__isfdkind(fd, kFdZip)) {
-    rc = eopnotsupp();
+    rc = enotsup();
   } else if (!IsWindows()) {
     rc = sys_dup(fd);
   } else {

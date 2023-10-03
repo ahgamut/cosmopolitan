@@ -16,10 +16,31 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/calls/internal.h"
+#include "libc/calls/struct/fd.internal.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/calls/termios.h"
+#include "libc/errno.h"
+#include "libc/intrin/strace.internal.h"
+#include "libc/sysv/errfuns.h"
 
-static char g_ptsname[32];
+static char g_ptsname[16];
 
+/**
+ * Gets name subordinate pseudoteletypewriter.
+ *
+ * @return static string path on success, or NULL w/ errno
+ */
 char *ptsname(int fd) {
-  return ptsname_r(fd, g_ptsname, sizeof(g_ptsname)) ? g_ptsname : NULL;
+  char *res;
+  if (fd < g_fds.n && g_fds.p[fd].kind == kFdZip) {
+    enotty();
+    res = 0;
+  } else if (!_ptsname(fd, g_ptsname, sizeof(g_ptsname))) {
+    res = g_ptsname;
+  } else {
+    res = 0;
+  }
+  STRACE("ptsname(%d) → %#s% m", fd, res);
+  return res;
 }

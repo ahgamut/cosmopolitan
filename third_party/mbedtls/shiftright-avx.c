@@ -19,13 +19,15 @@
 #include "third_party/mbedtls/bignum_internal.h"
 #include "third_party/mbedtls/platform.h"
 
+#ifdef __x86_64__
+
 typedef uint64_t xmm_t __attribute__((__vector_size__(16), __aligned__(1)));
 
 void ShiftRightAvx(uint64_t *p, size_t n, unsigned char k) {
   uint64_t p1;
+  xmm_t o0, o1;
+  xmm_t i0, i1;
   xmm_t cv = {0};
-  xmm_t i0, i1, i2, i3;
-  xmm_t o0, o1, o2, o3;
   MBEDTLS_ASSERT(!(k & ~63));
   p1 = n > 1 ? p[1] : 0;
   while (n >= 4) {
@@ -49,3 +51,5 @@ void ShiftRightAvx(uint64_t *p, size_t n, unsigned char k) {
     p[0] = p[0] >> k | p1 << (64 - k);
   }
 }
+
+#endif /* __x86_64__ */

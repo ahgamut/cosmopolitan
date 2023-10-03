@@ -17,8 +17,8 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "dsp/tty/tty.h"
-#include "libc/bits/bits.h"
-#include "libc/rand/rand.h"
+#include "libc/intrin/bits.h"
+#include "libc/stdio/rand.h"
 #include "libc/str/str.h"
 #include "libc/testlib/ezbench.h"
 #include "libc/testlib/testlib.h"
@@ -27,7 +27,7 @@ char p[16];
 struct TtyCursor c;
 
 void SetUp(void) {
-  rngset(p, sizeof(p), rand64, -1);
+  rngset(p, sizeof(p), _rand64, -1);
 }
 
 TEST(ttymove, sameCoord_doesNothing) {

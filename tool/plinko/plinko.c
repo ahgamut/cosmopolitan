@@ -16,14 +16,13 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/intrin/kprintf.h"
-#include "libc/log/log.h"
-#include "libc/stdio/stdio.h"
 #include "tool/plinko/lib/plinko.h"
+#include "libc/thread/tls.h"
 
-STATIC_YOINK("__zipos_get");
+__static_yoink("__zipos_get");
 
 int main(int argc, char *argv[]) {
+  __tls_enabled = false;
   Plinko(argc, argv);
   return 0;
 }

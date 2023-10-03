@@ -25,9 +25,9 @@ LIBC_TINYMATH_A_CHECKS =				\
 
 LIBC_TINYMATH_A_DIRECTDEPS =				\
 	LIBC_INTRIN					\
-	LIBC_STUBS					\
 	LIBC_NEXGEN32E					\
-	LIBC_SYSV
+	LIBC_SYSV					\
+	THIRD_PARTY_COMPILER_RT
 
 LIBC_TINYMATH_A_DEPS :=					\
 	$(call uniq,$(foreach x,$(LIBC_TINYMATH_A_DIRECTDEPS),$($(x))))
@@ -41,12 +41,28 @@ $(LIBC_TINYMATH_A).pkg:					\
 		$(LIBC_TINYMATH_A_OBJS)			\
 		$(foreach x,$(LIBC_TINYMATH_A_DIRECTDEPS),$($(x)_A).pkg)
 
-o/$(MODE)/libc/tinymath/cpow.o \
-o/$(MODE)/libc/tinymath/cpowf.o \
-o/$(MODE)/libc/tinymath/cpowl.o \
-o/$(MODE)/libc/tinymath/powfin.o :			\
-		OVERRIDE_CFLAGS +=			\
-			-ffast-math
+o/$(MODE)/libc/tinymath/lround.o			\
+o/$(MODE)/libc/tinymath/lroundf.o			\
+o/$(MODE)/libc/tinymath/lroundl.o: private		\
+		CFLAGS +=				\
+			-fno-builtin
+
+o/$(MODE)/libc/tinymath/expl.o				\
+o/$(MODE)/libc/tinymath/loglq.o: private		\
+		CFLAGS +=				\
+			-ffunction-sections
+
+$(LIBC_TINYMATH_A_OBJS): private			\
+		CFLAGS +=				\
+			-fsigned-zeros			\
+			-ftrapping-math			\
+			-frounding-math			\
+			-fsignaling-nans		\
+			-fno-reciprocal-math		\
+			-fno-associative-math		\
+			-fno-finite-math-only		\
+			-fno-cx-limited-range		\
+			-ffp-int-builtin-inexact
 
 LIBC_TINYMATH_LIBS = $(foreach x,$(LIBC_TINYMATH_ARTIFACTS),$($(x)))
 LIBC_TINYMATH_HDRS = $(foreach x,$(LIBC_TINYMATH_ARTIFACTS),$($(x)_HDRS))
@@ -57,4 +73,6 @@ LIBC_TINYMATH_CHECKS = $(LIBC_TINYMATH_HDRS:%=o/$(MODE)/%.ok)
 $(LIBC_TINYMATH_OBJS): $(BUILD_FILES) libc/tinymath/tinymath.mk
 
 .PHONY: o/$(MODE)/libc/tinymath
-o/$(MODE)/libc/tinymath: $(LIBC_TINYMATH_CHECKS)
+o/$(MODE)/libc/tinymath:				\
+		$(LIBC_TINYMATH_CHECKS)			\
+		o/$(MODE)/libc/tinymath/tinymath.a

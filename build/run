@@ -1,0 +1,9 @@
+#!/bin/sh
+if printf '%s\n' "$*" | grep aarch64 >/dev/null 2>&1; then
+  if [ ! -f o/third_party/qemu/qemu-aarch64 ]; then
+    make -j8 o/third_party/qemu/qemu-aarch64
+  fi
+  exec o/third_party/qemu/qemu-aarch64 "$@"
+else
+  exec "$@"
+fi

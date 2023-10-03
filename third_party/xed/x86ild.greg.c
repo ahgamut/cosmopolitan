@@ -17,13 +17,13 @@
 │ limitations under the License.                                               │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
-#include "libc/bits/bits.h"
 #include "libc/dce.h"
+#include "libc/intrin/bits.h"
+#include "libc/intrin/bsr.h"
+#include "libc/log/libfatal.internal.h"
 #include "libc/macros.internal.h"
-#include "libc/nexgen32e/bsr.h"
 #include "libc/runtime/runtime.h"
 #include "libc/str/str.h"
-#include "third_party/xed/avx.h"
 #include "third_party/xed/avx512.h"
 #include "third_party/xed/private.h"
 #include "third_party/xed/x86.h"
@@ -102,12 +102,116 @@ asm(".include \"libc/disclaimer.inc\"");
 #define XED_LF_UIMMv_IMM_WIDTH_OSZ_NONTERM_IMMUNE_REXW_EOSZ_l2(X) \
   xed_set_uimmv_imm_width_eosz(X, kXed.OSZ_NONTERM_IMMUNE_REXW_EOSZ)
 
-extern const uint32_t xed_prefix_table_bit[8] hidden;
-extern const uint8_t xed_imm_bits_2d[2][256] hidden;
-extern const uint8_t xed_has_modrm_2d[XED_ILD_MAP2][256] hidden;
-extern const uint8_t xed_has_sib_table[3][4][8] hidden;
-extern const uint8_t xed_has_disp_regular[3][4][8] hidden;
-extern const uint8_t xed_disp_bits_2d[XED_ILD_MAP2][256] hidden;
+static const uint32_t xed_prefix_table_bit[8] = {
+    0x00000000, 0x40404040, 0x0000ffff, 0x000000f0,
+    0x00000000, 0x00000000, 0x00000000, 0x000d0000,
+};
+
+static const uint8_t xed_imm_bits_2d[2][256] = {
+    {1, 1, 1,  1, 5, 7, 1, 1, 1,  1,  1,  1,  9,  7,  1,  0,  1, 1, 1, 1, 5, 7,
+     1, 1, 1,  1, 1, 1, 5, 7, 1,  1,  1,  1,  1,  1,  5,  7,  0, 1, 1, 1, 1, 1,
+     5, 7, 0,  1, 1, 1, 1, 1, 9,  7,  0,  1,  1,  1,  1,  1,  5, 7, 0, 1, 1, 1,
+     1, 1, 1,  1, 1, 1, 1, 1, 1,  1,  1,  1,  1,  1,  1,  1,  1, 1, 1, 1, 1, 1,
+     1, 1, 1,  1, 1, 1, 1, 1, 1,  1,  1,  1,  0,  0,  0,  0,  6, 7, 5, 5, 1, 1,
+     1, 1, 1,  1, 1, 1, 1, 1, 1,  1,  1,  1,  1,  1,  1,  1,  1, 1, 5, 7, 5, 5,
+     1, 1, 1,  1, 1, 1, 1, 1, 1,  1,  1,  1,  1,  1,  1,  1,  1, 1, 1, 1, 1, 1,
+     8, 1, 1,  1, 1, 1, 1, 1, 1,  1,  1,  1,  1,  1,  5,  7,  1, 1, 1, 1, 1, 1,
+     9, 9, 9,  9, 9, 9, 9, 9, 10, 10, 10, 10, 10, 10, 10, 10, 9, 9, 8, 1, 1, 1,
+     9, 2, 11, 1, 8, 1, 1, 9, 1,  1,  1,  1,  1,  1,  9,  9,  1, 1, 1, 1, 1, 1,
+     1, 1, 1,  1, 1, 1, 1, 1, 9,  9,  9,  9,  1,  1,  8,  1,  1, 1, 1, 1, 0, 1,
+     0, 0, 1,  1, 3, 4, 1, 1, 1,  1,  1,  1,  1,  1},
+    {1,  1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1,
+     1,  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
+     1,  1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
+     1,  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+     1,  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 9, 9, 9, 9, 1, 1, 1, 1,
+     12, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+     1,  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 9, 1, 0, 0,
+     1,  1, 1, 1, 9, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 9, 1, 1, 1, 1, 1,
+     1,  1, 9, 1, 9, 9, 9, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+     1,  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+     1,  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1},
+};
+
+static const uint8_t xed_has_modrm_2d[XED_ILD_MAP2][256] = {
+    {1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 3, 1, 1, 1, 1, 0, 0, 0, 0,
+     1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 3, 0, 1, 1, 1, 1, 0, 0, 3, 0,
+     1, 1, 1, 1, 0, 0, 3, 0, 1, 1, 1, 1, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+     0, 0, 1, 1, 3, 3, 3, 3, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+     0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+     1, 1, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0,
+     1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+     3, 0, 3, 3, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1},
+    {1, 1, 1, 1, 3, 0, 0, 0, 0, 0, 3, 0, 3, 1, 0, 3, 1, 1, 1, 1, 1, 1, 1, 1,
+     1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 1, 1, 1, 1, 1, 1, 1, 1,
+     0, 0, 0, 0, 0, 0, 3, 0, 3, 3, 3, 3, 3, 3, 3, 3, 1, 1, 1, 1, 1, 1, 1, 1,
+     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0,
+     1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 1, 1, 3, 3,
+     0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+     1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
+     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1},
+};
+
+static const uint8_t xed_has_sib_table[3][4][8] = {
+    {{0, 0, 0, 0, 0, 0, 0, 0},
+     {0, 0, 0, 0, 0, 0, 0, 0},
+     {0, 0, 0, 0, 0, 0, 0, 0},
+     {0, 0, 0, 0, 0, 0, 0, 0}},
+    {{0, 0, 0, 0, 1, 0, 0, 0},
+     {0, 0, 0, 0, 1, 0, 0, 0},
+     {0, 0, 0, 0, 1, 0, 0, 0},
+     {0, 0, 0, 0, 0, 0, 0, 0}},
+    {{0, 0, 0, 0, 1, 0, 0, 0},
+     {0, 0, 0, 0, 1, 0, 0, 0},
+     {0, 0, 0, 0, 1, 0, 0, 0},
+     {0, 0, 0, 0, 0, 0, 0, 0}},
+};
+
+static const uint8_t xed_has_disp_regular[3][4][8] = {
+    {{0, 0, 0, 0, 0, 0, 2, 0},
+     {1, 1, 1, 1, 1, 1, 1, 1},
+     {2, 2, 2, 2, 2, 2, 2, 2},
+     {0, 0, 0, 0, 0, 0, 0, 0}},
+    {{0, 0, 0, 0, 0, 4, 0, 0},
+     {1, 1, 1, 1, 1, 1, 1, 1},
+     {4, 4, 4, 4, 4, 4, 4, 4},
+     {0, 0, 0, 0, 0, 0, 0, 0}},
+    {{0, 0, 0, 0, 0, 4, 0, 0},
+     {1, 1, 1, 1, 1, 1, 1, 1},
+     {4, 4, 4, 4, 4, 4, 4, 4},
+     {0, 0, 0, 0, 0, 0, 0, 0}},
+};
+
+static const uint8_t xed_disp_bits_2d[XED_ILD_MAP2][256] = {
+    {4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 0, 4, 4, 4, 4, 4, 4, 4, 4,
+     4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 0, 4, 4, 4, 4, 4, 4, 4, 0, 4,
+     4, 4, 4, 4, 4, 4, 0, 4, 4, 4, 4, 4, 4, 4, 0, 4, 4, 4, 4, 4, 4, 4, 4, 4,
+     4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
+     4, 4, 4, 4, 0, 0, 0, 0, 4, 4, 4, 4, 4, 4, 4, 4, 1, 1, 1, 1, 1, 1, 1, 1,
+     1, 1, 1, 1, 1, 1, 1, 1, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
+     4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 4, 4, 4, 4, 4, 5, 5, 5, 5, 4, 4, 4, 4,
+     4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
+     4, 4, 4, 4, 4, 4, 4, 6, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
+     4, 4, 4, 4, 4, 4, 4, 4, 1, 1, 1, 1, 4, 4, 4, 4, 3, 3, 2, 1, 4, 4, 4, 4,
+     0, 4, 0, 0, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4},
+    {4, 4, 4, 4, 0, 4, 4, 4, 4, 4, 0, 4, 0, 4, 4, 0, 4, 4, 4, 4, 4, 4, 4, 4,
+     4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 0, 0, 0, 0, 4, 4, 4, 4, 4, 4, 4, 4,
+     4, 4, 4, 4, 4, 4, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 4, 4, 4, 4, 4, 4, 4, 4,
+     4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
+     4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
+     4, 4, 4, 4, 4, 4, 4, 4, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+     4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 0, 0,
+     4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
+     4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
+     4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
+     4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4},
+};
 
 static const struct XedDenseMagnums {
   unsigned vex_prefix_recoding[4];
@@ -775,7 +879,7 @@ privileged static void xed_evex_scanner(struct XedDecodedInst *d) {
 }
 
 privileged static uint64_t xed_read_number(uint8_t *p, size_t n, bool s) {
-  switch (s << 2 | bsr(n)) {
+  switch (s << 2 | _bsr(n)) {
     case 0b000:
       return *p;
     case 0b100:
@@ -792,12 +896,11 @@ privileged static uint64_t xed_read_number(uint8_t *p, size_t n, bool s) {
     case 0b111:
       return READ64LE(p);
     default:
-      unreachable;
+      __builtin_unreachable();
   }
 }
 
 privileged static void xed_evex_imm_scanner(struct XedDecodedInst *d) {
-  uint64_t uimm0;
   uint8_t *itext, *imm_ptr;
   xed_bits_t length, imm_bytes, imm1_bytes, max_bytes;
   imm_ptr = 0;
@@ -846,27 +949,32 @@ privileged static void xed_evex_imm_scanner(struct XedDecodedInst *d) {
 }
 
 privileged static void xed_vex_c4_scanner(struct XedDecodedInst *d) {
-  uint8_t n;
-  xed_bits_t length, max_bytes;
-  union XedAvxC4Payload1 c4byte1;
-  union XedAvxC4Payload2 c4byte2;
+  unsigned length, b1, b2;
   if (xed_is_bound_instruction(d)) return;
   length = d->length;
-  max_bytes = d->op.max_bytes;
   length++;
-  if (length + 2 < max_bytes) {
-    c4byte1.u32 = d->bytes[length];
-    c4byte2.u32 = d->bytes[length + 1];
-    d->op.rexr = ~c4byte1.s.r_inv & 1;
-    d->op.rexx = ~c4byte1.s.x_inv & 1;
-    d->op.rexb = (xed3_mode_64b(d) & ~c4byte1.s.b_inv) & 1;
-    d->op.rexw = c4byte2.s.w & 1;
-    d->op.vexdest3 = c4byte2.s.v3;
-    d->op.vexdest210 = c4byte2.s.vvv210;
-    d->op.vl = c4byte2.s.l;
-    d->op.vex_prefix = kXed.vex_prefix_recoding[c4byte2.s.pp];
-    d->op.map = c4byte1.s.map;
-    if ((c4byte1.s.map & 0x3) == XED_ILD_MAP3) {
+  if (length + 2 < d->op.max_bytes) {
+    // map:   5-bit
+    // rex.b: 1-bit
+    // rex.x: 1-bit
+    // rex.r: 1-bit
+    b1 = d->bytes[length];
+    d->op.rexr = !(b1 & 128);
+    d->op.rexx = !(b1 & 64);
+    d->op.rexb = xed3_mode_64b(d) & !(b1 & 32);
+    // prefix:        2-bit → {none, osz, rep3, rep2}
+    // vector_length: 1-bit → {xmm, ymm}
+    // vexdest210:    3-bit
+    // vexdest3:      1-bit
+    // rex.w:         1-bit
+    b2 = d->bytes[length + 1];
+    d->op.rexw = !!(b2 & 128);
+    d->op.vexdest3 = !!(b2 & 64);
+    d->op.vexdest210 = (b2 >> 3) & 7;
+    d->op.vl = !!(b2 & 4);
+    d->op.vex_prefix = kXed.vex_prefix_recoding[b2 & 3];
+    d->op.map = b1 & 31;
+    if ((b1 & 3) == XED_ILD_MAP3) {
       d->op.imm_width = xed_bytes2bits(1);
     }
     d->op.vexvalid = 1;
@@ -880,19 +988,22 @@ privileged static void xed_vex_c4_scanner(struct XedDecodedInst *d) {
 }
 
 privileged static void xed_vex_c5_scanner(struct XedDecodedInst *d) {
-  xed_bits_t max_bytes, length;
-  union XedAvxC5Payload c5byte1;
+  unsigned length, b;
   length = d->length;
-  max_bytes = d->op.max_bytes;
   if (xed_is_bound_instruction(d)) return;
   length++;
-  if (length + 1 < max_bytes) {
-    c5byte1.u32 = d->bytes[length];
-    d->op.rexr = ~c5byte1.s.r_inv & 1;
-    d->op.vexdest3 = c5byte1.s.v3;
-    d->op.vexdest210 = c5byte1.s.vvv210;
-    d->op.vl = c5byte1.s.l;
-    d->op.vex_prefix = kXed.vex_prefix_recoding[c5byte1.s.pp];
+  if (length + 1 < d->op.max_bytes) {
+    // prefix:        2-bit → {none, osz, rep3, rep2}
+    // vector_length: 1-bit → {xmm, ymm}
+    // vexdest210:    3-bit
+    // vexdest3:      1-bit
+    // rex.r:         1-bit
+    b = d->bytes[length];
+    d->op.rexr = !(b & 128);
+    d->op.vexdest3 = !!(b & 64);
+    d->op.vexdest210 = (b >> 3) & 7;
+    d->op.vl = (b >> 2) & 1;
+    d->op.vex_prefix = kXed.vex_prefix_recoding[b & 3];
     d->op.map = XED_ILD_MAP1;
     d->op.vexvalid = 1;
     length++;
@@ -1050,7 +1161,7 @@ privileged static void XED_LF_DISP_BUCKET_0_l1(struct XedDecodedInst *x) {
 }
 
 privileged static void xed_disp_scanner(struct XedDecodedInst *d) {
-  xed_bits_t length, disp_width, disp_bytes, max_bytes;
+  xed_bits_t length, disp_bytes, max_bytes;
   length = d->length;
   if (d->op.map < XED_ILD_MAP2) {
     switch (xed_disp_bits_2d[d->op.map][d->op.opcode]) {
@@ -1116,7 +1227,7 @@ privileged static void xed_decode_instruction_length(
  */
 privileged struct XedDecodedInst *xed_decoded_inst_zero_set_mode(
     struct XedDecodedInst *p, int mmode) {
-  __builtin_memset(p, 0, sizeof(*p));
+  __memset(p, 0, sizeof(*p));
   xed_operands_set_mode(&p->op, mmode);
   return p;
 }
@@ -1133,7 +1244,7 @@ privileged struct XedDecodedInst *xed_decoded_inst_zero_set_mode(
  */
 privileged int xed_instruction_length_decode(struct XedDecodedInst *xedd,
                                              const void *itext, size_t bytes) {
-  __builtin_memcpy(xedd->bytes, itext, MIN(15, bytes));
+  __memcpy(xedd->bytes, itext, MIN(15, bytes));
   xedd->op.max_bytes = MIN(15, bytes);
   xed_decode_instruction_length(xedd);
   if (!xedd->op.out_of_bytes) {

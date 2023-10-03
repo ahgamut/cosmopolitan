@@ -16,16 +16,23 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/internal.h"
+#include "libc/calls/struct/fd.internal.h"
 #include "libc/errno.h"
+#include "libc/intrin/weaken.h"
 #include "libc/nt/enum/filetype.h"
 #include "libc/nt/files.h"
 #include "libc/nt/runtime.h"
 #include "libc/sysv/consts/o.h"
 
-textwindows int sys_close_nt(struct Fd *fd) {
+void sys_fcntl_nt_lock_cleanup(int);
+
+textwindows int sys_close_nt(struct Fd *fd, int fildes) {
   int e;
   bool ok = true;
+
+  if (_weaken(sys_fcntl_nt_lock_cleanup)) {
+    _weaken(sys_fcntl_nt_lock_cleanup)(fildes);
+  }
 
   if (fd->kind == kFdFile && ((fd->flags & O_ACCMODE) != O_RDONLY &&
                               GetFileType(fd->handle) == kNtFileTypeDisk)) {
@@ -40,9 +47,11 @@ textwindows int sys_close_nt(struct Fd *fd) {
   // if this file descriptor is wrapped in a named pipe worker thread
   // then we need to close our copy of the worker thread handle. it's
   // also required that whatever install a worker use malloc, so free
-  if (!CloseHandle(fd->handle)) ok = false;
-  if (fd->kind == kFdConsole && fd->extra && fd->extra != -1) {
-    if (!CloseHandle(fd->extra)) ok = false;
+  if (!fd->dontclose) {
+    if (!CloseHandle(fd->handle)) ok = false;
+    if (fd->kind == kFdConsole && fd->extra && fd->extra != -1) {
+      if (!CloseHandle(fd->extra)) ok = false;
+    }
   }
 
   return ok ? 0 : -1;

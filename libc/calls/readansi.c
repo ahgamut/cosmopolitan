@@ -17,6 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
+#include "libc/errno.h"
 #include "libc/str/thompike.h"
 #include "libc/sysv/errfuns.h"
 
@@ -254,7 +255,7 @@ ssize_t readansi(int fd, char *p, size_t n) {
         }
         break;
       default:
-        unreachable;
+        __builtin_unreachable();
     }
   } while (t != kDone);
   errno = e;

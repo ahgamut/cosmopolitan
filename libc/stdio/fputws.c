@@ -27,8 +27,7 @@
  *
  * @param s is a NUL-terminated string that's non-NULL
  * @param f is an open stream
- * @return strlen(s) or -1 w/ errno on error
- * @threadsafe
+ * @return strlen(s), or -1 w/ errno
  */
 int fputws(const wchar_t *s, FILE *f) {
   int rc;

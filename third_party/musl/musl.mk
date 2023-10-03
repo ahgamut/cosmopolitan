@@ -17,16 +17,16 @@ THIRD_PARTY_MUSL_A_OBJS =				\
 	$(THIRD_PARTY_MUSL_A_SRCS:%.c=o/$(MODE)/%.o)
 
 THIRD_PARTY_MUSL_A_DIRECTDEPS =				\
-	LIBC_ALG					\
 	LIBC_CALLS					\
 	LIBC_INTRIN					\
+	LIBC_FMT					\
 	LIBC_MEM					\
 	LIBC_NEXGEN32E					\
 	LIBC_RUNTIME					\
 	LIBC_STDIO					\
 	LIBC_STR					\
-	LIBC_STUBS					\
-	LIBC_SYSV
+	LIBC_SYSV					\
+	THIRD_PARTY_ZLIB
 
 THIRD_PARTY_MUSL_A_DEPS :=				\
 	$(call uniq,$(foreach x,$(THIRD_PARTY_MUSL_A_DIRECTDEPS),$($(x))))
@@ -43,6 +43,9 @@ $(THIRD_PARTY_MUSL_A):					\
 $(THIRD_PARTY_MUSL_A).pkg:				\
 		$(THIRD_PARTY_MUSL_A_OBJS)		\
 		$(foreach x,$(THIRD_PARTY_MUSL_A_DIRECTDEPS),$($(x)_A).pkg)
+
+# offer assurances about the stack safety of cosmo libc
+$(THIRD_PARTY_MUSL_A_OBJS): private COPTS += -Wframe-larger-than=4096 -Walloca-larger-than=4096
 
 THIRD_PARTY_MUSL_LIBS = $(foreach x,$(THIRD_PARTY_MUSL_ARTIFACTS),$($(x)))
 THIRD_PARTY_MUSL_SRCS = $(foreach x,$(THIRD_PARTY_MUSL_ARTIFACTS),$($(x)_SRCS))

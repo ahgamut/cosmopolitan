@@ -17,12 +17,21 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/internal.h"
-#include "libc/nt/enum/filetype.h"
-#include "libc/nt/files.h"
+#include "libc/calls/syscall-nt.internal.h"
+#include "libc/nt/console.h"
 #include "libc/sysv/errfuns.h"
 
 textwindows bool32 sys_isatty_nt(int fd) {
-  return __isfdkind(fd, kFdConsole) ||
-         (__isfdkind(fd, kFdFile) &&
-          GetFileType(__getfdhandleactual(fd)) == kNtFileTypeChar);
+  if (__isfdopen(fd)) {
+    uint32_t mode;
+    if (GetConsoleMode(g_fds.p[fd].handle, &mode)) {
+      return true;
+    } else {
+      enotty();
+      return false;
+    }
+  } else {
+    ebadf();
+    return false;
+  }
 }

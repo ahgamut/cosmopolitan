@@ -1,5 +1,6 @@
 #ifndef COSMOPOLITAN_LIBC_NT_SYNCHRONIZATION_H_
 #define COSMOPOLITAN_LIBC_NT_SYNCHRONIZATION_H_
+#include "libc/intrin/atomic.h"
 #include "libc/nt/struct/criticalsection.h"
 #include "libc/nt/struct/filetime.h"
 #include "libc/nt/struct/linkedlist.h"
@@ -33,26 +34,24 @@ COSMOPOLITAN_C_START_
 │ cosmopolitan § new technology » synchronization                          ─╬─│┼
 ╚────────────────────────────────────────────────────────────────────────────│*/
 
-#define InterlockedAdd(PTR, VAL)                                           \
-  ({                                                                       \
-    typeof(*(PTR)) Res;                                                    \
-    typeof(Res) Val = (VAL);                                               \
-    asm volatile("lock xadd\t%0,%1" : "=r"(Res), "+m"(*(PTR)) : "0"(Val)); \
-    Res + Val;                                                             \
-  })
+static inline int32_t InterlockedAdd(int32_t volatile *p, int32_t x) {
+  return atomic_fetch_add((_Atomic(int32_t) *)p, x) + x;
+}
 
-#define InterlockedExchange(PTR, VAL)                      \
-  ({                                                       \
-    typeof(*(PTR)) Res = (VAL);                            \
-    asm volatile("xchg\t%0,%1" : "+r"(Res), "+m"(*(PTR))); \
-    Res;                                                   \
-  })
+static inline int32_t InterlockedExchange(int32_t volatile *p, int32_t x) {
+  return atomic_exchange((_Atomic(int32_t) *)p, x);
+}
 
 typedef void (*NtTimerapcroutine)(void *lpArgToCompletionRoutine,
                                   uint32_t dwTimerLowValue,
                                   uint32_t dwTimerHighValue);
 typedef void (*NtWaitOrTimerCallback)(void *lpParameter,
                                       bool32 TimerOrWaitFired);
+
+void WakeByAddressAll(void *Address);
+void WakeByAddressSingle(void *Address);
+bool32 WaitOnAddress(const volatile void *Address, void *CompareAddress,
+                     size_t AddressSize, uint32_t opt_dwMilliseconds);
 
 void Sleep(uint32_t dwMilliseconds);
 uint32_t SleepEx(uint32_t dwMilliseconds, bool32 bAlertable);
@@ -76,15 +75,16 @@ bool32 RegisterWaitForSingleObject(int64_t *phNewWaitObject, int64_t hObject,
                                    void *Context, uint32_t dwMilliseconds,
                                    uint32_t dwFlags);
 
-int64_t CreateWaitableTimer(struct NtSecurityAttributes *lpTimerAttributes,
-                            bool32 bManualReset, const char16_t *lpTimerName);
+int64_t CreateWaitableTimer(
+    const struct NtSecurityAttributes *lpTimerAttributes, bool32 bManualReset,
+    const char16_t *lpTimerName);
 bool32 SetWaitableTimer(int64_t hTimer, const int64_t *lpDueTimeAsFtOrNegRela,
                         int32_t opt_lPeriodMs, NtTimerapcroutine opt_callback,
                         void *lpArgToCallback, bool32 fUnsleepSystem);
 
-int32_t SetEvent(int64_t hEvent);
-int32_t ResetEvent(int64_t hEvent);
-int32_t PulseEvent(int64_t hEvent);
+int64_t CreateSemaphore(
+    const struct NtSecurityAttributes *opt_lpSemaphoreAttributes,
+    uint32_t lInitialCount, uint32_t lMaximumCount, const char16_t *opt_lpName);
 
 int32_t ReleaseMutex(int64_t hMutex);
 int32_t ReleaseSemaphore(int64_t hSemaphore, int32_t lReleaseCount,

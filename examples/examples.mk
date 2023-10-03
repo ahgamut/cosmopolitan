@@ -42,8 +42,6 @@ EXAMPLES_DIRECTDEPS =								\
 	DSP_CORE								\
 	DSP_SCALE								\
 	DSP_TTY									\
-	LIBC_ALG								\
-	LIBC_BITS								\
 	LIBC_CALLS								\
 	LIBC_DNS								\
 	LIBC_FMT								\
@@ -51,40 +49,46 @@ EXAMPLES_DIRECTDEPS =								\
 	LIBC_LOG								\
 	LIBC_MEM								\
 	LIBC_NEXGEN32E								\
+	LIBC_NT_ADVAPI32							\
 	LIBC_NT_IPHLPAPI							\
 	LIBC_NT_KERNEL32							\
 	LIBC_NT_NTDLL								\
 	LIBC_NT_USER32								\
 	LIBC_NT_WS2_32								\
-	LIBC_NT_ADVAPI32							\
-	LIBC_RAND								\
+	LIBC_PROC								\
 	LIBC_RUNTIME								\
 	LIBC_SOCK								\
 	LIBC_STDIO								\
 	LIBC_STR								\
-	LIBC_STUBS								\
 	LIBC_SYSV								\
 	LIBC_SYSV_CALLS								\
 	LIBC_TESTLIB								\
 	LIBC_THREAD								\
 	LIBC_TIME								\
 	LIBC_TINYMATH								\
-	LIBC_UNICODE								\
+	LIBC_VGA								\
 	LIBC_X									\
-	LIBC_ZIPOS								\
 	NET_HTTP								\
 	NET_HTTPS								\
+	THIRD_PARTY_AWK								\
 	THIRD_PARTY_COMPILER_RT							\
 	THIRD_PARTY_DLMALLOC							\
+	THIRD_PARTY_DOUBLECONVERSION						\
 	THIRD_PARTY_GDTOA							\
 	THIRD_PARTY_GETOPT							\
+	THIRD_PARTY_HIREDIS							\
 	THIRD_PARTY_LIBCXX							\
 	THIRD_PARTY_LINENOISE							\
 	THIRD_PARTY_LUA								\
 	THIRD_PARTY_MBEDTLS							\
 	THIRD_PARTY_MUSL							\
+	THIRD_PARTY_NSYNC							\
+	THIRD_PARTY_NSYNC_MEM							\
 	THIRD_PARTY_QUICKJS							\
+	THIRD_PARTY_SED								\
 	THIRD_PARTY_STB								\
+	THIRD_PARTY_TR								\
+	THIRD_PARTY_VQSORT							\
 	THIRD_PARTY_XED								\
 	THIRD_PARTY_ZLIB							\
 	TOOL_BUILD_LIB								\
@@ -97,8 +101,8 @@ o/$(MODE)/examples/examples.pkg:						\
 		$(EXAMPLES_OBJS)						\
 		$(foreach x,$(EXAMPLES_DIRECTDEPS),$($(x)_A).pkg)
 
-o/$(MODE)/examples/unbourne.o:							\
-		OVERRIDE_CPPFLAGS +=						\
+o/$(MODE)/examples/unbourne.o: private						\
+		CPPFLAGS +=							\
 			-DSTACK_FRAME_UNLIMITED					\
 			-fpie
 
@@ -143,26 +147,27 @@ o/$(MODE)/examples/nesemu1.com.dbg:						\
 		$(EXAMPLES_BOOTLOADER)
 	@$(APELINK)
 
-o/$(MODE)/examples/nesemu1.com:							\
-		o/$(MODE)/examples/nesemu1.com.dbg				\
-		o/$(MODE)/third_party/zip/zip.com				\
-		o/$(MODE)/tool/build/symtab.com
-	@$(COMPILE) -AOBJCOPY -T$@ $(OBJCOPY) -S -O binary $< $@
-	@$(COMPILE) -ASYMTAB o/$(MODE)/tool/build/symtab.com			\
-		-o o/$(MODE)/examples/.nesemu1/.symtab $<
-	@$(COMPILE) -AZIP -T$@ o/$(MODE)/third_party/zip/zip.com -9qj $@	\
-		o/$(MODE)/examples/.nesemu1/.symtab
+o/$(MODE)/examples/picol.o: private				\
+		CPPFLAGS +=					\
+			-DSTACK_FRAME_UNLIMITED
 
-o/$(MODE)/examples/nesemu1.o: QUOTA += -M512m
-o/$(MODE)/usr/share/dict/words.zip.o: ZIPOBJ_FLAGS += -C2
+o/$(MODE)/examples/picol.com.dbg:				\
+		$(EXAMPLES_DEPS)				\
+		o/$(MODE)/examples/picol.o			\
+		o/$(MODE)/examples/examples.pkg			\
+		$(CRT)						\
+		$(APE_NO_MODIFY_SELF)
+	@$(APELINK)
+
+o/$(MODE)/examples/nesemu1.o: private QUOTA += -M512m
+o/$(MODE)/usr/share/dict/words.zip.o: private ZIPOBJ_FLAGS += -C2
 
 $(EXAMPLES_OBJS): examples/examples.mk
 
-o/$(MODE)/usr/share/dict/words:							\
-		usr/share/dict/words.gz						\
-		o/$(MODE)/tool/build/gzip.com
+o/$(MODE)/usr/share/dict/words:					\
+		usr/share/dict/words.gz
 	@$(MKDIR) $(@D)
-	@o/$(MODE)/tool/build/gzip.com $(ZFLAGS) -cd <$< >$@
+	@$(GZIP) $(ZFLAGS) -cd <$< >$@
 
 ################################################################################
 

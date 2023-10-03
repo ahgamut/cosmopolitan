@@ -17,8 +17,9 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/internal.h"
-#include "libc/calls/strace.internal.h"
+#include "libc/calls/struct/fd.internal.h"
 #include "libc/dce.h"
+#include "libc/intrin/strace.internal.h"
 #include "libc/sock/internal.h"
 #include "libc/sock/sock.h"
 #include "libc/sock/syscall_fd.internal.h"
@@ -34,12 +35,16 @@
  */
 int shutdown(int fd, int how) {
   int rc;
-  if (!IsWindows()) {
+  if (fd < g_fds.n && g_fds.p[fd].kind == kFdZip) {
+    rc = enotsock();
+  } else if (!IsWindows()) {
     rc = sys_shutdown(fd, how);
+  } else if (!__isfdopen(fd)) {
+    rc = ebadf();
   } else if (__isfdkind(fd, kFdSocket)) {
     rc = sys_shutdown_nt(&g_fds.p[fd], how);
   } else {
-    rc = ebadf();
+    rc = enotsock();
   }
   STRACE("shutdown(%d, %d) -> %d% lm", fd, how, rc);
   return rc;

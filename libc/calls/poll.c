@@ -16,17 +16,14 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/likely.h"
-#include "libc/calls/calls.h"
-#include "libc/calls/strace.internal.h"
+#include "libc/calls/bo.internal.h"
+#include "libc/calls/cp.internal.h"
 #include "libc/dce.h"
-#include "libc/errno.h"
 #include "libc/intrin/asan.internal.h"
-#include "libc/intrin/describeflags.internal.h"
-#include "libc/intrin/kprintf.h"
-#include "libc/macros.internal.h"
-#include "libc/sock/internal.h"
-#include "libc/sock/sock.h"
+#include "libc/intrin/strace.internal.h"
+#include "libc/sock/struct/pollfd.h"
+#include "libc/sock/struct/pollfd.internal.h"
+#include "libc/stdckdint.h"
 #include "libc/sysv/errfuns.h"
 
 /**
@@ -61,15 +58,19 @@
  * @return fds[𝑖].revents is always zero initializaed and then will
  *     be populated with POLL{IN,OUT,PRI,HUP,ERR,NVAL} if something
  *     was determined about the file descriptor
+ * @raise ECANCELED if thread was cancelled in masked mode
+ * @raise EINTR if signal was delivered
+ * @cancellationpoint
  * @asyncsignalsafe
- * @threadsafe
  * @norestart
  */
 int poll(struct pollfd *fds, size_t nfds, int timeout_ms) {
-  int i, rc;
-  uint64_t millis;
+  int rc;
+  size_t n;
+  BEGIN_CANCELLATION_POINT;
 
-  if (IsAsan() && !__asan_is_valid(fds, nfds * sizeof(struct pollfd))) {
+  if (IsAsan() &&
+      (ckd_mul(&n, nfds, sizeof(struct pollfd)) || !__asan_is_valid(fds, n))) {
     rc = efault();
   } else if (!IsWindows()) {
     if (!IsMetal()) {
@@ -78,30 +79,14 @@ int poll(struct pollfd *fds, size_t nfds, int timeout_ms) {
       rc = sys_poll_metal(fds, nfds, timeout_ms);
     }
   } else {
-    millis = timeout_ms;
-    rc = sys_poll_nt(fds, nfds, &millis);
+    BEGIN_BLOCKING_OPERATION;
+    uint32_t ms = timeout_ms >= 0 ? timeout_ms : -1u;
+    rc = sys_poll_nt(fds, nfds, &ms, 0);
+    END_BLOCKING_OPERATION;
   }
 
-#if defined(SYSDEBUG) && _POLLTRACE
-  if (UNLIKELY(__strace > 0)) {
-    kprintf(STRACE_PROLOGUE "poll(");
-    if ((!IsAsan() && kisdangerous(fds)) ||
-        (IsAsan() && !__asan_is_valid(fds, nfds * sizeof(struct pollfd)))) {
-      kprintf("%p", fds);
-    } else {
-      char flagbuf[2][64];
-      kprintf("[{");
-      for (i = 0; i < MIN(5, nfds); ++i) {
-        kprintf(
-            "%s{%d, %s, %s}", i ? ", " : "", fds[i].fd,
-            DescribePollFlags(flagbuf[0], sizeof(flagbuf[0]), fds[i].events),
-            DescribePollFlags(flagbuf[1], sizeof(flagbuf[1]), fds[i].revents));
-      }
-      kprintf("%s}]", i == 5 ? "..." : "");
-    }
-    kprintf(", %'zu, %'d) → %d% lm\n", nfds, timeout_ms, rc);
-  }
-#endif
-
+  END_CANCELLATION_POINT;
+  STRACE("poll(%s, %'zu, %'d) → %d% lm", DescribePollFds(rc, fds, nfds), nfds,
+         timeout_ms, rc);
   return rc;
 }

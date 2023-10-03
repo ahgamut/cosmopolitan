@@ -172,13 +172,6 @@ TEST(strtoul, weirdComma) {
   EXPECT_EQ(0, e - p);
 }
 
-TEST(strtoul, outsideLimit_doesModulus) {
-  EXPECT_EQ(/* python -c 'print(((2**123-1)/123)%(2**64))' */
-            9298358801382050408ull,
-            strtoul(/* python -c 'print((2**123-1)/123)' */
-                    "86453853384384772221385825058884200", 0, 10));
-}
-
 TEST(strtol, testHex) {
   EXPECT_EQ(0, strtol("", 0, 16));
   EXPECT_EQ(0, strtol("0", 0, 16));
@@ -313,37 +306,12 @@ TEST(strtoimax, testEndPtr) {
   ASSERT_EQ(1, e - p);
 }
 
-TEST(strtoi128, testLimits) {
-  EXPECT_EQ(
-      ((uint128_t)0xffffffffffffffff) << 64 | (uint128_t)0xffffffffffffffff,
-      strtoi128("-1", NULL, 0));
-  EXPECT_EQ(
-      ((uint128_t)0x7fffffffffffffff) << 64 | (uint128_t)0xffffffffffffffff,
-      strtoi128("0x7fffffffffffffffffffffffffffffff", NULL, 0));
-}
-
-TEST(strtoi128, testOutsideLimit) {
-  errno = 0;
-  EXPECT_EQ(
-      ((uint128_t)0x7fffffffffffffff) << 64 | (uint128_t)0xffffffffffffffff,
-      strtoi128("0x80000000000000000000000000000000", NULL, 0));
-  EXPECT_EQ(ERANGE, errno);
-  errno = 0;
-  EXPECT_EQ(((uint128_t)0x8000000000000000) << 64 | 0x0000000000000000,
-            strtoi128("-0x80000000000000000000000000000001", NULL, 0));
-  EXPECT_EQ(ERANGE, errno);
-}
-
 TEST(strtoul, neghex) {
   errno = 0;
   ASSERT_EQ(-16, (long)strtoul("0xfffffffffffffff0", NULL, 0));
   EXPECT_EQ(0, errno);
 }
 
-TEST(strtoumax, testZero) {
-  EXPECT_EQ(UINTMAX_MIN, strtoumax("0", NULL, 0));
-  EXPECT_EQ(UINT128_MIN, strtou128("0", NULL, 0));
-}
 TEST(strtoumax, testDecimal) {
   EXPECT_EQ(123, strtoumax("123", NULL, 0));
   EXPECT_EQ(-123, strtoumax("-123", NULL, 0));
@@ -359,18 +327,6 @@ TEST(strtoumax, testOctal) {
 TEST(strtoumax, testBinary) {
   EXPECT_EQ(42, strtoumax("0b101010", NULL, 0));
   EXPECT_EQ(42, strtoumax("0b101010", NULL, 2));
-}
-
-TEST(strtou128, test128imum) {
-  EXPECT_EQ(UINT128_MAX,
-            strtou128("340282366920938463463374607431768211455", NULL, 0));
-  EXPECT_EQ(UINT128_MAX,
-            strtou128("0xffffffffffffffffffffffffffffffff", NULL, 0));
-}
-
-TEST(strtou128, testTwosBane) {
-  EXPECT_EQ(((uint128_t)0x8000000000000000) << 64 | 0x0000000000000000,
-            strtou128("0x80000000000000000000000000000000", NULL, 0));
 }
 
 TEST(wcstol, test) {
@@ -556,30 +512,79 @@ TEST(wcstoumax, testIBM) {
   ASSERT_STREQ(L"f", e);
 }
 
+TEST(strtol, term) {
+  static char const input[2][3] = {"0x", "0b"};
+  static int const base[] = {0, 2, 10};
+  for (int i = 0; i < 2; i++) {
+    for (int j = 0; j < 3; j++) {
+      char *term;
+      strtoll(input[i], &term, base[j]);
+      ASSERT_EQ(input[i] + 1, term);
+    }
+  }
+}
+
+TEST(strtoul, testoverflow) {
+  errno = 0;
+  char *e = 0;
+  unsigned long x = strtoul("18446744073709551616", &e, 0);
+  ASSERT_EQ(ULONG_MAX, x);
+  ASSERT_EQ(ERANGE, errno);
+  ASSERT_STREQ("", e);
+}
+
+TEST(strtol, invalidHex1) {
+  char *c = 0;
+  long x = strtol("0xz", &c, 16);
+  ASSERT_EQ(0, x);
+  ASSERT_STREQ("xz", c);
+}
+
+TEST(strtol, invalidHex2) {
+  char *c = 0;
+  long x = strtol("0xez", &c, 16);
+  ASSERT_EQ(0xe, x);
+  ASSERT_STREQ("z", c);
+}
+
+TEST(strtol, invalidHex3) {
+  char *c = 0;
+  long x = strtol("0xez", &c, 0);
+  ASSERT_EQ(0xe, x);
+  ASSERT_STREQ("z", c);
+}
+
+TEST(strtol, invalidBin1) {
+  char *c = 0;
+  long x = strtol("0b2", &c, 2);
+  ASSERT_EQ(0, x);
+  ASSERT_STREQ("b2", c);
+}
+
+TEST(strtol, invalidBin2) {
+  char *c = 0;
+  long x = strtol("0b2", &c, 0);
+  ASSERT_EQ(0, x);
+  ASSERT_STREQ("b2", c);
+}
+
 BENCH(atoi, bench) {
-  EZBENCH2("atoi 10⁸", donothing, EXPROPRIATE(atoi(VEIL("r", "100000000"))));
+  EZBENCH2("atoi 10⁸", donothing,
+           __expropriate(atoi(__veil("r", "100000000"))));
   EZBENCH2("strtol 10⁸", donothing,
-           EXPROPRIATE(strtol(VEIL("r", "100000000"), 0, 10)));
+           __expropriate(strtol(__veil("r", "100000000"), 0, 10)));
   EZBENCH2("strtoul 10⁸", donothing,
-           EXPROPRIATE(strtol(VEIL("r", "100000000"), 0, 10)));
+           __expropriate(strtol(__veil("r", "100000000"), 0, 10)));
   EZBENCH2("wcstol 10⁸", donothing,
-           EXPROPRIATE(wcstol(VEIL("r", L"100000000"), 0, 10)));
+           __expropriate(wcstol(__veil("r", L"100000000"), 0, 10)));
   EZBENCH2("wcstoul 10⁸", donothing,
-           EXPROPRIATE(wcstol(VEIL("r", L"100000000"), 0, 10)));
+           __expropriate(wcstol(__veil("r", L"100000000"), 0, 10)));
   EZBENCH2("strtoimax 10⁸", donothing,
-           EXPROPRIATE(strtoimax(VEIL("r", "100000000"), 0, 10)));
+           __expropriate(strtoimax(__veil("r", "100000000"), 0, 10)));
   EZBENCH2("strtoumax 10⁸", donothing,
-           EXPROPRIATE(strtoimax(VEIL("r", "100000000"), 0, 10)));
+           __expropriate(strtoimax(__veil("r", "100000000"), 0, 10)));
   EZBENCH2("wcstoimax 10⁸", donothing,
-           EXPROPRIATE(wcstoimax(VEIL("r", L"100000000"), 0, 10)));
+           __expropriate(wcstoimax(__veil("r", L"100000000"), 0, 10)));
   EZBENCH2("wcstoumax 10⁸", donothing,
-           EXPROPRIATE(wcstoimax(VEIL("r", L"100000000"), 0, 10)));
-  EZBENCH2("strtoi128 10⁸", donothing,
-           EXPROPRIATE(strtoi128(VEIL("r", "100000000"), 0, 10)));
-  EZBENCH2("strtou128 10⁸", donothing,
-           EXPROPRIATE(strtoi128(VEIL("r", "100000000"), 0, 10)));
-  EZBENCH2("wcstoi128 10⁸", donothing,
-           EXPROPRIATE(wcstoi128(VEIL("r", L"100000000"), 0, 10)));
-  EZBENCH2("wcstou128 10⁸", donothing,
-           EXPROPRIATE(wcstoi128(VEIL("r", L"100000000"), 0, 10)));
+           __expropriate(wcstoimax(__veil("r", L"100000000"), 0, 10)));
 }

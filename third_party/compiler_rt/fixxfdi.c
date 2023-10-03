@@ -12,8 +12,10 @@
  *
  * ===----------------------------------------------------------------------===
  */
+#include "libc/math.h"
+#if !(LDBL_MANT_DIG == 53 && LDBL_MAX_EXP == 1024)
 
-STATIC_YOINK("huge_compiler_rt_license");
+__static_yoink("huge_compiler_rt_license");
 
 #if !_ARCH_PPC
 
@@ -49,3 +51,5 @@ __fixxfdi(long double a)
 }
 
 #endif /* !_ARCH_PPC */
+
+#endif /* long double is long */

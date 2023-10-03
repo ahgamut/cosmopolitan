@@ -22,8 +22,8 @@
 #include "dsp/tty/ttyrgb.h"
 #include "dsp/tty/windex.h"
 #include "libc/assert.h"
-#include "libc/bits/bits.h"
-#include "libc/bits/safemacros.internal.h"
+#include "libc/intrin/bits.h"
+#include "libc/intrin/safemacros.internal.h"
 #include "libc/limits.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
@@ -609,7 +609,7 @@ static struct Pick PickBlockUnicodeAnsi(struct TtyRgb tl, struct TtyRgb tr,
   struct TtyRgb tr2 = GetQuant(tr);
   struct TtyRgb bl2 = GetQuant(bl);
   struct TtyRgb br2 = GetQuant(br);
-  unsigned i, p1, p2;
+  unsigned p1, p2;
   uint16_t picks1[96] forcealign(32);
   uint16_t picks2[32] forcealign(32);
   memset(picks1, 0x79, sizeof(picks1));
@@ -646,7 +646,7 @@ static struct Pick PickBlockCp437Ansi(struct TtyRgb tl, struct TtyRgb tr,
   struct TtyRgb tr2 = GetQuant(tr);
   struct TtyRgb bl2 = GetQuant(bl);
   struct TtyRgb br2 = GetQuant(br);
-  unsigned i, p1, p2;
+  unsigned p1, p2;
   uint16_t picks1[32] forcealign(32);
   uint16_t picks2[32] forcealign(32);
   memset(picks1, 0x79, sizeof(picks1));
@@ -660,7 +660,6 @@ static struct Pick PickBlockCp437Ansi(struct TtyRgb tl, struct TtyRgb tr,
 
 static struct Pick PickBlockCp437True(struct TtyRgb tl, struct TtyRgb tr,
                                       struct TtyRgb bl, struct TtyRgb br) {
-  unsigned i;
   uint16_t picks[32] forcealign(32);
   memset(picks, 0x79, sizeof(picks));
   PickCp437(picks, tl, tr, bl, br, tl, tr, bl, br);
@@ -775,7 +774,10 @@ char *ttyraster(char *v, const struct TtyRgb *c, size_t yn, size_t xn,
   struct Glyph glyph;
   struct TtyRgb chun[4], lastchunk[4];
   for (y = 0; y < yn; y += 2, c += xn) {
-    if (y) *v++ = '\r', *v++ = '\n';
+    if (y) {
+      v = stpcpy(v, "\e[0m\r\n");
+      v = setbgfg(v, bg, fg);
+    }
     for (x = 0; x < xn; x += 2, c += 2) {
       CopyChunk(chun, c, xn);
       if (ttyquant()->alg == kTtyQuantTrue) {
@@ -795,6 +797,6 @@ char *ttyraster(char *v, const struct TtyRgb *c, size_t yn, size_t xn,
       memcpy(lastchunk, chun, sizeof(chun));
     }
   }
-  *v = '\0';
+  v = stpcpy(v, "\e[0m");
   return v;
 }

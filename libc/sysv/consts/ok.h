@@ -1,19 +1,17 @@
 #ifndef COSMOPOLITAN_LIBC_SYSV_CONSTS_OK_H_
 #define COSMOPOLITAN_LIBC_SYSV_CONSTS_OK_H_
-#include "libc/runtime/symbolic.h"
 
-#define F_OK SYMBOLIC(F_OK)
-#define R_OK SYMBOLIC(R_OK)
-#define W_OK SYMBOLIC(W_OK)
-#define X_OK SYMBOLIC(X_OK)
+#define F_OK 0
+#define X_OK X_OK
+#define W_OK W_OK
+#define R_OK R_OK
 
 #if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 
-extern const long F_OK;
-extern const long R_OK;
-extern const long W_OK;
-extern const long X_OK;
+extern const int X_OK;
+extern const int W_OK;
+extern const unsigned R_OK; /* warning: is sign bit on windows */
 
 COSMOPOLITAN_C_END_
 #endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */

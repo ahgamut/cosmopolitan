@@ -18,7 +18,9 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/dce.h"
 #include "libc/intrin/asan.internal.h"
+#include "libc/limits.h"
 #include "libc/nexgen32e/x86feature.h"
+#include "libc/stdckdint.h"
 #include "libc/str/str.h"
 
 typedef wchar_t xmm_t __attribute__((__vector_size__(16), __aligned__(4)));
@@ -34,10 +36,11 @@ static inline const wchar_t *wmemrchr_pure(const wchar_t *s, wchar_t c,
   return 0;
 }
 
-noasan static inline const wchar_t *wmemrchr_sse(const wchar_t *s, wchar_t c,
-                                                 size_t n) {
+#if defined(__x86_64__) && !defined(__chibicc__)
+static inline const wchar_t *wmemrchr_sse(const wchar_t *s, wchar_t c,
+                                                   size_t n) {
   size_t i;
-  unsigned k, m;
+  unsigned m;
   xmm_t v, t = {c, c, c, c};
   for (i = n; i >= 4;) {
     v = *(const xmm_t *)(s + (i -= 4));
@@ -54,6 +57,7 @@ noasan static inline const wchar_t *wmemrchr_sse(const wchar_t *s, wchar_t c,
   }
   return 0;
 }
+#endif
 
 /**
  * Returns pointer to first instance of character.
@@ -64,13 +68,17 @@ noasan static inline const wchar_t *wmemrchr_sse(const wchar_t *s, wchar_t c,
  * @return is pointer to first instance of c or NULL if not found
  * @asyncsignalsafe
  */
-void *wmemrchr(const void *s, wchar_t c, size_t n) {
+void *wmemrchr(const wchar_t *s, wchar_t c, size_t n) {
+#if defined(__x86_64__) && !defined(__chibicc__)
+  size_t bytes;
   const void *r;
-  if (!IsTiny() && X86_HAVE(SSE)) {
-    if (IsAsan()) __asan_verify(s, n * 4);
-    r = wmemrchr_sse(s, c, n);
-  } else {
-    r = wmemrchr_pure(s, c, n);
+  if (IsAsan()) {
+    if (ckd_mul(&bytes, n, sizeof(wchar_t))) bytes = -1;
+    __asan_verify(s, bytes);
   }
+  r = wmemrchr_sse(s, c, n);
   return (void *)r;
+#else
+  return (void *)wmemrchr_pure(s, c, n);
+#endif
 }

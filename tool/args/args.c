@@ -16,17 +16,18 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "tool/args/args.h"
 #include "libc/assert.h"
 #include "libc/calls/calls.h"
 #include "libc/errno.h"
-#include "libc/runtime/gc.internal.h"
+#include "libc/mem/gc.internal.h"
+#include "libc/mem/mem.h"
 #include "libc/runtime/runtime.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/o.h"
 #include "libc/x/x.h"
-#include "tool/args/args.h"
 
-STATIC_YOINK("zip_uri_support");
+__static_yoink("zipos");
 
 static struct ZipArgs {
   bool initialized;
@@ -54,11 +55,11 @@ void FreeZipArgs(void) {
 }
 
 int LoadZipArgsImpl(int *argc, char ***argv, char *data) {
-  int i, n, fd;
+  int i, n;
   bool founddots;
   char *arg, **args, *state, *start;
   assert(!g_zipargs.loaded);
-  if (_chomp(data)) {
+  if (chomp(data)) {
     n = 0;
     args = 0;
     start = data;

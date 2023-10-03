@@ -8,6 +8,7 @@ THIRD_PARTY_QUICKJS_BINS = $(THIRD_PARTY_QUICKJS_COMS) $(THIRD_PARTY_QUICKJS_COM
 THIRD_PARTY_QUICKJS = $(THIRD_PARTY_QUICKJS_A_DEPS) $(THIRD_PARTY_QUICKJS_A)
 THIRD_PARTY_QUICKJS_A = o/$(MODE)/third_party/quickjs/quickjs.a
 THIRD_PARTY_QUICKJS_HDRS = $(foreach x,$(THIRD_PARTY_QUICKJS_ARTIFACTS),$($(x)_HDRS))
+THIRD_PARTY_QUICKJS_INCS = $(foreach x,$(THIRD_PARTY_QUICKJS_ARTIFACTS),$($(x)_INCS))
 
 THIRD_PARTY_QUICKJS_A_SRCS =							\
 	third_party/quickjs/array.c						\
@@ -66,11 +67,17 @@ THIRD_PARTY_QUICKJS_A_HDRS =							\
 	third_party/quickjs/quickjs-libc.h					\
 	third_party/quickjs/quickjs.h
 
+THIRD_PARTY_QUICKJS_A_INCS =							\
+	third_party/quickjs/libregexp-opcode.inc				\
+	third_party/quickjs/libunicode-table.inc				\
+	third_party/quickjs/quickjs-atom.inc					\
+	third_party/quickjs/quickjs-opcode.inc					\
+	third_party/quickjs/unicode_gen_def.inc
+
 THIRD_PARTY_QUICKJS_A_OBJS =							\
 	$(THIRD_PARTY_QUICKJS_A_SRCS:%.c=o/$(MODE)/%.o)
 
 THIRD_PARTY_QUICKJS_A_DIRECTDEPS =						\
-	LIBC_ALG								\
 	LIBC_CALLS								\
 	LIBC_FMT								\
 	LIBC_INTRIN								\
@@ -78,6 +85,7 @@ THIRD_PARTY_QUICKJS_A_DIRECTDEPS =						\
 	LIBC_MEM								\
 	LIBC_NEXGEN32E								\
 	LIBC_NT_KERNEL32							\
+	LIBC_PROC								\
 	LIBC_RUNTIME								\
 	LIBC_SOCK								\
 	LIBC_STDIO								\
@@ -86,7 +94,6 @@ THIRD_PARTY_QUICKJS_A_DIRECTDEPS =						\
 	LIBC_SYSV_CALLS								\
 	LIBC_TIME								\
 	LIBC_TINYMATH								\
-	LIBC_UNICODE								\
 	LIBC_X									\
 	THIRD_PARTY_COMPILER_RT							\
 	THIRD_PARTY_GDTOA							\
@@ -132,12 +139,12 @@ THIRD_PARTY_QUICKJS_CHECKS =							\
 o/$(MODE)/third_party/quickjs/qjscalc.c:					\
 		third_party/quickjs/qjscalc.js					\
 		o/$(MODE)/third_party/quickjs/qjsc.com
-	@$(COMPILE) -AQJSC o/$(MODE)/third_party/quickjs/qjsc.com -fbignum -o $@ -c $<
+	@$(COMPILE) -wAQJSC o/$(MODE)/third_party/quickjs/qjsc.com -fbignum -o $@ -c $<
 
 o/$(MODE)/third_party/quickjs/repl.c:						\
 		third_party/quickjs/repl.js					\
 		o/$(MODE)/third_party/quickjs/qjsc.com
-	@$(COMPILE) -AQJSC o/$(MODE)/third_party/quickjs/qjsc.com -o $@ -m -c $<
+	@$(COMPILE) -wAQJSC o/$(MODE)/third_party/quickjs/qjsc.com -o $@ -m -c $<
 
 o/$(MODE)/third_party/quickjs/qjs.com.dbg:					\
 		$(THIRD_PARTY_QUICKJS)						\
@@ -152,11 +159,9 @@ o/$(MODE)/third_party/quickjs/qjs.com:						\
 		o/$(MODE)/third_party/quickjs/qjs.com.dbg			\
 		o/$(MODE)/third_party/zip/zip.com				\
 		o/$(MODE)/tool/build/symtab.com
-	@$(COMPILE) -AOBJCOPY -T$@ $(OBJCOPY) -S -O binary $< $@
-	@$(COMPILE) -ASYMTAB o/$(MODE)/tool/build/symtab.com			\
-		-o o/$(MODE)/third_party/quickjs/.qjs/.symtab $<
-	@$(COMPILE) -AZIP -T$@ o/$(MODE)/third_party/zip/zip.com -9qj $@	\
-		o/$(MODE)/third_party/quickjs/.qjs/.symtab
+	@$(MAKE_OBJCOPY)
+	@$(MAKE_SYMTAB_CREATE)
+	@$(MAKE_SYMTAB_ZIP)
 
 o/$(MODE)/third_party/quickjs/qjsc.com.dbg:					\
 		$(THIRD_PARTY_QUICKJS)						\
@@ -186,27 +191,23 @@ o/$(MODE)/third_party/quickjs/unicode_gen.com.dbg:				\
 		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
 
-$(THIRD_PARTY_QUICKJS_OBJS):							\
-		OVERRIDE_CPPFLAGS +=						\
+$(THIRD_PARTY_QUICKJS_OBJS): private						\
+		CPPFLAGS +=							\
 			-DCONFIG_BIGNUM						\
-			-DCONFIG_VERSION=\"$(shell cat third_party/quickjs/VERSION)\"
+			-DCONFIG_VERSION=\"2021-03-27\"
 
-o/tiny/third_party/quickjs/call.o:						\
-		OVERRIDE_CFLAGS +=						\
+o/tiny/third_party/quickjs/call.o: private					\
+		CFLAGS +=							\
 			-O2
-
-o/$(MODE)/third_party/quickjs/unicode_gen.o:					\
-		OVERRIDE_CPPFLAGS +=						\
-			-DSTACK_FRAME_UNLIMITED
 
 # TODO(jart): Replace alloca() calls with malloc().
 o/$(MODE)/third_party/quickjs/libregexp.o					\
-o/$(MODE)/third_party/quickjs/quickjs.o:					\
-		OVERRIDE_CPPFLAGS +=						\
+o/$(MODE)/third_party/quickjs/quickjs.o: private				\
+		CPPFLAGS +=							\
 			-DSTACK_FRAME_UNLIMITED
 
-o/$(MODE)/third_party/quickjs/call.o: QUOTA = -M1024m -C32 -L180
-o/$(MODE)/third_party/quickjs/quickjs.o: QUOTA = -M512m -C32 -L180
+o/$(MODE)/third_party/quickjs/call.o: private QUOTA = -M1024m -C32 -L180
+o/$(MODE)/third_party/quickjs/quickjs.o: private QUOTA = -M512m -C32 -L180
 
 .PHONY: o/$(MODE)/third_party/quickjs
 o/$(MODE)/third_party/quickjs:							\

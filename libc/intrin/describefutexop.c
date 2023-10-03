@@ -16,22 +16,47 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/fmt/itoa.h"
 #include "libc/intrin/describeflags.internal.h"
-#include "libc/macros.internal.h"
-#include "libc/nt/enum/consolemodeflags.h"
+#include "libc/str/str.h"
 #include "libc/sysv/consts/futex.h"
 
-const char *DescribeNtFutexOp(int x) {
-  const struct DescribeFlags kFutexOp[] = {
-      {FUTEX_WAIT_PRIVATE, "WAIT_PRIVATE"},        //
-      {FUTEX_WAKE_PRIVATE, "WAKE_PRIVATE"},        //
-      {FUTEX_REQUEUE_PRIVATE, "REQUEUE_PRIVATE"},  //
-      {FUTEX_PRIVATE_FLAG, "PRIVATE_FLAG"},        //
-      {FUTEX_REQUEUE, "REQUEUE"},                  //
-      {FUTEX_WAIT, "WAIT"},                        //
-      {FUTEX_WAKE, "WAKE"},                        //
-  };
-  _Alignas(char) static char futexop[32];
-  return DescribeFlags(futexop, sizeof(futexop), kFutexOp, ARRAYLEN(kFutexOp),
-                       "FUTEX_", x);
+const char *(DescribeFutexOp)(char buf[64], int x) {
+
+  bool priv = false;
+  if (x & FUTEX_PRIVATE_FLAG) {
+    priv = true;
+    x &= ~FUTEX_PRIVATE_FLAG;
+  }
+
+  bool real = false;
+  if (x & FUTEX_CLOCK_REALTIME) {
+    real = true;
+    x &= ~FUTEX_CLOCK_REALTIME;
+  }
+
+  char *p = buf;
+
+  if (x == FUTEX_WAIT) {
+    p = stpcpy(p, "FUTEX_WAIT");
+  } else if (x == FUTEX_WAKE) {
+    p = stpcpy(p, "FUTEX_WAKE");
+  } else if (x == FUTEX_REQUEUE) {
+    p = stpcpy(p, "FUTEX_REQUEUE");
+  } else if (x == FUTEX_WAIT_BITSET) {
+    p = stpcpy(p, "FUTEX_WAIT_BITSET");
+  } else {
+    p = stpcpy(p, "FUTEX_");
+    p = FormatUint32(p, x);
+  }
+
+  if (priv) {
+    p = stpcpy(p, "_PRIVATE");
+  }
+
+  if (real) {
+    p = stpcpy(p, "|FUTEX_CLOCK_REALTIME");
+  }
+
+  return buf;
 }

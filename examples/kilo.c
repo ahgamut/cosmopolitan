@@ -58,14 +58,14 @@ Contact: antirez@gmail.com\"\n\
 #endif
 #define _GNU_SOURCE
 
-#include "libc/alg/alg.h"
-#include "libc/alg/arraylist2.internal.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/termios.h"
 #include "libc/calls/weirdtypes.h"
 #include "libc/errno.h"
 #include "libc/fmt/fmt.h"
 #include "libc/log/log.h"
+#include "libc/mem/alg.h"
+#include "libc/mem/arraylist2.internal.h"
 #include "libc/mem/mem.h"
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
@@ -355,7 +355,7 @@ int getCursorPosition(int64_t ifd, int64_t ofd, int *rows, int *cols) {
  * Returns 0 on success, -1 on error. */
 int getWindowSize(int64_t ifd, int64_t ofd, int *rows, int *cols) {
   struct winsize ws;
-  if (getttysize(STDOUT_FILENO, &ws) == -1 || ws.ws_col == 0) {
+  if (tcgetwinsize(1, &ws) == -1 || ws.ws_col == 0) {
     /* ioctl() failed. Try to query the terminal itself. */
     int orig_row, orig_col, retval;
 
@@ -413,9 +413,9 @@ void editorUpdateSyntax(erow *row) {
   int i, prev_sep, in_string, in_comment;
   char *p;
   const char *const *keywords = E.syntax->keywords;
-  char *scs = E.syntax->singleline_comment_start;
-  char *mcs = E.syntax->multiline_comment_start;
-  char *mce = E.syntax->multiline_comment_end;
+  const char *scs = E.syntax->singleline_comment_start;
+  const char *mcs = E.syntax->multiline_comment_start;
+  const char *mce = E.syntax->multiline_comment_end;
 
   /* Point to the first non-space char. */
   p = row->render;
@@ -539,7 +539,7 @@ void editorUpdateSyntax(erow *row) {
     i++;
   }
 
-  /* Propagate syntax change to the next row if the open commen
+  /* Propagate syntax change to the next row if the open comment
    * state changed. This may recursively affect all the following rows
    * in the file. */
   int oc = editorRowHasOpenComment(row);
@@ -575,7 +575,7 @@ int editorSyntaxToColor(int hl) {
  * setting it in the global state E.syntax. */
 void editorSelectSyntaxHighlight(char *filename) {
   for (unsigned j = 0; j < HLDB_ENTRIES; j++) {
-    struct editorSyntax *s = HLDB + j;
+    const struct editorSyntax *s = HLDB + j;
     unsigned i = 0;
     while (s->filematch[i]) {
       char *p;
@@ -745,7 +745,7 @@ void editorInsertChar(int c) {
   erow *row = (filerow >= E.numrows) ? NULL : &E.row[filerow];
 
   /* If the row where the cursor is currently located does not exist in our
-   * logical representaion of the file, add enough empty rows as needed. */
+   * logical representation of the file, add enough empty rows as needed. */
   if (!row) {
     while (E.numrows <= filerow) editorInsertRow(E.numrows, "", 0);
   }
@@ -898,7 +898,7 @@ struct abuf {
 };
 
 static void abAppend(struct abuf *ab, const char *s, int len) {
-  CONCAT(&ab->p, &ab->i, &ab->n, s, len);
+  CONCAT(&ab->p, &ab->i, &ab->n, (void *)s, len);
 }
 
 /* This function writes the whole screen using VT100 escape characters
@@ -920,7 +920,7 @@ void editorRefreshScreen(void) {
         char welcome[80];
         int welcomelen =
             snprintf(welcome, sizeof(welcome),
-                     "Kilo editor -- verison %s\e[0K\r\n", KILO_VERSION);
+                     "Kilo editor -- version %s\e[0K\r\n", KILO_VERSION);
         int padding = (E.screencols - welcomelen) / 2;
         if (padding) {
           abAppend(&ab, "~", 1);

@@ -16,29 +16,20 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/weaken.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
 #include "libc/calls/sig.internal.h"
-#include "libc/calls/strace.internal.h"
 #include "libc/calls/struct/sigset.h"
+#include "libc/calls/struct/sigset.internal.h"
 #include "libc/dce.h"
 #include "libc/fmt/itoa.h"
 #include "libc/intrin/asan.internal.h"
 #include "libc/intrin/describeflags.internal.h"
-#include "libc/intrin/kprintf.h"
-#include "libc/log/log.h"
+#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/weaken.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/sig.h"
 #include "libc/sysv/errfuns.h"
-
-static const char *DescribeHow(char buf[12], int how) {
-  if (how == SIG_BLOCK) return "SIG_BLOCK";
-  if (how == SIG_UNBLOCK) return "SIG_UNBLOCK";
-  if (how == SIG_SETMASK) return "SIG_SETMASK";
-  FormatInt32(buf, how);
-  return buf;
-}
 
 /**
  * Changes signal blocking state of calling thread, e.g.:
@@ -52,17 +43,15 @@ static const char *DescribeHow(char buf[12], int how) {
  * @param set is the new mask content (optional)
  * @param oldset will receive the old mask (optional) and can't overlap
  * @return 0 on success, or -1 w/ errno
+ * @raise EFAULT if `set` or `oldset` is bad memory
+ * @raise EINVAL if `how` is invalid
  * @asyncsignalsafe
  * @restartable
  * @vforksafe
  */
 int sigprocmask(int how, const sigset_t *opt_set, sigset_t *opt_out_oldset) {
-  sigset_t old;
-  char howbuf[12];
-  char buf[2][41];
-  int res, rc, arg1;
-  const sigset_t *arg2;
-  sigemptyset(&old);
+  int rc;
+  sigset_t old = {0};
   if (IsAsan() &&
       ((opt_set && !__asan_is_valid(opt_set, sizeof(*opt_set))) ||
        (opt_out_oldset &&
@@ -70,15 +59,16 @@ int sigprocmask(int how, const sigset_t *opt_set, sigset_t *opt_out_oldset) {
     rc = efault();
   } else if (IsMetal() || IsWindows()) {
     rc = __sig_mask(how, opt_set, &old);
-    _check_interrupts(false, 0);
+    if (_weaken(__sig_check)) {
+      _weaken(__sig_check)();
+    }
   } else {
     rc = sys_sigprocmask(how, opt_set, opt_out_oldset ? &old : 0);
   }
   if (rc != -1 && opt_out_oldset) {
     *opt_out_oldset = old;
   }
-  STRACE("sigprocmask(%s, %s, [%s]) → %d% m", DescribeHow(howbuf, how),
-         DescribeSigset(buf[0], sizeof(buf[0]), 0, opt_set),
-         DescribeSigset(buf[1], sizeof(buf[1]), rc, opt_out_oldset), rc);
+  STRACE("sigprocmask(%s, %s, [%s]) → %d% m", DescribeHow(how),
+         DescribeSigset(0, opt_set), DescribeSigset(rc, opt_out_oldset), rc);
   return rc;
 }

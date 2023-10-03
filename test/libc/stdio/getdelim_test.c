@@ -17,8 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
-#include "libc/bits/bits.h"
-#include "libc/intrin/kprintf.h"
+#include "libc/intrin/bits.h"
 #include "libc/log/libfatal.internal.h"
 #include "libc/mem/mem.h"
 #include "libc/runtime/symbols.internal.h"
@@ -29,7 +28,9 @@
 #include "libc/testlib/testlib.h"
 #include "libc/x/x.h"
 
-char testlib_enable_tmp_setup_teardown;
+void SetUpOnce(void) {
+  testlib_enable_tmp_setup_teardown();
+}
 
 TEST(getline, testEmpty) {
   FILE *f = fmemopen("", 0, "r+");
@@ -57,7 +58,7 @@ TEST(getline, testOneWithoutLineFeed) {
 
 TEST(getline, testTwoLines) {
   const char *s = "hello\nthere\n";
-  FILE *f = fmemopen(s, strlen(s), "r+");
+  FILE *f = fmemopen((void *)s, strlen(s), "r+");
   char *line = NULL;
   size_t linesize = 0;
   ASSERT_EQ(6, getline(&line, &linesize, f));
@@ -73,7 +74,7 @@ TEST(getline, testTwoLines) {
 
 TEST(getline, testBinaryLine_countExcludesOnlyTheBonusNul) {
   const char s[] = "he\0\3o\n";
-  FILE *f = fmemopen(s, sizeof(s), "r+");
+  FILE *f = fmemopen((void *)s, sizeof(s), "r+");
   char *line = NULL;
   size_t linesize = 0;
   ASSERT_EQ(6, getline(&line, &linesize, f));
@@ -97,7 +98,6 @@ void ReadHyperionLines(void) {
   char *line = NULL;
   size_t linesize = 0;
   ASSERT_NE(NULL, (f = fopen("hyperion.txt", "r")));
-  int i = 0;
   for (;;) {
     rc = getline(&line, &linesize, f);
     if (rc == -1) break;

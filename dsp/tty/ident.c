@@ -17,14 +17,17 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "dsp/tty/tty.h"
-#include "libc/bits/safemacros.internal.h"
-#include "libc/bits/weaken.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/termios.h"
-#include "libc/fmt/fmt.h"
+#include "libc/dce.h"
+#include "libc/errno.h"
+#include "libc/intrin/safemacros.internal.h"
+#include "libc/intrin/weaken.h"
 #include "libc/mem/mem.h"
 #include "libc/runtime/runtime.h"
 #include "libc/sock/sock.h"
+#include "libc/sock/struct/pollfd.h"
+#include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/poll.h"
 #include "libc/sysv/errfuns.h"
@@ -80,13 +83,15 @@ int ttyident(struct TtyIdent *ti, int ttyinfd, int ttyoutfd) {
       if (ttyident_probe(ti, ttyinfd, ttyoutfd, "\e[>c") != -1) {
         rc = 0;
         memset(&outer, 0, sizeof(outer));
-        if (ti->id == 83 /* GNU Screen */ && (ti->next || weaken(malloc)) &&
+        if (ti->id == 83 /* GNU Screen */ && (ti->next || _weaken(malloc)) &&
             ttyident_probe(&outer, ttyinfd, ttyoutfd, "\eP\e[>c\e\\") != -1 &&
-            (ti->next = (ti->next ? ti->next
-                                  : weaken(malloc)(sizeof(struct TtyIdent))))) {
+            (ti->next =
+                 (ti->next ? ti->next
+                           : _weaken(malloc)(sizeof(struct TtyIdent))))) {
           memcpy(ti->next, &outer, sizeof(outer));
         } else {
-          free_s(&ti->next);
+          free(ti->next);
+          ti->next = 0;
         }
       }
       ttyrestore(ttyinfd, &old);

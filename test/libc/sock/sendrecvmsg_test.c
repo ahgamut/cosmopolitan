@@ -17,11 +17,17 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
+#include "libc/calls/calls.h"
 #include "libc/calls/struct/iovec.h"
 #include "libc/dce.h"
-#include "libc/runtime/gc.internal.h"
+#include "libc/errno.h"
+#include "libc/mem/gc.internal.h"
 #include "libc/sock/sock.h"
+#include "libc/sock/struct/msghdr.h"
+#include "libc/sock/struct/sockaddr.h"
+#include "libc/str/str.h"
 #include "libc/sysv/consts/af.h"
+#include "libc/sysv/consts/ipproto.h"
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/sock.h"
 #include "libc/testlib/testlib.h"
@@ -38,9 +44,9 @@ TEST(sendrecvmsg, testPingPong) {
   memset(&msg, 0, sizeof(msg));
   memset(&data[0], 0, sizeof(data));
 
-  data[0].iov_base = hello;
+  data[0].iov_base = (void *)hello;
   data[0].iov_len = strlen(hello);
-  data[1].iov_base = world;
+  data[1].iov_base = (void *)world;
   data[1].iov_len = strlen(world); /* Don't send the '\0' */
 
   msg.msg_iov = &data[0];

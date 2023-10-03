@@ -16,17 +16,20 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "ape/sections.internal.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
 #include "libc/calls/state.internal.h"
 #include "libc/calls/struct/metasigaltstack.h"
+#include "libc/calls/struct/sigaction.h"
+#include "libc/calls/struct/siginfo-meta.internal.h"
 #include "libc/calls/struct/siginfo-xnu.internal.h"
 #include "libc/calls/struct/siginfo.h"
-#include "libc/calls/typedef/sigaction_f.h"
 #include "libc/calls/ucontext.h"
-#include "libc/intrin/kprintf.h"
 #include "libc/intrin/repstosb.h"
 #include "libc/log/libfatal.internal.h"
+#include "libc/runtime/runtime.h"
+#include "libc/runtime/stack.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/sa.h"
 
@@ -342,10 +345,37 @@ struct __darwin_mcontext_avx512_64_full {
   struct __darwin_x86_avx512_state64 __fs;
 };
 
+struct __darwin_arm_exception_state64 {
+  uint64_t far;
+  uint32_t esr;
+  uint32_t exception;
+};
+
+struct __darwin_arm_thread_state64 {
+  uint64_t __x[29];
+  uint64_t __fp;
+  uint64_t __lr;
+  uint64_t __sp;
+  uint64_t __pc;
+  uint32_t __cpsr;
+  uint32_t __pad;
+};
+
+struct __darwin_arm_vfp_state {
+  uint32_t __r[64];
+  uint32_t __fpscr;
+};
+
 struct __darwin_mcontext64 {
+#ifdef __x86_64__
   struct __darwin_x86_exception_state64 __es;
   struct __darwin_x86_thread_state64 __ss;
   struct __darwin_x86_float_state64 __fs;
+#elif defined(__aarch64__)
+  struct __darwin_arm_exception_state64 __es;
+  struct __darwin_arm_thread_state64 __ss;
+  struct __darwin_arm_vfp_state __fs;
+#endif
 };
 
 struct __darwin_ucontext {
@@ -356,6 +386,8 @@ struct __darwin_ucontext {
   uint64_t uc_mcsize;
   struct __darwin_mcontext64 *uc_mcontext;
 };
+
+#ifdef __x86_64__
 
 static privileged void xnuexceptionstate2linux(
     mcontext_t *mc, struct __darwin_x86_exception_state64 *xnues) {
@@ -422,7 +454,7 @@ static privileged void linuxthreadstate2xnu(
 static privileged void CopyFpXmmRegs(void *d, const void *s) {
   size_t i;
   for (i = 0; i < (8 + 16) * 16; i += 16) {
-    __builtin_memcpy((char *)d + i, (const char *)s + i, 16);
+    __memcpy((char *)d + i, (const char *)s + i, 16);
   }
 }
 
@@ -452,28 +484,35 @@ static privileged void linuxssefpustate2xnu(
   CopyFpXmmRegs(&xnufs->__fpu_stmm0, fs->st);
 }
 
+#endif /* __x86_64__ */
+
 privileged void __sigenter_xnu(void *fn, int infostyle, int sig,
                                struct siginfo_xnu *xnuinfo,
                                struct __darwin_ucontext *xnuctx) {
-  intptr_t ax;
-  int rva, flags;
+#pragma GCC push_options
+#pragma GCC diagnostic ignored "-Wframe-larger-than="
   struct Goodies {
     ucontext_t uc;
     siginfo_t si;
   } g;
-  rva = __sighandrvas[sig & (NSIG - 1)];
+  CheckLargeStackAllocation(&g, sizeof(g));
+#pragma GCC pop_options
+  int rva, flags;
+  rva = __sighandrvas[sig];
   if (rva >= kSigactionMinRva) {
-    flags = __sighandflags[sig & (NSIG - 1)];
+    flags = __sighandflags[sig];
     if (~flags & SA_SIGINFO) {
-      ((sigaction_f)(_base + rva))(sig, 0, 0);
+      ((sigaction_f)(__executable_start + rva))(sig, 0, 0);
     } else {
       __repstosb(&g, 0, sizeof(g));
+
       if (xnuctx) {
-        g.uc.uc_flags = xnuctx->uc_onstack ? SA_ONSTACK : 0;
         g.uc.uc_sigmask.__bits[0] = xnuctx->uc_sigmask;
+        g.uc.uc_sigmask.__bits[1] = 0;
         g.uc.uc_stack.ss_sp = xnuctx->uc_stack.ss_sp;
         g.uc.uc_stack.ss_flags = xnuctx->uc_stack.ss_flags;
         g.uc.uc_stack.ss_size = xnuctx->uc_stack.ss_size;
+#ifdef __x86_64__
         g.uc.uc_mcontext.fpregs = &g.uc.__fpustate;
         if (xnuctx->uc_mcontext) {
           if (xnuctx->uc_mcsize >=
@@ -490,24 +529,25 @@ privileged void __sigenter_xnu(void *fn, int infostyle, int sig,
             xnussefpustate2linux(&g.uc.__fpustate, &xnuctx->uc_mcontext->__fs);
           }
         }
-      }
-      if (xnuinfo) {
-        g.si.si_signo = xnuinfo->si_signo;
-        g.si.si_errno = xnuinfo->si_errno;
-        g.si.si_code = xnuinfo->si_code;
-        if (xnuinfo->si_pid) {
-          g.si.si_pid = xnuinfo->si_pid;
-          g.si.si_uid = xnuinfo->si_uid;
-        } else {
-          g.si.si_addr = (void *)xnuinfo->si_addr;
+#elif defined(__aarch64__)
+        if (xnuctx->uc_mcontext) {
+          __memcpy(g.uc.uc_mcontext.regs, &xnuctx->uc_mcontext->__ss.__x,
+                   33 * 8);
         }
-        g.si.si_value = xnuinfo->si_value;
+#endif /* __x86_64__ */
       }
-      ((sigaction_f)(_base + rva))(sig, &g.si, &g.uc);
+
+      if (xnuinfo) {
+        __siginfo2cosmo(&g.si, (void *)xnuinfo);
+      }
+      ((sigaction_f)(__executable_start + rva))(sig, &g.si, &g.uc);
+
       if (xnuctx) {
         xnuctx->uc_stack.ss_sp = g.uc.uc_stack.ss_sp;
         xnuctx->uc_stack.ss_flags = g.uc.uc_stack.ss_flags;
         xnuctx->uc_stack.ss_size = g.uc.uc_stack.ss_size;
+        xnuctx->uc_sigmask = g.uc.uc_sigmask.__bits[0];
+#ifdef __x86_64__
         if (xnuctx->uc_mcontext) {
           if (xnuctx->uc_mcsize >=
               sizeof(struct __darwin_x86_exception_state64)) {
@@ -524,12 +564,31 @@ privileged void __sigenter_xnu(void *fn, int infostyle, int sig,
             linuxssefpustate2xnu(&xnuctx->uc_mcontext->__fs, &g.uc.__fpustate);
           }
         }
+#elif defined(__aarch64__)
+        if (xnuctx->uc_mcontext) {
+          __memcpy(&xnuctx->uc_mcontext->__ss.__x, g.uc.uc_mcontext.regs,
+                   33 * 8);
+        }
+#endif /* __x86_64__ */
       }
     }
   }
+
+#ifdef __x86_64__
+  intptr_t ax;
   asm volatile("syscall"
                : "=a"(ax)
                : "0"(0x20000b8 /* sigreturn */), "D"(xnuctx), "S"(infostyle)
                : "rcx", "r11", "memory", "cc");
-  unreachable;
+#else
+  register long r0 asm("x0") = (long)xnuctx;
+  register long r1 asm("x1") = (long)infostyle;
+  asm volatile("mov\tx16,%0\n\t"
+               "svc\t0"
+               : /* no outputs */
+               : "i"(0x0b8 /* sigreturn */), "r"(r0), "r"(r1)
+               : "x16", "memory");
+#endif /* __x86_64__ */
+
+  notpossible;
 }

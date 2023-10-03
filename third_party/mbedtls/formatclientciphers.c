@@ -16,16 +16,16 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/bits.h"
+#include "libc/intrin/bits.h"
 #include "libc/macros.internal.h"
-#include "libc/stdio/append.internal.h"
+#include "libc/stdio/append.h"
 #include "third_party/mbedtls/iana.h"
 
 /**
  * Returns string of joined list of first 𝑘 client preferred ciphers.
  * @return string that must be free'd, or null if none set
  */
-dontdiscard char *FormatSslClientCiphers(const mbedtls_ssl_context *ssl) {
+__wur char *FormatSslClientCiphers(const mbedtls_ssl_context *ssl) {
   int i;
   char *b = 0;
   for (i = 0; i < ARRAYLEN(ssl->client_ciphers); ++i) {

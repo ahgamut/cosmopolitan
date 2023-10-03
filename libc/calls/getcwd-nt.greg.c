@@ -20,7 +20,6 @@
 #include "libc/macros.internal.h"
 #include "libc/nt/files.h"
 #include "libc/str/str.h"
-#include "libc/str/tpenc.h"
 #include "libc/str/utf16.h"
 #include "libc/sysv/errfuns.h"
 

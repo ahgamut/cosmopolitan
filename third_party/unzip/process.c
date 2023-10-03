@@ -33,6 +33,7 @@
 
 #define UNZIP_INTERNAL
 #include "third_party/unzip/unzip.h"
+#include "third_party/unzip/globals.h"
 #if defined(DYNALLOC_CRCTAB) || defined(UNICODE_SUPPORT)
 #include "third_party/unzip/crc32.h"
 #endif
@@ -1329,7 +1330,7 @@ static int find_ecrec64(__G__ searchlen)         /* return PK-class error */
     if (memcmp((char *)byterec, end_central64_sig, 4) ) {
       /* Zip64 EOCD Record not found */
       /* Since we already have seen the Zip64 EOCD Locator, it's
-         possible we got here because there are bytes prepended
+         possible we got h-ere because there are bytes prepended
          to the archive, like the sfx prefix. */
 
       /* Make a guess as to where the Zip64 EOCD Record might be */

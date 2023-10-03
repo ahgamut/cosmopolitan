@@ -31,11 +31,12 @@
 #include "libc/calls/weirdtypes.h"
 #include "libc/errno.h"
 #include "libc/runtime/runtime.h"
-#include "libc/stdio/temp.h"
+#include "libc/str/locale.h"
+#include "libc/str/str.h"
 #include "libc/sysv/consts/exit.h"
+#include "libc/temp.h"
 #include "libc/time/struct/tm.h"
 #include "libc/time/time.h"
-#include "libc/unicode/locale.h"
 #include "third_party/lua/lauxlib.h"
 #include "third_party/lua/lprefix.h"
 #include "third_party/lua/lua.h"
@@ -141,7 +142,7 @@ asm(".include \"libc/disclaimer.inc\"");
 #define LUA_TMPNAMBUFSIZE	32
 
 #define lua_tmpnam(b,e) { \
-        strcpy(b, kTmpPath); \
+        strcpy(b, __get_tmpdir()); \
         strcat(b, "lua_XXXXXX"); \
         e = mkstemp(b); \
         if (e != -1) close(e); \

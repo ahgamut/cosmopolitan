@@ -5,7 +5,7 @@ PKGS += THIRD_PARTY_ZIP
 
 THIRD_PARTY_ZIP_FILES := $(wildcard third_party/zip/*)
 THIRD_PARTY_ZIP_SRCS = $(filter %.c,$(THIRD_PARTY_ZIP_FILES))
-#THIRD_PARTY_ZIP_HDRS = $(filter %.h,$(THIRD_PARTY_ZIP_FILES))
+THIRD_PARTY_ZIP_HDRS = $(filter %.h,$(THIRD_PARTY_ZIP_FILES))
 THIRD_PARTY_ZIP_INCS = $(filter %.inc,$(THIRD_PARTY_ZIP_FILES))
 
 THIRD_PARTY_ZIP_COMS =				\
@@ -85,15 +85,15 @@ THIRD_PARTY_ZIP_DIRECTDEPS =			\
 	LIBC_LOG				\
 	LIBC_MEM				\
 	LIBC_NEXGEN32E				\
-	LIBC_RAND				\
 	LIBC_RUNTIME				\
 	LIBC_STDIO				\
+	LIBC_PROC				\
 	LIBC_STR				\
-	LIBC_STUBS				\
 	LIBC_SYSV				\
 	LIBC_TIME				\
-	LIBC_UNICODE				\
-	THIRD_PARTY_BZIP2
+	LIBC_X					\
+	THIRD_PARTY_BZIP2			\
+	THIRD_PARTY_ZLIB
 
 THIRD_PARTY_ZIP_DEPS :=				\
 	$(call uniq,$(foreach x,$(THIRD_PARTY_ZIP_DIRECTDEPS),$($(x))))
@@ -151,8 +151,9 @@ o/$(MODE)/third_party/zip/zipfile.o		\
 o/$(MODE)/third_party/zip/zipfile_.o		\
 o/$(MODE)/third_party/zip/zipnote.o		\
 o/$(MODE)/third_party/zip/zipsplit.o		\
-o/$(MODE)/third_party/zip/zipup.o:		\
-	OVERRIDE_CPPFLAGS +=			\
+o/$(MODE)/third_party/zip/zipup.o: private	\
+	CPPFLAGS +=				\
+		-w				\
 		-DUNIX				\
 		-DMMAP				\
 		-DUNICODE_SUPPORT		\
@@ -162,26 +163,6 @@ o/$(MODE)/third_party/zip/zipup.o:		\
 		-DHAVE_TERMIOS_H		\
 		-DZIP64_SUPPORT			\
 		-DBZIP2_SUPPORT
-
-o/$(MODE)/third_party/zip/crypt_.o		\
-o/$(MODE)/third_party/zip/unix_.o		\
-o/$(MODE)/third_party/zip/zipfile_.o		\
-o/$(MODE)/third_party/zip/fileio_.o		\
-o/$(MODE)/third_party/zip/util_.o:		\
-	OVERRIDE_CPPFLAGS +=			\
-		-DUTIL
-
-o/$(MODE)/third_party/zip/zip.o			\
-o/$(MODE)/third_party/zip/zipsplit.o		\
-o/$(MODE)/third_party/zip/fileio.o		\
-o/$(MODE)/third_party/zip/fileio_.o:		\
-	OVERRIDE_CPPFLAGS +=			\
-		-DSTACK_FRAME_UNLIMITED
-
-o/$(MODE)/third_party/zip/%_.o:			\
-		third_party/zip/%.c		\
-		o/$(MODE)/third_party/zip/%.o
-	@$(COMPILE) -AOBJECTIFY.c $(OBJECTIFY.c) $(OUTPUT_OPTION) $<
 
 .PHONY: o/$(MODE)/third_party/zip
 o/$(MODE)/third_party/zip:			\

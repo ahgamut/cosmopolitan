@@ -14,15 +14,17 @@
 
 #define kNtCpUtf8             65001
 #define kNtInvalidHandleValue -1L
-#define kNtStdInputHandle     -10L
-#define kNtStdOutputHandle    -11L
-#define kNtStdErrorHandle     -12L
+#define kNtStdInputHandle     -10u
+#define kNtStdOutputHandle    -11u
+#define kNtStdErrorHandle     -12u
+
+#define GetCurrentProcess() -1
 
 #if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 
 char16_t *GetCommandLine(void) nosideeffect;
-char16_t *GetEnvironmentStrings(void) dontdiscard;
+char16_t *GetEnvironmentStrings(void) __wur;
 bool32 FreeEnvironmentStrings(char16_t *) paramsnonnull();
 bool32 ReadFile(int64_t hFile, void *lpBuffer, uint32_t nNumberOfBytesToRead,
                 uint32_t *lpNumberOfBytesRead,
@@ -32,12 +34,12 @@ bool32 WriteFile(int64_t hFile, const void *lpBuffer,
                  uint32_t *lpNumberOfBytesWritten,
                  struct NtOverlapped *opt_lpOverlapped);
 bool32 TerminateProcess(int64_t hProcess, uint32_t uExitCode);
-int64_t GetCurrentProcess(void) pureconst;
+void TerminateThisProcess(uint32_t dwWaitStatus) wontreturn;
 void ExitProcess(uint32_t uExitCode) wontreturn;
 uint32_t GetLastError(void) nosideeffect;
 bool32 CloseHandle(int64_t hObject) dontthrow nocallback;
-intptr_t GetStdHandle(int64_t nStdHandle) nosideeffect;
-bool32 SetStdHandle(int64_t nStdHandle, int64_t hHandle);
+intptr_t GetStdHandle(uint32_t nStdHandle) nosideeffect;
+bool32 SetStdHandle(uint32_t nStdHandle, int64_t hHandle);
 bool32 SetDefaultDllDirectories(unsigned dirflags);
 bool32 RtlGenRandom(void *RandomBuffer, uint32_t RandomBufferLength);
 uint32_t GetModuleFileName(int64_t hModule, char16_t *lpFilename,

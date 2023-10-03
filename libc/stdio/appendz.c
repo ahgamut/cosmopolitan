@@ -19,7 +19,7 @@
 #include "libc/assert.h"
 #include "libc/dce.h"
 #include "libc/mem/mem.h"
-#include "libc/stdio/append.internal.h"
+#include "libc/stdio/append.h"
 
 #define W sizeof(size_t)
 
@@ -34,19 +34,17 @@ struct appendz appendz(char *p) {
   struct appendz z;
   if (p) {
     z.n = malloc_usable_size(p);
-    assert(z.n >= W * 2 && !(z.n & (W - 1)));
+    unassert(z.n >= W * 2 && !(z.n & (W - 1)));
     z.i = *(size_t *)(p + z.n - W);
     if (!IsTiny() && W == 8) {
-      /*
-       * This check should fail if an append*() function was passed a
-       * pointer that was allocated manually by malloc(). Append ptrs
-       * can be free()'d safely, but they need to be allocated by the
-       * append library, because we write a special value to the end.
-       */
-      assert((z.i >> 48) == APPEND_COOKIE);
+      // This check should fail if an append*() function was passed a
+      // pointer that was allocated manually by malloc(). Append ptrs
+      // can be free()'d safely, but they need to be allocated by the
+      // append library, because we write a special value to the end.
+      unassert((z.i >> 48) == APPEND_COOKIE);
       z.i &= 0x0000ffffffffffff;
     }
-    assert(z.n >= z.i);
+    unassert(z.n >= z.i);
   } else {
     z.i = 0;
     z.n = 0;

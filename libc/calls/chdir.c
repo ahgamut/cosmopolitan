@@ -16,25 +16,54 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/strace.internal.h"
 #include "libc/calls/syscall-nt.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
+#include "libc/errno.h"
 #include "libc/intrin/asan.internal.h"
+#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/weaken.h"
+#include "libc/log/log.h"
+#include "libc/runtime/runtime.h"
+#include "libc/runtime/zipos.internal.h"
 #include "libc/sysv/errfuns.h"
 
 /**
  * Sets current directory.
  *
- * This does *not* update the `PWD` environment variable.
+ * The current directory is shared by all threads in a process. This
+ * does not update the `PWD` environment variable.
  *
+ * @return 0 on success, or -1 w/ errno
+ * @raise ELOOP if a loop was detected resolving components of `path`
+ * @raise EACCES if search permission was denied on directory
+ * @raise ENOTDIR if component of `path` isn't a directory
+ * @raise ENOMEM if insufficient memory was available
+ * @raise EFAULT if `path` points to invalid memory
+ * @raise ENOTSUP if `path` is a `/zip/...` file
+ * @raise ENAMETOOLONG if `path` was too long
+ * @raise ENOENT if `path` doesn't exist
+ * @raise EIO if an i/o error happened
  * @asyncsignalsafe
  * @see fchdir()
  */
 int chdir(const char *path) {
   int rc;
-  if (!path || (IsAsan() && !__asan_is_valid(path, 1))) {
+  struct ZiposUri zipname;
+  if (_weaken(__get_tmpdir)) {
+    _weaken(__get_tmpdir)();
+  }
+  if (_weaken(GetAddr2linePath)) {
+    _weaken(GetAddr2linePath)();
+  }
+  if (_weaken(GetProgramExecutableName)) {
+    _weaken(GetProgramExecutableName)();
+  }
+  if (!path || (IsAsan() && !__asan_is_valid_str(path))) {
     rc = efault();
+  } else if (_weaken(__zipos_parseuri) &&
+             _weaken(__zipos_parseuri)(path, &zipname) != -1) {
+    rc = enotsup();
   } else if (!IsWindows()) {
     rc = sys_chdir(path);
   } else {

@@ -16,26 +16,14 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/internal.h"
 #include "libc/calls/struct/metastat.internal.h"
-#include "libc/calls/struct/stat.h"
+#include "libc/calls/struct/stat.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
-#include "libc/dce.h"
-#include "libc/intrin/asan.internal.h"
-#include "libc/sysv/errfuns.h"
 
-/**
- * Supports fstat(), etc. implementations.
- * @asyncsignalsafe
- */
 int32_t sys_fstat(int32_t fd, struct stat *st) {
   void *p;
   union metastat ms;
-  if (IsLinux()) {
-    _Static_assert(sizeof(*st) == sizeof(ms.linux), "assumption broken");
-    if (IsAsan() && !__asan_is_valid(st, sizeof(*st))) return efault();
-    p = st;
-  } else if (st) {
+  if (st) {
     p = &ms;
   } else {
     p = 0;

@@ -34,11 +34,15 @@
  *
  * @see libc/fmt/vcscanf.c
  */
-int(fscanf)(FILE *stream, const char *fmt, ...) {
+int fscanf(FILE *stream, const char *fmt, ...) {
   int rc;
   va_list va;
   va_start(va, fmt);
-  rc = (vcscanf)((int (*)(void *))fgetc, (void *)ungetc, stream, fmt, va);
+  flockfile(stream);
+  rc = __vcscanf((void *)fgetc_unlocked,   //
+                 (void *)ungetc_unlocked,  //
+                 stream, fmt, va);
+  funlockfile(stream);
   va_end(va);
   return rc;
 }

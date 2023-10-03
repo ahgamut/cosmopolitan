@@ -17,11 +17,39 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
+#include "libc/calls/internal.h"
+#include "libc/calls/struct/fd.internal.h"
+#include "libc/calls/syscall-sysv.internal.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/calls/termios.h"
+#include "libc/dce.h"
+#include "libc/intrin/strace.internal.h"
 #include "libc/sysv/consts/pty.h"
+#include "libc/sysv/errfuns.h"
 
+#define TIOCSPTLCK  0x40045431  // linux
+#define TIOCPTYUNLK 0x20007452  // xnu
+
+/**
+ * Unlocks pseudoteletypewriter pair.
+ *
+ * @return 0 on success, or -1 w/ errno
+ * @raise EBADF if fd isn't open
+ * @raise EINVAL if fd is valid but not associated with pty
+ */
 int unlockpt(int fd) {
-  int unlock = 0;
-  /* TODO(jart) */
-  return ioctl(fd, TIOCSPTLCK, &unlock);
+  int rc, unlock = 0;
+  if (fd < g_fds.n && g_fds.p[fd].kind == kFdZip) {
+    rc = enotty();
+  } else if (IsFreebsd() || IsOpenbsd() || IsNetbsd()) {
+    rc = _isptmaster(fd);
+  } else if (IsXnu()) {
+    rc = sys_ioctl(fd, TIOCPTYUNLK);
+  } else if (IsLinux()) {
+    rc = sys_ioctl(fd, TIOCSPTLCK, &unlock);
+  } else {
+    rc = enosys();
+  }
+  STRACE("unlockpt(%d) → %d% m", fd, rc);
+  return rc;
 }

@@ -27,12 +27,13 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/math.h"
 #include "libc/tinymath/feval.internal.h"
+#include "libc/tinymath/freebsd.internal.h"
 
 asm(".ident\t\"\\n\\n\
 Musl libc (MIT License)\\n\
 Copyright 2005-2014 Rich Felker, et. al.\"");
 asm(".include \"libc/disclaimer.inc\"");
-/* clang-format off */
+// clang-format off
 
 /**
  * Returns inverse hyperbolic sine of 𝑥.
@@ -63,3 +64,7 @@ double asinh(double x)
 	}
 	return s ? -x : x;
 }
+
+#if LDBL_MANT_DIG == 53 && LDBL_MAX_EXP == 1024
+__weak_reference(asinh, asinhl);
+#endif

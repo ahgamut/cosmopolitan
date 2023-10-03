@@ -16,21 +16,16 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "dsp/tty/quant.h"
 #include "libc/assert.h"
-#include "libc/bits/xmmintrin.internal.h"
-#include "libc/runtime/buffer.h"
+#include "libc/mem/mem.h"
 #include "tool/viz/lib/graphic.h"
 
-/**
- * Allocates graphic.
- *
- * @param g should be zero initialized before first call
- * @note bfree(g->b) needs to be called later
- */
+// TODO(jart): DELETE
+
 struct Graphic *resizegraphic(struct Graphic *g, size_t yn, size_t xn) {
-  /* assert(xn % 2 == 0); */ /* todo: ughhh this whole thing is wrong */
   yn &= ~1;
-  balloc(&g->b, 64, yn * xn * sizeof(__m128) + /* wut */ PAGESIZE);
+  g->b = pvalloc(yn * xn * sizeof(ttyrgb_m128));
   g->yn = yn;
   g->xn = xn;
   return g;

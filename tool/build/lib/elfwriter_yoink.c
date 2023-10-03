@@ -16,6 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/elf/def.h"
 #include "libc/str/str.h"
 #include "tool/build/lib/elfwriter.h"
 
@@ -27,6 +28,7 @@ void elfwriter_yoink(struct ElfWriter *elf, const char *symbol, int stb) {
   memcpy(p, kNopl, sizeof(kNopl));
   sym = elfwriter_linksym(elf, symbol, ELF64_ST_INFO(stb, STT_OBJECT),
                           STV_HIDDEN);
-  elfwriter_appendrela(elf, sizeof(kNopl) - 4, sym, R_X86_64_32, 0);
+  elfwriter_appendrela(elf, sizeof(kNopl) - 4, sym,
+                       elfwriter_relatype_abs32(elf), 0);
   elfwriter_commit(elf, sizeof(kNopl));
 }

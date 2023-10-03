@@ -17,6 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
+#include "libc/stdio/internal.h"
 #include "libc/stdio/stdio.h"
 
 /**
@@ -36,3 +37,5 @@ int fputc_unlocked(int c, FILE *f) {
     return b;
   }
 }
+
+__strong_reference(fputc_unlocked, putc_unlocked);

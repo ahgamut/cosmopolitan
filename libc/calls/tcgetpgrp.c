@@ -17,15 +17,36 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
+#include "libc/calls/syscall-sysv.internal.h"
 #include "libc/calls/termios.h"
+#include "libc/dce.h"
+#include "libc/intrin/strace.internal.h"
 #include "libc/sysv/consts/termios.h"
+#include "libc/sysv/errfuns.h"
+
+#define TIOCGPGRP_linux 0x0000540f
+#define TIOCGPGRP_bsd   0x40047477
 
 /**
  * Returns which process group controls terminal.
+ *
+ * @return process group id on success, or -1 w/ errno
+ * @raise ENOTTY if `fd` is isn't controlling teletypewriter
+ * @raise EBADF if `fd` isn't an open file descriptor
+ * @raise ENOSYS on Windows and Bare Metal
  * @asyncsignalsafe
  */
-int32_t tcgetpgrp(int fd) {
-  int pgrp;
-  if (ioctl(fd, TIOCGPGRP, &pgrp) < 0) return -1;
-  return pgrp;
+int tcgetpgrp(int fd) {
+  int rc, pgrp;
+  if (IsLinux()) {
+    rc = sys_ioctl(fd, TIOCGPGRP_linux, &pgrp);
+  } else if (IsBsd()) {
+    rc = sys_ioctl(fd, TIOCGPGRP_bsd, &pgrp);
+  } else if (IsWindows()) {
+    pgrp = rc = getpid();
+  } else {
+    rc = enosys();
+  }
+  STRACE("tcgetpgrp(%d) → %d% m", fd, rc == -1 ? rc : pgrp);
+  return rc == -1 ? rc : pgrp;
 }

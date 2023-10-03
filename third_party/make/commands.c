@@ -21,6 +21,8 @@ this program.  If not, see <http://www.gnu.org/licenses/>.  */
 #include "third_party/make/job.h"
 #include "third_party/make/variable.h"
 /**/
+#include "libc/runtime/runtime.h"
+#include "libc/sysv/consts/sig.h"
 #include "third_party/make/commands.h"
 /* clang-format off */
 
@@ -520,6 +522,7 @@ fatal_error_signal (int sig)
   if (sig == SIGTERM || sig == SIGINT
     || sig == SIGHUP
     || sig == SIGQUIT
+    || sig == SIGPIPE
     )
     {
       struct child *c;
@@ -531,7 +534,10 @@ fatal_error_signal (int sig)
           (void) remote_kill (c->pid, sig);
 
       for (c = children; c != 0; c = c->next)
-        delete_child_targets (c);
+        {
+          delete_child_targets (c);
+          delete_tmpdir (c);
+        }
 
       /* Clean up the children.  We don't just use the call below because
          we don't want to print the "Waiting for children" message.  */

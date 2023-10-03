@@ -16,27 +16,36 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/strace.internal.h"
+#include "libc/intrin/leaky.internal.h"
+#include "libc/intrin/strace.internal.h"
 #include "libc/mem/internal.h"
 #include "libc/mem/mem.h"
 #include "libc/runtime/runtime.h"
 #include "libc/str/str.h"
+#include "libc/sysv/errfuns.h"
 
 /**
  * Copies variable to environment.
  *
- * @return 0 on success, or -1 w/ errno
+ * @return 0 on success, or -1 w/ errno and environment is unchanged
+ * @raise EINVAL if `name` is empty or contains `'='`
+ * @raise ENOMEM if out of memory
  * @see putenv(), getenv()
+ * @threadunsafe
  */
 int setenv(const char *name, const char *value, int overwrite) {
   int rc;
   char *s;
-  size_t namelen, valuelen;
-  namelen = strlen(name);
-  valuelen = strlen(value);
-  s = malloc(namelen + valuelen + 2);
-  memcpy(mempcpy(mempcpy(s, name, namelen), "=", 1), value, valuelen + 1);
-  rc = PutEnvImpl(s, overwrite);
-  STRACE("setenv(%#s, %#s, %d) → %d", name, value, overwrite, rc);
+  size_t n, m;
+  if (!name || !*name || !value || strchr(name, '=')) return einval();
+  if ((s = malloc((n = strlen(name)) + 1 + (m = strlen(value)) + 1))) {
+    memcpy(mempcpy(mempcpy(s, name, n), "=", 1), value, m + 1);
+    rc = __putenv(s, overwrite);
+  } else {
+    rc = -1;
+  }
+  STRACE("setenv(%#s, %#s, %hhhd) → %d% m", name, value, overwrite, rc);
   return rc;
 }
+
+IGNORE_LEAKS(setenv)

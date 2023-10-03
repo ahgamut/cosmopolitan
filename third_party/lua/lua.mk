@@ -64,7 +64,6 @@ THIRD_PARTY_LUA_A_HDRS =						\
 	third_party/lua/visitor.h
 
 THIRD_PARTY_LUA_A_SRCS =						\
-	third_party/lua/escapeluastring.c				\
 	third_party/lua/lapi.c						\
 	third_party/lua/lauxlib.c					\
 	third_party/lua/lbaselib.c					\
@@ -79,6 +78,7 @@ THIRD_PARTY_LUA_A_SRCS =						\
 	third_party/lua/linit.c						\
 	third_party/lua/liolib.c					\
 	third_party/lua/llex.c						\
+	third_party/lua/llock.c						\
 	third_party/lua/lmathlib.c					\
 	third_party/lua/lmem.c						\
 	third_party/lua/loadlib.c					\
@@ -109,6 +109,7 @@ THIRD_PARTY_LUA_A_SRCS =						\
 	third_party/lua/lutf8lib.c					\
 	third_party/lua/lvm.c						\
 	third_party/lua/lzio.c						\
+	third_party/lua/serialize.c					\
 	third_party/lua/visitor.c
 
 THIRD_PARTY_LUA_A_OBJS =						\
@@ -120,6 +121,7 @@ THIRD_PARTY_LUA_A_DIRECTDEPS =						\
 	LIBC_INTRIN							\
 	LIBC_MEM							\
 	LIBC_NEXGEN32E							\
+	LIBC_PROC							\
 	LIBC_RUNTIME							\
 	LIBC_STDIO							\
 	LIBC_STR							\
@@ -128,9 +130,9 @@ THIRD_PARTY_LUA_A_DIRECTDEPS =						\
 	LIBC_TIME							\
 	LIBC_X								\
 	LIBC_TINYMATH							\
-	LIBC_UNICODE							\
 	NET_HTTP							\
 	THIRD_PARTY_LINENOISE						\
+	THIRD_PARTY_DOUBLECONVERSION					\
 	THIRD_PARTY_GDTOA
 
 THIRD_PARTY_LUA_A_DEPS :=						\
@@ -146,20 +148,16 @@ $(THIRD_PARTY_LUA_A).pkg:						\
 		$(foreach x,$(THIRD_PARTY_LUA_A_DIRECTDEPS),$($(x)_A).pkg)
 
 o/$(MODE)/third_party/lua/lmathlib.o					\
-o//third_party/lua/lgc.o:						\
-		OVERRIDE_CFLAGS +=					\
+o//third_party/lua/lgc.o: private					\
+		CFLAGS +=						\
 			-O2
 
-o/$(MODE)/third_party/lua/lvm.o:					\
-		OVERRIDE_CFLAGS +=					\
+o/$(MODE)/third_party/lua/lvm.o: private				\
+		CFLAGS +=						\
 			-fno-gcse
 
-o/$(MODE)/third_party/lua/lauxlib.o:					\
-		OVERRIDE_CFLAGS +=					\
-			-DSTACK_FRAME_UNLIMITED
-
-$(THIRD_PARTY_LUA_A_OBJS):						\
-		OVERRIDE_CFLAGS +=					\
+$(THIRD_PARTY_LUA_A_OBJS): private					\
+		CFLAGS +=						\
 			-ffunction-sections				\
 			-fdata-sections
 
@@ -193,15 +191,17 @@ THIRD_PARTY_LUA_UNIX_DIRECTDEPS =					\
 	LIBC_MEM							\
 	LIBC_NEXGEN32E							\
 	LIBC_NT_KERNEL32						\
+	LIBC_PROC							\
 	LIBC_RUNTIME							\
 	LIBC_SOCK							\
 	LIBC_STDIO							\
 	LIBC_STR							\
-	LIBC_STUBS							\
 	LIBC_SYSV							\
+	LIBC_THREAD							\
 	LIBC_TIME							\
 	LIBC_X								\
-	THIRD_PARTY_LUA
+	THIRD_PARTY_LUA							\
+	THIRD_PARTY_NSYNC
 
 THIRD_PARTY_LUA_UNIX_DEPS :=						\
 	$(call uniq,$(foreach x,$(THIRD_PARTY_LUA_UNIX_DIRECTDEPS),$($(x))))
@@ -227,6 +227,7 @@ THIRD_PARTY_LUA_LUA_DIRECTDEPS =					\
 	LIBC_LOG							\
 	LIBC_STR							\
 	LIBC_SYSV							\
+	LIBC_THREAD							\
 	THIRD_PARTY_LINENOISE						\
 	THIRD_PARTY_LUA							\
 	THIRD_PARTY_LUA_UNIX						\
@@ -247,15 +248,13 @@ o/$(MODE)/third_party/lua/lua.com.dbg:					\
 		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
 
-o/dbg/third_party/lua/lua.com:						\
-		o/dbg/third_party/lua/lua.com.dbg			\
-		o/dbg/third_party/zip/zip.com				\
-		o/dbg/tool/build/symtab.com
-	@$(COMPILE) -AOBJCOPY -T$@ $(OBJCOPY) -S -O binary $< $@
-	@$(COMPILE) -ASYMTAB o/dbg/tool/build/symtab.com		\
-		-o o/dbg/third_party/lua/.lua/.symtab $<
-	@$(COMPILE) -AZIP -T$@ o/dbg/third_party/zip/zip.com		\
-		-9qj $@ o/dbg/third_party/lua/.lua/.symtab
+o/$(MODE)/third_party/lua/lua2.com:					\
+		o/$(MODE)/third_party/lua/lua.com.dbg			\
+		o/$(MODE)/third_party/zip/zip.com			\
+		o/$(MODE)/tool/build/symtab.com
+	@$(MAKE_OBJCOPY)
+	@$(MAKE_SYMTAB_CREATE)
+	@$(MAKE_SYMTAB_ZIP)
 
 ################################################################################
 # luac.com
@@ -268,7 +267,6 @@ THIRD_PARTY_LUA_LUAC_DIRECTDEPS =					\
 	LIBC_STDIO							\
 	LIBC_STR							\
 	LIBC_SYSV							\
-	LIBC_UNICODE							\
 	THIRD_PARTY_LUA							\
 	TOOL_ARGS
 
@@ -289,8 +287,12 @@ o/$(MODE)/third_party/lua/luac.com.dbg:					\
 
 ################################################################################
 
+THIRD_PARTY_LUA_SRCS =							\
+	$(foreach x,$(THIRD_PARTY_LUA_ARTIFACTS),$($(x)_SRCS))		\
+	third_party/lua/lua.main.c					\
+	third_party/lua/luac.main.c
+
 THIRD_PARTY_LUA_LIBS = $(foreach x,$(THIRD_PARTY_LUA_ARTIFACTS),$($(x)))
-THIRD_PARTY_LUA_SRCS = $(foreach x,$(THIRD_PARTY_LUA_ARTIFACTS),$($(x)_SRCS))
 THIRD_PARTY_LUA_HDRS = $(foreach x,$(THIRD_PARTY_LUA_ARTIFACTS),$($(x)_HDRS))
 THIRD_PARTY_LUA_OBJS = $(foreach x,$(THIRD_PARTY_LUA_ARTIFACTS),$($(x)_OBJS))
 $(THIRD_PARTY_LUA_OBJS): third_party/lua/lua.mk

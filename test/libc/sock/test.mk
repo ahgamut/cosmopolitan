@@ -28,12 +28,15 @@ TEST_LIBC_SOCK_DIRECTDEPS =					\
 	LIBC_INTRIN						\
 	LIBC_MEM						\
 	LIBC_NEXGEN32E						\
+	LIBC_PROC						\
 	LIBC_RUNTIME						\
 	LIBC_SOCK						\
 	LIBC_STDIO						\
 	LIBC_STR						\
-	LIBC_STUBS						\
 	LIBC_SYSV						\
+	LIBC_THREAD						\
+	LIBC_LOG						\
+	LIBC_SYSV_CALLS						\
 	LIBC_TESTLIB						\
 	LIBC_X							\
 	TOOL_DECODE_LIB
@@ -53,6 +56,30 @@ o/$(MODE)/test/libc/sock/%.com.dbg:				\
 		$(CRT)						\
 		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
+
+o/$(MODE)/test/libc/sock/unix_test.com.runs:			\
+		private .PLEDGE = stdio rpath wpath cpath fattr proc unix
+
+o/$(MODE)/test/libc/sock/recvfrom_test.com.runs			\
+o/$(MODE)/test/libc/sock/nonblock_test.com.runs			\
+o/$(MODE)/test/libc/sock/socket_test.com.runs			\
+o/$(MODE)/test/libc/sock/shutdown_test.com.runs			\
+o/$(MODE)/test/libc/sock/setsockopt_test.com.runs		\
+o/$(MODE)/test/libc/sock/sendfile_test.com.runs			\
+o/$(MODE)/test/libc/sock/poll_test.com.runs			\
+o/$(MODE)/test/libc/sock/pollfd_test.com.runs:			\
+		private .PLEDGE = stdio rpath wpath cpath fattr proc inet
+
+o/$(MODE)/test/libc/sock/sendrecvmsg_test.com.runs:		\
+		private .PLEDGE = stdio rpath wpath cpath fattr proc inet recvfd sendfd
+
+o/$(MODE)/test/libc/sock/socket_test.com.runs:			\
+		private .INTERNET = 1  # todo: ipv6 filtering
+
+o/$(MODE)/test/libc/sock/recvmsg_test.com.runs:			\
+		private .INTERNET = 1  # need to bind to 0.0.0.0
+o/$(MODE)/test/libc/sock/recvmsg_test.com.runs:			\
+		private .PLEDGE = stdio rpath wpath cpath fattr proc inet recvfd sendfd
 
 $(TEST_LIBC_SOCK_OBJS): test/libc/sock/test.mk
 

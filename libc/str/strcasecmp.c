@@ -16,14 +16,10 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/dce.h"
+#include "libc/intrin/asan.internal.h"
 #include "libc/str/str.h"
-
-static inline noasan uint64_t UncheckedAlignedRead64(const char *p) {
-  return (uint64_t)(255 & p[7]) << 070 | (uint64_t)(255 & p[6]) << 060 |
-         (uint64_t)(255 & p[5]) << 050 | (uint64_t)(255 & p[4]) << 040 |
-         (uint64_t)(255 & p[3]) << 030 | (uint64_t)(255 & p[2]) << 020 |
-         (uint64_t)(255 & p[1]) << 010 | (uint64_t)(255 & p[0]) << 000;
-}
+#include "libc/str/tab.internal.h"
 
 /**
  * Compares NUL-terminated strings ascii case-insensitively.
@@ -36,8 +32,10 @@ static inline noasan uint64_t UncheckedAlignedRead64(const char *p) {
 int strcasecmp(const char *a, const char *b) {
   int x, y;
   size_t i = 0;
-  uint64_t v, w, d;
+  uint64_t v, w;
   if (a == b) return 0;
+  if (IsAsan()) __asan_verify_str(a);
+  if (IsAsan()) __asan_verify_str(b);
   if (((uintptr_t)a & 7) == ((uintptr_t)b & 7)) {
     for (; (uintptr_t)(a + i) & 7; ++i) {
     CheckEm:
@@ -46,8 +44,8 @@ int strcasecmp(const char *a, const char *b) {
       }
     }
     for (;; i += 8) {
-      v = UncheckedAlignedRead64(a + i);
-      w = UncheckedAlignedRead64(b + i);
+      v = *(uint64_t *)(a + i);
+      w = *(uint64_t *)(b + i);
       w = (v ^ w) | (~v & (v - 0x0101010101010101) & 0x8080808080808080);
       if (w) {
         i += (unsigned)__builtin_ctzll(w) >> 3;
@@ -59,3 +57,5 @@ int strcasecmp(const char *a, const char *b) {
     return x - y;
   }
 }
+
+__weak_reference(strcasecmp, strcasecmp_l);

@@ -5,7 +5,7 @@
 │ https://docs.python.org/3/license.html                                       │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #define PY_SSIZE_T_CLEAN
-#include "libc/bits/bits.h"
+#include "third_party/python/Modules/unicodedata.h"
 #include "libc/fmt/fmt.h"
 #include "libc/nexgen32e/kompressor.h"
 #include "third_party/python/Include/floatobject.h"
@@ -20,7 +20,7 @@
 #include "third_party/python/Include/structmember.h"
 #include "third_party/python/Include/ucnhash.h"
 #include "third_party/python/Include/yoink.h"
-#include "third_party/python/Modules/unicodedata.h"
+#include "third_party/python/Modules/bextra.h"
 #include "third_party/python/Modules/unicodedata_unidata.h"
 /* clang-format off */
 
@@ -405,7 +405,7 @@ unicodedata_UCD_decomposition_impl(PyObject *self, int chr)
 
     /* high byte is number of hex bytes (usually one or two), low byte
        is prefix code (from*/
-    count = bextra(_PyUnicode_Decomp, index, _PyUnicode_DecompBits) >> 8;
+    count = BitFieldExtract(_PyUnicode_Decomp, index, _PyUnicode_DecompBits) >> 8;
 
     /* XXX: could allocate the PyString up front instead
        (strlen(prefix) + 5 * count + 1 bytes) */
@@ -413,7 +413,7 @@ unicodedata_UCD_decomposition_impl(PyObject *self, int chr)
     /* Based on how index is calculated above and _PyUnicode_Decomp is
        generated from Tools/unicode/makeunicodedata.py, it should not be
        possible to overflow _PyUnicode_DecompPrefix. */
-    prefix_index = bextra(_PyUnicode_Decomp, index, _PyUnicode_DecompBits) & 255;
+    prefix_index = BitFieldExtract(_PyUnicode_Decomp, index, _PyUnicode_DecompBits) & 255;
     assert(prefix_index < Py_ARRAY_LENGTH(_PyUnicode_DecompPrefix));
 
     /* copy prefix */
@@ -425,8 +425,8 @@ unicodedata_UCD_decomposition_impl(PyObject *self, int chr)
             decomp[i++] = ' ';
         assert(i < sizeof(decomp));
         PyOS_snprintf(decomp + i, sizeof(decomp) - i, "%04X",
-                      bextra(_PyUnicode_Decomp, ++index,
-                             _PyUnicode_DecompBits));
+                      BitFieldExtract(_PyUnicode_Decomp, ++index,
+                                      _PyUnicode_DecompBits));
         i += strlen(decomp + i);
     }
     return PyUnicode_FromStringAndSize(decomp, i);
@@ -646,7 +646,12 @@ PyInit_unicodedata(void)
     return m;
 }
 
-_Section(".rodata.pytab.1") const struct _inittab _PyImport_Inittab_unicodedata = {
+#ifdef __aarch64__
+_Section(".rodata.pytab.1 //")
+#else
+_Section(".rodata.pytab.1")
+#endif
+ const struct _inittab _PyImport_Inittab_unicodedata = {
     "unicodedata",
     PyInit_unicodedata,
 };

@@ -16,55 +16,49 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/ntspawn.h"
+#include "libc/proc/ntspawn.h"
 #include "libc/errno.h"
+#include "libc/mem/gc.internal.h"
 #include "libc/mem/mem.h"
-#include "libc/runtime/gc.internal.h"
 #include "libc/str/str.h"
 #include "libc/testlib/testlib.h"
 
 char16_t cmdline[ARG_MAX / 2];
 
 TEST(mkntcmdline, emptyArgvList_cantBeEmptyOnWindows) {
-  char *argv[] = {NULL};
-  EXPECT_NE(-1, mkntcmdline(cmdline, "foo", argv));
+  char *argv[] = {"foo", NULL};
+  EXPECT_NE(-1, mkntcmdline(cmdline, argv));
   EXPECT_STREQ(u"foo", cmdline);
 }
 
 TEST(mkntcmdline, emptyArgvListWithProg_isEmpty) {
   char *argv[] = {NULL};
-  EXPECT_NE(-1, mkntcmdline(cmdline, argv[0], argv));
+  EXPECT_NE(-1, mkntcmdline(cmdline, argv));
   EXPECT_STREQ(u"", cmdline);
 }
 
 TEST(mkntcmdline, emptyArg_getsQuoted) {
   char *argv[] = {"", NULL};
-  EXPECT_NE(-1, mkntcmdline(cmdline, argv[0], argv));
+  EXPECT_NE(-1, mkntcmdline(cmdline, argv));
   EXPECT_STREQ(u"\"\"", cmdline);
 }
 
 TEST(mkntcmdline, ignoranceIsBliss) {
   char *argv[] = {"echo", "hello", "world", NULL};
-  EXPECT_NE(-1, mkntcmdline(cmdline, argv[0], argv));
+  EXPECT_NE(-1, mkntcmdline(cmdline, argv));
   EXPECT_STREQ(u"echo hello world", cmdline);
 }
 
 TEST(mkntcmdline, spaceInArgument_getQuotesWrappedAround) {
   char *argv[] = {"echo", "hello there", "world", NULL};
-  EXPECT_NE(-1, mkntcmdline(cmdline, argv[0], argv));
+  EXPECT_NE(-1, mkntcmdline(cmdline, argv));
   EXPECT_STREQ(u"echo \"hello there\" world", cmdline);
 }
 
 TEST(mkntcmdline, justSlash) {
   char *argv[] = {"\\", NULL};
-  EXPECT_NE(-1, mkntcmdline(cmdline, argv[0], argv));
+  EXPECT_NE(-1, mkntcmdline(cmdline, argv));
   EXPECT_STREQ(u"\\", cmdline);
-}
-
-TEST(mkntcmdline, basicQuoting) {
-  char *argv[] = {"a\"b c", "d", NULL};
-  EXPECT_NE(-1, mkntcmdline(cmdline, argv[0], argv));
-  EXPECT_STREQ(u"\"a\\\"b c\" d" /* "a\"b c" d */, cmdline);
 }
 
 TEST(mkntcmdline, testUnicode) {
@@ -73,7 +67,7 @@ TEST(mkntcmdline, testUnicode) {
       gc(strdup("要依法治国是赞美那些谁是公义的和惩罚恶人。 - 韩非")),
       NULL,
   };
-  EXPECT_NE(-1, mkntcmdline(cmdline, argv1[0], argv1));
+  EXPECT_NE(-1, mkntcmdline(cmdline, argv1));
   EXPECT_STREQ(u"(╯°□°)╯ \"要依法治国是赞美那些谁是公义的和惩罚恶人。 - 韩非\"",
                cmdline);
 }
@@ -82,12 +76,12 @@ TEST(mkntcmdline, fixAsBestAsWeCanForNow1) {
   char *argv1[] = {
       "/C/WINDOWS/system32/cmd.exe",
       "/C",
-      "more < \"/C/Users/jart/AppData/Local/Temp/tmplquaa_d6\"",
+      "more <\"/C/Users/jart/AppData/Local/Temp/tmplquaa_d6\"",
       NULL,
   };
-  EXPECT_NE(-1, mkntcmdline(cmdline, argv1[0], argv1));
-  EXPECT_STREQ(u"C:\\WINDOWS\\system32\\cmd.exe /C \"more < "
-               u"\\\"C:/Users/jart/AppData/Local/Temp/tmplquaa_d6\\\"\"",
+  EXPECT_NE(-1, mkntcmdline(cmdline, argv1));
+  EXPECT_STREQ(u"C:\\WINDOWS\\system32\\cmd.exe /C \"more <"
+               u"\"\"\"C:/Users/jart/AppData/Local/Temp/tmplquaa_d6\"\"\"\"",
                cmdline);
 }
 
@@ -98,14 +92,14 @@ TEST(mkntcmdline, fixAsBestAsWeCanForNow2) {
       "less /C/Users/jart/AppData/Local/Temp/tmplquaa_d6",
       NULL,
   };
-  EXPECT_NE(-1, mkntcmdline(cmdline, argv1[0], argv1));
+  EXPECT_NE(-1, mkntcmdline(cmdline, argv1));
   EXPECT_STREQ(u"C:\\WINDOWS\\system32\\cmd.exe /C \"less "
                u"C:/Users/jart/AppData/Local/Temp/tmplquaa_d6\"",
                cmdline);
 }
 
 TEST(mkntcmdline, testWut) {
-  char *argv[] = {"redbean.com", "--strace", NULL};
-  EXPECT_NE(-1, mkntcmdline(cmdline, "C:\\Users\\jart\\redbean.com", argv));
-  EXPECT_STREQ(u"C:\\Users\\jart\\redbean.com --strace", cmdline);
+  char *argv[] = {"C:\\Users\\jart\\𝑟𝑒𝑑𝑏𝑒𝑎𝑛.com", "--strace", NULL};
+  EXPECT_NE(-1, mkntcmdline(cmdline, argv));
+  EXPECT_STREQ(u"C:\\Users\\jart\\𝑟𝑒𝑑𝑏𝑒𝑎𝑛.com --strace", cmdline);
 }

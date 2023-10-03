@@ -17,22 +17,21 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
-#include "libc/bits/bits.h"
-#include "libc/bits/likely.h"
-#include "libc/bits/safemacros.internal.h"
-#include "libc/bits/weaken.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
-#include "libc/calls/strace.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/intrin/asan.internal.h"
 #include "libc/intrin/asancodes.h"
+#include "libc/intrin/bits.h"
+#include "libc/intrin/bsr.h"
 #include "libc/intrin/describeflags.internal.h"
-#include "libc/intrin/kprintf.h"
-#include "libc/intrin/pthread.h"
-#include "libc/intrin/spinlock.h"
+#include "libc/intrin/directmap.internal.h"
+#include "libc/intrin/likely.h"
+#include "libc/intrin/safemacros.internal.h"
+#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/weaken.h"
 #include "libc/limits.h"
 #include "libc/log/backtrace.internal.h"
 #include "libc/log/libfatal.internal.h"
@@ -41,16 +40,20 @@
 #include "libc/nt/process.h"
 #include "libc/nt/runtime.h"
 #include "libc/nt/struct/processmemorycounters.h"
-#include "libc/rand/rand.h"
-#include "libc/runtime/directmap.internal.h"
 #include "libc/runtime/internal.h"
 #include "libc/runtime/memtrack.internal.h"
 #include "libc/runtime/runtime.h"
+#include "libc/runtime/zipos.internal.h"
+#include "libc/stdckdint.h"
+#include "libc/stdio/rand.h"
 #include "libc/str/str.h"
+#include "libc/sysv/consts/auxv.h"
 #include "libc/sysv/consts/map.h"
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/prot.h"
+#include "libc/sysv/consts/ss.h"
 #include "libc/sysv/errfuns.h"
+#include "libc/thread/thread.h"
 
 #define MAP_ANONYMOUS_linux   0x00000020
 #define MAP_ANONYMOUS_openbsd 0x00001000
@@ -61,23 +64,25 @@
 #define IP(X)      (intptr_t)(X)
 #define VIP(X)     (void *)IP(X)
 #define ALIGNED(p) (!(IP(p) & (FRAMESIZE - 1)))
-#define ADDR(x)    ((int64_t)((uint64_t)(x) << 32) >> 16)
 #define SHADE(x)   (((intptr_t)(x) >> 3) + 0x7fff8000)
 #define FRAME(x)   ((int)((intptr_t)(x) >> 16))
 
-static wontreturn void OnUnrecoverableMmapError(const char *s) {
-  if (weaken(__die)) weaken(__die)();
+static inline pureconst unsigned long __rounddown2pow(unsigned long x) {
+  return x ? 1ul << _bsrl(x) : 0;
+}
+
+static wontreturn void __mmap_die(const char *s) {
+  if (_weaken(__die)) _weaken(__die)();
   STRACE("%s %m", s);
-  __restorewintty();
   _Exit(199);
 }
 
-static noasan inline bool OverlapsExistingMapping(char *p, size_t n) {
+static inline bool __overlaps_existing_mapping(char *p, size_t n) {
   int a, b, i;
-  assert(n > 0);
+  unassert(n > 0);
   a = FRAME(p);
   b = FRAME(p + (n - 1));
-  i = FindMemoryInterval(&_mmi, a);
+  i = __find_memory(&_mmi, a);
   if (i < _mmi.i) {
     if (a <= _mmi.p[i].x && _mmi.p[i].x <= b) return true;
     if (a <= _mmi.p[i].y && _mmi.p[i].y <= b) return true;
@@ -86,20 +91,20 @@ static noasan inline bool OverlapsExistingMapping(char *p, size_t n) {
   return false;
 }
 
-static noasan bool ChooseMemoryInterval(int x, int n, int align, int *res) {
+static bool __choose_memory(int x, int n, int align, int *res) {
   // TODO: improve performance
   int i, start, end;
-  assert(align > 0);
+  unassert(align > 0);
   if (_mmi.i) {
 
     // find the start of the automap memory region
-    i = FindMemoryInterval(&_mmi, x);
+    i = __find_memory(&_mmi, x);
     if (i < _mmi.i) {
 
       // check to see if there's space available before the first entry
-      if (!__builtin_add_overflow(x, align - 1, &start)) {
+      if (!ckd_add(&start, x, align - 1)) {
         start &= -align;
-        if (!__builtin_add_overflow(start, n - 1, &end)) {
+        if (!ckd_add(&end, start, n - 1)) {
           if (end < _mmi.p[i].x) {
             *res = start;
             return true;
@@ -109,10 +114,10 @@ static noasan bool ChooseMemoryInterval(int x, int n, int align, int *res) {
 
       // check to see if there's space available between two entries
       while (++i < _mmi.i) {
-        if (!__builtin_add_overflow(_mmi.p[i - 1].y, 1, &start) &&
-            !__builtin_add_overflow(start, align - 1, &start)) {
+        if (!ckd_add(&start, _mmi.p[i - 1].y, 1) &&
+            !ckd_add(&start, start, align - 1)) {
           start &= -align;
-          if (!__builtin_add_overflow(start, n - 1, &end)) {
+          if (!ckd_add(&end, start, n - 1)) {
             if (end < _mmi.p[i].x) {
               *res = start;
               return true;
@@ -123,10 +128,10 @@ static noasan bool ChooseMemoryInterval(int x, int n, int align, int *res) {
     }
 
     // otherwise append after the last entry if space is available
-    if (!__builtin_add_overflow(_mmi.p[i - 1].y, 1, &start) &&
-        !__builtin_add_overflow(start, align - 1, &start)) {
+    if (!ckd_add(&start, _mmi.p[i - 1].y, 1) &&
+        !ckd_add(&start, start, align - 1)) {
       start &= -align;
-      if (!__builtin_add_overflow(start, n - 1, &end)) {
+      if (!ckd_add(&end, start, n - 1)) {
         *res = start;
         return true;
       }
@@ -135,9 +140,9 @@ static noasan bool ChooseMemoryInterval(int x, int n, int align, int *res) {
   } else {
     // if memtrack is empty, then just assign the requested address
     // assuming it doesn't overflow
-    if (!__builtin_add_overflow(x, align - 1, &start)) {
+    if (!ckd_add(&start, x, align - 1)) {
       start &= -align;
-      if (!__builtin_add_overflow(start, n - 1, &end)) {
+      if (!ckd_add(&end, start, n - 1)) {
         *res = start;
         return true;
       }
@@ -147,47 +152,46 @@ static noasan bool ChooseMemoryInterval(int x, int n, int align, int *res) {
   return false;
 }
 
-noasan static bool Automap(int count, int align, int *res) {
-  return ChooseMemoryInterval(FRAME(kAutomapStart), count, align, res) &&
+static bool __auto_map(int count, int align, int *res) {
+  return __choose_memory(FRAME(kAutomapStart), count, align, res) &&
          *res + count <= FRAME(kAutomapStart + (kAutomapSize - 1));
 }
 
-static noasan void *FinishMemory(void *addr, size_t size, int prot, int flags,
-                                 int fd, int64_t off, int f, int x, int n,
-                                 struct DirectMap dm) {
+static void *__finish_memory(void *addr, size_t size, int prot, int flags,
+                             int fd, int64_t off, int f, int x, int n,
+                             struct DirectMap dm) {
   if (!IsWindows() && (flags & MAP_FIXED)) {
-    if (UntrackMemoryIntervals(addr, size)) {
-      OnUnrecoverableMmapError("FIXED UNTRACK FAILED");
+    if (__untrack_memories(addr, size)) {
+      __mmap_die("FIXED UNTRACK FAILED");
     }
   }
-  if (TrackMemoryInterval(&_mmi, x, x + (n - 1), dm.maphandle, prot, flags,
-                          false, false, off, size)) {
+  if (__track_memory(&_mmi, x, x + (n - 1), dm.maphandle, prot, flags, false,
+                     false, off, size)) {
     if (sys_munmap(addr, n) == -1) {
-      OnUnrecoverableMmapError("TRACK MUNMAP FAILED");
+      __mmap_die("TRACK MUNMAP FAILED");
     }
     return MAP_FAILED;
   }
-  if (weaken(__asan_map_shadow) && !OverlapsShadowSpace(addr, size)) {
-    weaken(__asan_map_shadow)((intptr_t)addr, size);
+  if (_weaken(__asan_map_shadow) && !OverlapsShadowSpace(addr, size)) {
+    _weaken(__asan_map_shadow)((intptr_t)addr, size);
   }
   return addr;
 }
 
-static noasan void *MapMemory(void *addr, size_t size, int prot, int flags,
-                              int fd, int64_t off, int f, int x, int n) {
+static void *__map_memory(void *addr, size_t size, int prot, int flags, int fd,
+                          int64_t off, int f, int x, int n) {
   struct DirectMap dm;
   dm = sys_mmap(addr, size, prot, f, fd, off);
   if (VERY_UNLIKELY(dm.addr == MAP_FAILED)) {
     if (IsWindows() && (flags & MAP_FIXED)) {
-      OnUnrecoverableMmapError(
-          "can't recover from MAP_FIXED errors on Windows");
+      __mmap_die("can't recover from MAP_FIXED errors on Windows");
     }
     return MAP_FAILED;
   }
   if (VERY_UNLIKELY(dm.addr != addr)) {
-    OnUnrecoverableMmapError("KERNEL DIDN'T RESPECT MAP_FIXED");
+    __mmap_die("KERNEL DIDN'T RESPECT MAP_FIXED");
   }
-  return FinishMemory(addr, size, prot, flags, fd, off, f, x, n, dm);
+  return __finish_memory(addr, size, prot, flags, fd, off, f, x, n, dm);
 }
 
 /**
@@ -196,17 +200,17 @@ static noasan void *MapMemory(void *addr, size_t size, int prot, int flags,
  * This is useful on Windows since it allows us to partially unmap or
  * punch holes into existing mappings.
  */
-static textwindows dontinline noasan void *MapMemories(char *addr, size_t size,
-                                                       int prot, int flags,
-                                                       int fd, int64_t off,
-                                                       int f, int x, int n) {
+static textwindows dontinline void *__map_memories(char *addr, size_t size,
+                                                   int prot, int flags, int fd,
+                                                   int64_t off, int f, int x,
+                                                   int n) {
   size_t i, m;
   int64_t oi, sz;
   struct DirectMap dm;
   bool iscow, readonlyfile;
   m = (size_t)(n - 1) << 16;
-  assert(m < size);
-  assert(m + FRAMESIZE >= size);
+  unassert(m < size);
+  unassert(m + FRAMESIZE >= size);
   oi = fd == -1 ? 0 : off + m;
   sz = size - m;
   dm = sys_mmap(addr + m, sz, prot, f, fd, oi);
@@ -214,143 +218,123 @@ static textwindows dontinline noasan void *MapMemories(char *addr, size_t size,
   iscow = (flags & MAP_TYPE) != MAP_SHARED && fd != -1;
   readonlyfile = (flags & MAP_TYPE) == MAP_SHARED && fd != -1 &&
                  (g_fds.p[fd].flags & O_ACCMODE) == O_RDONLY;
-  if (TrackMemoryInterval(&_mmi, x + (n - 1), x + (n - 1), dm.maphandle, prot,
-                          flags, readonlyfile, iscow, oi, sz) == -1) {
-    OnUnrecoverableMmapError("MapMemories unrecoverable #1");
+  if (__track_memory(&_mmi, x + (n - 1), x + (n - 1), dm.maphandle, prot, flags,
+                     readonlyfile, iscow, oi, sz) == -1) {
+    __mmap_die("__map_memories unrecoverable #1");
   }
   for (i = 0; i < m; i += FRAMESIZE) {
     oi = fd == -1 ? 0 : off + i;
     sz = FRAMESIZE;
     dm = sys_mmap(addr + i, sz, prot, f, fd, oi);
     if (dm.addr == MAP_FAILED ||
-        TrackMemoryInterval(&_mmi, x + i / FRAMESIZE, x + i / FRAMESIZE,
-                            dm.maphandle, prot, flags, readonlyfile, iscow, oi,
-                            sz) == -1) {
-      OnUnrecoverableMmapError("MapMemories unrecoverable #2");
+        __track_memory(&_mmi, x + i / FRAMESIZE, x + i / FRAMESIZE,
+                       dm.maphandle, prot, flags, readonlyfile, iscow, oi,
+                       sz) == -1) {
+      __mmap_die("__map_memories unrecoverable #2");
     }
   }
-  if (weaken(__asan_map_shadow) && !OverlapsShadowSpace(addr, size)) {
-    weaken(__asan_map_shadow)((intptr_t)addr, size);
+  if (_weaken(__asan_map_shadow) && !OverlapsShadowSpace(addr, size)) {
+    _weaken(__asan_map_shadow)((intptr_t)addr, size);
   }
   return addr;
 }
 
-static noasan inline void *Mmap(void *addr, size_t size, int prot, int flags,
-                                int fd, int64_t off) {
-#if defined(SYSDEBUG) && (_KERNTRACE || _NTTRACE)
-  if (IsWindows()) {
-    STRACE("mmap(%p, %'zu, %s, %s, %d, %'ld) → ...", addr, size,
-           DescribeProtFlags(prot), DescribeMapFlags(flags), fd, off);
-  }
-#endif
+inline void *__mmap_unlocked(void *addr, size_t size, int prot, int flags,
+                             int fd, int64_t off) {
   char *p = addr;
   struct DirectMap dm;
-  int a, b, i, f, m, n, x;
+  size_t requested_size;
   bool needguard, clashes;
+  int a, f, n, x, pagesize;
   size_t virtualused, virtualneed;
 
   if (VERY_UNLIKELY(!size)) {
-    STRACE("size=0");
-    return VIP(einval());
-  }
-
-  if (VERY_UNLIKELY(!IsLegalPointer(p))) {
-    STRACE("p isn't 48-bit");
+    STRACE("can't mmap zero bytes");
     return VIP(einval());
   }
 
   if (VERY_UNLIKELY(!ALIGNED(p))) {
-    STRACE("p isn't 64kb aligned");
-    return VIP(einval());
-  }
-
-  if (VERY_UNLIKELY(fd < -1)) {
-    STRACE("mmap(%.12p, %'zu, fd=%d) EBADF", p, size, fd);
-    return VIP(ebadf());
-  }
-
-  if (VERY_UNLIKELY(!((fd != -1) ^ !!(flags & MAP_ANONYMOUS)))) {
-    STRACE("fd anonymous mismatch");
-    return VIP(einval());
-  }
-
-  if (VERY_UNLIKELY(!(!!(flags & MAP_PRIVATE) ^ !!(flags & MAP_SHARED)))) {
-    STRACE("MAP_SHARED ^ MAP_PRIVATE");
-    return VIP(einval());
-  }
-
-  if (VERY_UNLIKELY(off < 0)) {
-    STRACE("neg off");
-    return VIP(einval());
-  }
-
-  if (VERY_UNLIKELY(!ALIGNED(off))) {
-    STRACE("p isn't 64kb aligned");
-    return VIP(einval());
-  }
-
-  if (fd == -1) {
-    size = ROUNDUP(size, FRAMESIZE);
-    if (IsWindows()) {
-      prot |= PROT_WRITE; /* kludge */
-    }
-  } else if (__isfdkind(fd, kFdZip)) {
-    STRACE("fd is zipos handle");
+    STRACE("cosmo mmap is 64kb aligned");
     return VIP(einval());
   }
 
   if (VERY_UNLIKELY(!IsLegalSize(size))) {
-    STRACE("size isn't 48-bit");
+    STRACE("mmap size isn't legal");
     return VIP(einval());
   }
 
-  if (VERY_UNLIKELY(INT64_MAX - size < off)) {
-    STRACE("too large");
+  if (VERY_UNLIKELY(!IsLegalPointer(p))) {
+    STRACE("mmap addr isn't 48-bit");
+    return VIP(einval());
+  }
+
+  if ((flags & (MAP_SHARED | MAP_PRIVATE)) == (MAP_SHARED | MAP_PRIVATE)) {
+    flags = MAP_SHARED;  // cf. MAP_SHARED_VALIDATE
+  }
+
+  requested_size = size;
+  pagesize = getauxval(AT_PAGESZ);
+  if (flags & MAP_ANONYMOUS) {
+    fd = -1;
+    off = 0;
+    size = ROUNDUP(size, FRAMESIZE);
+    if ((flags & MAP_TYPE) == MAP_FILE) {
+      STRACE("need MAP_PRIVATE or MAP_SHARED");
+      return VIP(einval());
+    }
+  } else if (__isfdkind(fd, kFdZip)) {
+    STRACE("mmap fd is zipos handle");
+    return VIP(einval());
+  } else if (VERY_UNLIKELY(off < 0)) {
+    STRACE("mmap negative offset");
+    return VIP(einval());
+  } else if (off & ((IsWindows() ? FRAMESIZE : pagesize) - 1)) {
+    STRACE("mmap offset isn't properly aligned");
+    return VIP(einval());
+  } else if (VERY_UNLIKELY(INT64_MAX - size < off)) {
+    STRACE("mmap too large");
     return VIP(einval());
   }
 
   if (__virtualmax < LONG_MAX &&
-      (__builtin_add_overflow((virtualused = GetMemtrackSize(&_mmi)), size,
-                              &virtualneed) ||
+      (ckd_add(&virtualneed, (virtualused = __get_memtrack_size(&_mmi)),
+               size) ||
        virtualneed > __virtualmax)) {
-    STRACE("%'zu size + %'zu inuse exceeds virtual memory limit %'zu", size,
-           virtualused, __virtualmax);
+    STRACE("mmap %'zu size + %'zu inuse exceeds virtual memory limit %'zu",
+           size, virtualused, __virtualmax);
     return VIP(enomem());
   }
 
-  clashes = OverlapsImageSpace(p, size) || OverlapsExistingMapping(p, size);
+  clashes = OverlapsImageSpace(p, size) || __overlaps_existing_mapping(p, size);
 
   if ((flags & MAP_FIXED_NOREPLACE) == MAP_FIXED_NOREPLACE && clashes) {
-    STRACE("noreplace overlaps existing");
+    STRACE("mmap noreplace overlaps existing");
     return VIP(eexist());
   }
 
-  if (__builtin_add_overflow((int)(size >> 16), (int)!!(size & (FRAMESIZE - 1)),
-                             &n)) {
-    STRACE("memory range overflows");
+  if (ckd_add(&n, (int)(size >> 16), (int)!!(size & (FRAMESIZE - 1)))) {
+    STRACE("mmap range overflows");
     return VIP(einval());
   }
 
-  a = max(1, rounddown2pow(size) >> 16);
-
+  a = MAX(1, __rounddown2pow(size) >> 16);
   f = (flags & ~MAP_FIXED_NOREPLACE) | MAP_FIXED;
   if (flags & MAP_FIXED) {
     x = FRAME(p);
     if (IsWindows()) {
-      if (UntrackMemoryIntervals(p, size)) {
-        OnUnrecoverableMmapError("FIXED UNTRACK FAILED");
+      if (__untrack_memories(p, size)) {
+        __mmap_die("FIXED UNTRACK FAILED");
       }
     }
-  } else if (p && !clashes && !OverlapsArenaSpace(p, size) &&
-             !OverlapsShadowSpace(p, size)) {
+  } else if (p && !clashes && !OverlapsShadowSpace(p, size)) {
     x = FRAME(p);
-  } else if (!Automap(n, a, &x)) {
+  } else if (!__auto_map(n, a, &x)) {
     STRACE("automap has no room for %d frames with %d alignment", n, a);
     return VIP(enomem());
   }
 
   needguard = false;
-  p = (char *)ADDR(x);
+  p = (char *)ADDR_32_TO_48(x);
   if ((f & MAP_TYPE) == MAP_STACK) {
     if (~f & MAP_ANONYMOUS) {
       STRACE("MAP_STACK must be anonymous");
@@ -370,25 +354,28 @@ static noasan inline void *Mmap(void *addr, size_t size, int prot, int flags,
       f |= MAP_STACK_openbsd;
       needguard = true;
     } else if (IsLinux()) {
-      // by default MAP_GROWSDOWN will auto-allocate 10mb of pages. it's
-      // supposed to stop growing if an adjacent allocation exists, to
-      // prevent your stacks from overlapping on each other. we're not
-      // able to easily assume a mapping beneath this one exists. even
-      // if we could, the linux kernel requires for muh security reasons
-      // that stacks be at least 1mb away from each other, so it's not
-      // possible to avoid this call if our goal is to have 60kb stacks
-      // with 4kb guards like a sane multithreaded production system.
-      // however this 1mb behavior oddly enough is smart enough to not
-      // apply if the mapping is a manually-created guard page.
-      if ((dm = sys_mmap(p + size - PAGESIZE, PAGESIZE, prot,
+      // make sure there's no existing stuff existing between our stack
+      // starting page and the bottom guard page, since that would stop
+      // our stack page from growing down.
+      npassert(!sys_munmap(p, size));
+      int guardsize = pagesize, e = errno;
+      if ((dm = sys_mmap(p + size - guardsize, guardsize, prot,
                          f | MAP_GROWSDOWN_linux, fd, off))
-              .addr == MAP_FAILED) {
-        return MAP_FAILED;
+              .addr != MAP_FAILED) {
+        npassert(sys_mmap(p, pagesize, PROT_NONE,
+                          MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS, -1, 0)
+                     .addr == p);
+        dm.addr = p;
+        p = __finish_memory(p, size, prot, flags, fd, off, f, x, n, dm);
+        if (IsAsan() && p != MAP_FAILED) {
+          __asan_poison(p, pagesize, kAsanStackOverflow);
+        }
+        return p;
+      } else if (errno == ENOTSUP) {
+        // WSL and Blink don't support MAP_GROWSDOWN
+        needguard = true;
+        errno = e;
       }
-      sys_mmap(p, PAGESIZE, PROT_NONE, MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS,
-               -1, 0);
-      dm.addr = p;
-      return FinishMemory(p, size, prot, flags, fd, off, f, x, n, dm);
     } else {
       if (IsFreebsd()) {
         f |= MAP_STACK_freebsd;
@@ -398,17 +385,20 @@ static noasan inline void *Mmap(void *addr, size_t size, int prot, int flags,
   }
 
   if (!IsWindows()) {
-    p = MapMemory(p, size, prot, flags, fd, off, f, x, n);
+    p = __map_memory(p, size, prot, flags, fd, off, f, x, n);
   } else {
-    p = MapMemories(p, size, prot, flags, fd, off, f, x, n);
+    p = __map_memories(p, size, prot, flags, fd, off, f, x, n);
   }
 
   if (p != MAP_FAILED) {
+    if (IsAsan()) {
+      __asan_poison(p + requested_size, size - requested_size,
+                    kAsanMmapSizeOverrun);
+    }
     if (needguard) {
-      mprotect(p, PAGESIZE, PROT_NONE);
+      unassert(!mprotect(p, pagesize, PROT_NONE));
       if (IsAsan()) {
-        __repstosb((void *)(((intptr_t)p >> 3) + 0x7fff8000),
-                   kAsanStackOverflow, PAGESIZE / 8);
+        __asan_poison(p, pagesize, kAsanStackOverflow);
       }
     }
   }
@@ -417,7 +407,7 @@ static noasan inline void *Mmap(void *addr, size_t size, int prot, int flags,
 }
 
 /**
- * Beseeches system for page-table entries, e.g.
+ * Creates virtual memory, e.g.
  *
  *     char *m;
  *     m = mmap(NULL, FRAMESIZE, PROT_READ | PROT_WRITE,
@@ -432,26 +422,16 @@ static noasan inline void *Mmap(void *addr, size_t size, int prot, int flags,
  *     needs to be made mandatory because of Windows although you can
  *     use __sys_mmap() to circumvent it on System Five in which case
  *     runtime support services, e.g. asan memory safety, could break
- * @param size must be >0 and needn't be a multiple of FRAMESIZE, but
- *     will be rounded up to FRAMESIZE automatically if MAP_ANONYMOUS
- *     is specified
+ * @param size must be >0 otherwise EINVAL is raised
  * @param prot can have PROT_READ/PROT_WRITE/PROT_EXEC/PROT_NONE/etc.
  * @param flags should have one of the following masked by `MAP_TYPE`
- *     - `MAP_FILE` in which case `fd != -1` should be the case
+ *     - `MAP_FILE` in which case `MAP_ANONYMOUS` shouldn't be used
  *     - `MAP_PRIVATE` for copy-on-write behavior of writeable pages
  *     - `MAP_SHARED` to create shared memory between processes
  *     - `MAP_STACK` to create a grows-down alloc, where a guard page
- *       is automatically protected at the bottom: FreeBSD's behavior
- *       is polyfilled across platforms; uses MAP_GROWSDOWN on Linux
- *       too for extra oomph (do not use MAP_GROWSDOWN!) and this is
- *       completely mandatory on OpenBSD but helps perf elsewhere if
- *       you need to create 10,000 threads.  This flag is the reason
- *       why `STACK_FRAME_UNLIMITED` toil is important, because this
- *       only allocates a 4096-byte guard page, thus we need the GCC
- *       compile-time checks to ensure some char[8192] vars will not
- *       create an undetectable overflow into another thread's stack
+ *       is automatically protected at the bottom, sized as AT_PAGESZ
  *     Your `flags` may optionally bitwise or any of the following:
- *     - `MAP_ANONYMOUS` in which case `fd == -1` should be the case
+ *     - `MAP_ANONYMOUS` in which case `fd` and `off` are ignored
  *     - `MAP_FIXED` in which case `addr` becomes more than a hint
  *     - `MAP_FIXED_NOREPLACE` to protect existing mappings; this is
  *       always polyfilled by mmap() which tracks its own memory and
@@ -467,21 +447,33 @@ static noasan inline void *Mmap(void *addr, size_t size, int prot, int flags,
  *     - `MAP_INHERIT` is NetBSD-only
  *     - `MAP_LOCKED` is Linux-only
  * @param fd is an open()'d file descriptor, whose contents shall be
- *     made available w/ automatic reading at the chosen address and
- *     must be -1 if MAP_ANONYMOUS is specified
+ *     made available w/ automatic reading at the chosen address
  * @param off specifies absolute byte index of fd's file for mapping,
- *     should be zero if MAP_ANONYMOUS is specified, and sadly needs
- *     to be 64kb aligned too
+ *     should be zero if MAP_ANONYMOUS is specified, which SHOULD be
+ *     aligned to FRAMESIZE
  * @return virtual base address of new mapping, or MAP_FAILED w/ errno
  */
-noasan void *mmap(void *addr, size_t size, int prot, int flags, int fd,
-                  int64_t off) {
+void *mmap(void *addr, size_t size, int prot, int flags, int fd, int64_t off) {
   void *res;
-  size_t toto;
+#ifdef SYSDEBUG
+  size_t toto = 0;
+#if _KERNTRACE || _NTTRACE
+  if (IsWindows()) {
+    STRACE("mmap(%p, %'zu, %s, %s, %d, %'ld) → ...", addr, size,
+           DescribeProtFlags(prot), DescribeMapFlags(flags), fd, off);
+  }
+#endif
+#endif
   __mmi_lock();
-  res = Mmap(addr, size, prot, flags, fd, off);
+  if (!__isfdkind(fd, kFdZip)) {
+    res = __mmap_unlocked(addr, size, prot, flags, fd, off);
+  } else {
+    res = _weaken(__zipos_mmap)(
+        addr, size, prot, flags,
+        (struct ZiposHandle *)(intptr_t)g_fds.p[fd].handle, off);
+  }
 #if SYSDEBUG
-  toto = __strace > 0 ? GetMemtrackSize(&_mmi) : 0;
+  toto = __strace > 0 ? __get_memtrack_size(&_mmi) : 0;
 #endif
   __mmi_unlock();
   STRACE("mmap(%p, %'zu, %s, %s, %d, %'ld) → %p% m (%'zu bytes total)", addr,
@@ -489,3 +481,5 @@ noasan void *mmap(void *addr, size_t size, int prot, int flags, int fd,
          toto);
   return res;
 }
+
+__strong_reference(mmap, mmap64);

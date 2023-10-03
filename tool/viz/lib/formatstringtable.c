@@ -16,15 +16,17 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/safemacros.internal.h"
-#include "libc/unicode/unicode.h"
 #include "tool/viz/lib/formatstringtable.h"
+#include "libc/intrin/safemacros.internal.h"
+#include "libc/mem/mem.h"
+#include "libc/str/strwidth.h"
 
 void *FreeStringTableCells(long yn, long xn, char *T[yn][xn]) {
   long y, x;
   for (y = 0; y < yn; ++y) {
     for (x = 0; x < xn; ++x) {
-      free_s(&T[y][x]);
+      free(T[y][x]);
+      T[y][x] = 0;
     }
   }
   return T;

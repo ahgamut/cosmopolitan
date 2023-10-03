@@ -16,20 +16,18 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/alg/arraylist2.internal.h"
+#include "tool/build/lib/buffer.h"
 #include "libc/calls/calls.h"
 #include "libc/errno.h"
-#include "libc/fmt/fmt.h"
 #include "libc/macros.internal.h"
-#include "libc/mem/fmt.h"
+#include "libc/mem/arraylist2.internal.h"
 #include "libc/mem/mem.h"
+#include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
-#include "libc/str/tpenc.h"
-#include "tool/build/lib/buffer.h"
 
 /* TODO(jart): replace with new append*() library */
 
-void AppendData(struct Buffer *b, char *data, unsigned len) {
+void AppendData(struct Buffer *b, const char *data, size_t len) {
   char *p;
   unsigned n;
   if (b->i + len + 1 > b->n) {
@@ -65,7 +63,6 @@ void AppendWide(struct Buffer *b, wint_t wc) {
 
 int AppendFmt(struct Buffer *b, const char *fmt, ...) {
   int n;
-  char *p;
   va_list va, vb;
   va_start(va, fmt);
   va_copy(vb, va);

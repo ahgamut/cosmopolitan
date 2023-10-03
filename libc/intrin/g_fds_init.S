@@ -21,7 +21,10 @@
 	.init.start 305,_init_g_fds
 	push	%rdi
 	push	%rsi
-	call	InitializeFileDescriptors
+	mov	%r12d,%edi			// argc
+	mov	%r13,%rsi			// argv
+	mov	%r14,%rdx			// environ
+	call	__init_fds
 	pop	%rsi
 	pop	%rdi
 	.init.end 305,_init_g_fds

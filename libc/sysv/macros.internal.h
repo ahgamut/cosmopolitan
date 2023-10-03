@@ -1,7 +1,7 @@
 #ifndef COSMOPOLITAN_LIBC_SYSV_MACROS_H_
 #define COSMOPOLITAN_LIBC_SYSV_MACROS_H_
+#include "libc/macros.internal.h"
 #ifdef __ASSEMBLER__
-#include "libc/macros.internal.inc"
 /* clang-format off */
 
 /**
@@ -15,22 +15,35 @@
  * risk of slowing down builds too much with complicated headers.
  */
 
-.macro	.scall	name:req num:req kw1 kw2
-	.section .privileged,"ax",@progbits
+.macro	.scall	name:req amd:req arm_linux:req arm_xnu:req kw1 kw2
+	.section .text.syscall,"ax",@progbits
+#ifdef __x86_64__
   .ifnb	\kw2
-	.align	16
-\name:	movabs	$\num,%rax
+	.ftrace1
+\name:	.ftrace2
+	movabs	$\amd,%rax
 	jmp	*__systemfive(%rip)
   .else
-\name:	push	%rbp
+	.ftrace1
+\name:	.ftrace2
+	push	%rbp
 	mov	%rsp,%rbp
-	movabs	$\num,%rax
-	.hookable
+	movabs	$\amd,%rax
 	call	*__systemfive(%rip)
 	pop	%rbp
 	ret
   .endif
 	.endfn	\name,\kw1,\kw2
+#elif defined(__aarch64__)
+	.ftrace1
+\name:	.ftrace2
+	mov	x8,#\arm_linux
+	mov	x16,#\arm_xnu
+	b	systemfive
+	.endfn	\name,\kw1,\kw2
+#else
+#error "architecture unsupported"
+#endif
 	.previous
 .endm
 

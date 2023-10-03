@@ -24,11 +24,9 @@ THIRD_PARTY_TIDY_A_DIRECTDEPS =							\
 	LIBC_NEXGEN32E								\
 	LIBC_RUNTIME								\
 	LIBC_CALLS								\
-	LIBC_UNICODE								\
 	LIBC_STDIO								\
 	LIBC_SYSV								\
-	LIBC_STR								\
-	LIBC_STUBS
+	LIBC_STR
 
 THIRD_PARTY_TIDY_A_DEPS :=							\
 	$(call uniq,$(foreach x,$(THIRD_PARTY_TIDY_A_DIRECTDEPS),$($(x))))
@@ -58,15 +56,11 @@ o/$(MODE)/third_party/tidy/tidy.com:						\
 		o/$(MODE)/third_party/tidy/tidy.com.dbg				\
 		o/$(MODE)/third_party/zip/zip.com				\
 		o/$(MODE)/tool/build/symtab.com
-	@$(COMPILE) -AOBJCOPY -T$@ $(OBJCOPY) -S -O binary $< $@
-	@$(COMPILE) -ASYMTAB o/$(MODE)/tool/build/symtab.com			\
-		-o o/$(MODE)/third_party/tidy/.tidy/.symtab $<
-	@$(COMPILE) -AZIP -T$@ o/$(MODE)/third_party/zip/zip.com -9qj $@	\
-		o/$(MODE)/third_party/tidy/.tidy/.symtab
+	@$(MAKE_OBJCOPY)
+	@$(MAKE_SYMTAB_CREATE)
+	@$(MAKE_SYMTAB_ZIP)
 
-o/$(MODE)/third_party/tidy/.tidyrc.zip.o:					\
-		ZIPOBJ_FLAGS +=							\
-			-B
+o/$(MODE)/third_party/tidy/.tidyrc.zip.o: private ZIPOBJ_FLAGS += -B
 
 THIRD_PARTY_TIDY_COMS =								\
 	o/$(MODE)/third_party/tidy/tidy.com

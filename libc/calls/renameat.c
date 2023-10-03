@@ -16,17 +16,17 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/weaken.h"
 #include "libc/calls/calls.h"
-#include "libc/calls/strace.internal.h"
 #include "libc/calls/syscall-nt.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/intrin/asan.internal.h"
 #include "libc/intrin/describeflags.internal.h"
+#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/weaken.h"
 #include "libc/sysv/consts/at.h"
 #include "libc/sysv/errfuns.h"
-#include "libc/zipos/zipos.internal.h"
+#include "libc/runtime/zipos.internal.h"
 
 /**
  * Renames files relative to directories.
@@ -46,11 +46,10 @@
 int renameat(int olddirfd, const char *oldpath, int newdirfd,
              const char *newpath) {
   int rc;
-  char buf[2][12];
   if (IsAsan() &&
-      (!__asan_is_valid(oldpath, 1) || !__asan_is_valid(newpath, 1))) {
+      (!__asan_is_valid_str(oldpath) || !__asan_is_valid_str(newpath))) {
     rc = efault();
-  } else if (weaken(__zipos_notat) &&
+  } else if (_weaken(__zipos_notat) &&
              ((rc = __zipos_notat(olddirfd, oldpath)) == -1 ||
               (rc = __zipos_notat(newdirfd, newpath)) == -1)) {
     STRACE("zipos renameat not supported yet");
@@ -59,7 +58,7 @@ int renameat(int olddirfd, const char *oldpath, int newdirfd,
   } else {
     rc = sys_renameat_nt(olddirfd, oldpath, newdirfd, newpath);
   }
-  STRACE("renameat(%s, %#s, %s, %#s) → %d% m", DescribeDirfd(buf[0], olddirfd),
-         oldpath, DescribeDirfd(buf[1], newdirfd), newpath, rc);
+  STRACE("renameat(%s, %#s, %s, %#s) → %d% m", DescribeDirfd(olddirfd), oldpath,
+         DescribeDirfd(newdirfd), newpath, rc);
   return rc;
 }

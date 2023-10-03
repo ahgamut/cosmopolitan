@@ -36,8 +36,8 @@ COSMOPOLITAN_C_START_
 
 bool32 CreateProcess(const char16_t *opt_lpApplicationName,
                      char16_t *lpCommandLine,
-                     struct NtSecurityAttributes *opt_lpProcessAttributes,
-                     struct NtSecurityAttributes *opt_lpThreadAttributes,
+                     const struct NtSecurityAttributes *opt_lpProcessAttributes,
+                     const struct NtSecurityAttributes *opt_lpThreadAttributes,
                      bool32 bInheritHandles, uint32_t dwCreationFlags,
                      void *opt_lpEnvironment,
                      const char16_t *opt_lpCurrentDirectory,
@@ -56,13 +56,13 @@ int64_t OpenProcess(uint32_t dwDesiredAccess, bool32 bInheritHandle,
 uint32_t GetCurrentProcessId(void); /* %gs:0x40 */
 uint32_t GetEnvironmentVariable(const char16_t *lpName, char16_t *lpBuffer,
                                 uint32_t nSize);
-uint32_t SetEnvironmentVariable(const char16_t *lpName, char16_t *lpValue);
+uint32_t SetEnvironmentVariable(const char16_t *lpName,
+                                const char16_t *lpValue);
 int32_t SetEnvironmentStrings(char16_t *NewEnvironment);
-bool32 GetProcessAffinityMask(int64_t hProcess,
-                              uintptr_t *lpProcessAffinityMask,
-                              uintptr_t *lpSystemAffinityMask);
+bool32 GetProcessAffinityMask(int64_t hProcess, uint64_t *lpProcessAffinityMask,
+                              uint64_t *lpSystemAffinityMask);
 uint64_t /*bool32*/ SetProcessAffinityMask(int64_t hProcess,
-                                           uintptr_t dwProcessAffinityMask);
+                                           uint64_t dwProcessAffinityMask);
 
 /* e.g. kNtAboveNormalPriorityClass, kNtHighPriorityClass */
 uint32_t GetPriorityClass(int64_t hProcess);

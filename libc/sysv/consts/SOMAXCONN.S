@@ -1,2 +1,2 @@
 #include "libc/sysv/consts/syscon.internal.h"
-.syscon misc,SOMAXCONN,0x80,0x80,0x80,0x80,0x80,0x7fffffff
+.syscon limits,SOMAXCONN,4096,4096,128,128,128,128,128,2147483647

@@ -16,20 +16,20 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "tool/viz/lib/bilinearscale.h"
 #include "dsp/core/twixt8.h"
+#include "libc/intrin/bsr.h"
 #include "libc/log/check.h"
 #include "libc/log/log.h"
 #include "libc/macros.internal.h"
 #include "libc/math.h"
+#include "libc/mem/gc.h"
 #include "libc/mem/mem.h"
-#include "libc/nexgen32e/bsr.h"
-#include "libc/runtime/gc.internal.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
 #include "libc/testlib/testlib.h"
 #include "libc/tinymath/emod.h"
 #include "libc/x/x.h"
-#include "tool/viz/lib/bilinearscale.h"
 
 static void ComputeScalingSolution(long dn, long sn, double r, double o,
                                    unsigned char pct[dn + 1], int idx[dn + 1]) {
@@ -52,7 +52,7 @@ static void BilinearScaler(long dcw, long dyw, long dxw,
                            int iy[dyn + 1], unsigned char py[dyn + 1],
                            int ix[dxn + 1], unsigned char px[dxn + 1],
                            unsigned char db[dxn], unsigned char sb[2][sxn]) {
-  long c, y, x, b;
+  long c, y, x;
   ComputeScalingSolution(dxn, sxn, rx, ox, px, ix);
   ComputeScalingSolution(dyn, syn, ry, oy, py, iy);
   for (c = c0; c < cn; ++c) {
@@ -82,16 +82,16 @@ void *BilinearScale(long dcw, long dyw, long dxw,
       DCHECK_LE(sxn, sxw);
       DCHECK_LE(dyn, dyw);
       DCHECK_LE(dxn, dxw);
-      DCHECK_LT(bsrl(cn) + bsrl(syn) + bsrl(sxn), 32);
-      DCHECK_LT(bsrl(cn) + bsrl(dyn) + bsrl(dxn), 32);
+      DCHECK_LT(_bsrl(cn) + _bsrl(syn) + _bsrl(sxn), 32);
+      DCHECK_LT(_bsrl(cn) + _bsrl(dyn) + _bsrl(dxn), 32);
       BilinearScaler(dcw, dyw, dxw, dst, scw, syw, sxw, src, c0, cn, dyn, dxn,
                      syn, sxn, ry, rx, oy, ox,
-                     gc(xmemalign(64, ROUNDUP(sizeof(int) * (dyn + 1), 64))),
-                     gc(xmemalign(64, ROUNDUP(dyn + 1, 64))),
-                     gc(xmemalign(64, ROUNDUP(sizeof(int) * (dxn + 1), 64))),
-                     gc(xmemalign(64, ROUNDUP(dxn + 1, 64))),
-                     gc(xmemalign(64, ROUNDUP(dxn, 64))),
-                     gc(xmemalign(64, ROUNDUP(sxn, 64) * 2)));
+                     _gc(xmemalign(64, ROUNDUP(sizeof(int) * (dyn + 1), 64))),
+                     _gc(xmemalign(64, ROUNDUP(dyn + 1, 64))),
+                     _gc(xmemalign(64, ROUNDUP(sizeof(int) * (dxn + 1), 64))),
+                     _gc(xmemalign(64, ROUNDUP(dxn + 1, 64))),
+                     _gc(xmemalign(64, ROUNDUP(dxn, 64))),
+                     _gc(xmemalign(64, ROUNDUP(sxn, 64) * 2)));
     } else {
       bzero(dst[c0], &dst[cn][0][0] - &dst[c0][0][0]);
     }

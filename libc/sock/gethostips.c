@@ -16,11 +16,11 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/bits.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/calls/syscall_support-nt.internal.h"
 #include "libc/dce.h"
+#include "libc/intrin/bits.h"
 #include "libc/macros.internal.h"
 #include "libc/mem/mem.h"
 #include "libc/nt/errors.h"
@@ -31,8 +31,6 @@
 #include "libc/sysv/consts/ipproto.h"
 #include "libc/sysv/consts/sio.h"
 #include "libc/sysv/consts/sock.h"
-
-/* TODO(jart): DELETE */
 
 static uint32_t *GetUnixIps(void) {
   int fd, n;

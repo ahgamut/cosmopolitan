@@ -16,40 +16,54 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/safemacros.internal.h"
+#include "libc/assert.h"
+#include "libc/calls/bo.internal.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
 #include "libc/calls/sig.internal.h"
-#include "libc/calls/strace.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/calls/syscall_support-nt.internal.h"
 #include "libc/dce.h"
-#include "libc/intrin/kprintf.h"
+#include "libc/errno.h"
+#include "libc/intrin/asan.internal.h"
+#include "libc/intrin/describeflags.internal.h"
+#include "libc/intrin/safemacros.internal.h"
+#include "libc/intrin/strace.internal.h"
+#include "libc/macros.internal.h"
+#include "libc/nt/enum/filetype.h"
 #include "libc/nt/enum/wait.h"
 #include "libc/nt/errors.h"
 #include "libc/nt/files.h"
+#include "libc/nt/struct/byhandlefileinformation.h"
 #include "libc/nt/winsock.h"
 #include "libc/sock/internal.h"
 #include "libc/sock/sendfile.internal.h"
 #include "libc/str/str.h"
 #include "libc/sysv/errfuns.h"
+#include "libc/thread/posixthread.internal.h"
 
 // sendfile() isn't specified as raising eintr
 static textwindows int SendfileBlock(int64_t handle,
                                      struct NtOverlapped *overlapped) {
+  struct PosixThread *pt;
   uint32_t i, got, flags = 0;
-  if (WSAGetLastError() != kNtErrorIoPending) {
+  if (WSAGetLastError() != kNtErrorIoPending &&
+      WSAGetLastError() != WSAEINPROGRESS) {
     NTTRACE("TransmitFile failed %lm");
     return __winsockerr();
   }
+  pt = _pthread_self();
+  pt->abort_errno = 0;
+  pt->ioverlap = overlapped;
+  pt->iohandle = handle;
   for (;;) {
     i = WSAWaitForMultipleEvents(1, &overlapped->hEvent, true,
-                                 __SIG_POLLING_INTERVAL_MS, true);
+                                 __SIG_IO_INTERVAL_MS, true);
     if (i == kNtWaitFailed) {
       NTTRACE("WSAWaitForMultipleEvents failed %lm");
       return __winsockerr();
     } else if (i == kNtWaitTimeout || i == kNtWaitIoCompletion) {
-      _check_interrupts(true, g_fds.p);
+      if (_check_interrupts(kSigOpRestartable)) return -1;
 #if _NTTRACE
       POLLTRACE("WSAWaitForMultipleEvents...");
 #endif
@@ -57,59 +71,91 @@ static textwindows int SendfileBlock(int64_t handle,
       break;
     }
   }
-  if (!WSAGetOverlappedResult(handle, overlapped, &got, false, &flags)) {
-    NTTRACE("WSAGetOverlappedResult failed %lm");
-    return __winsockerr();
+  pt->ioverlap = 0;
+  pt->iohandle = 0;
+  if (WSAGetOverlappedResult(handle, overlapped, &got, false, &flags)) {
+    return got;
+  } else {
+    if (WSAGetLastError() == kNtErrorOperationAborted) {
+      errno = pt->abort_errno;
+    }
+    return -1;
   }
-  return got;
 }
 
-static textwindows ssize_t sendfile_linux2nt(int outfd, int infd,
-                                             int64_t *inout_opt_inoffset,
-                                             size_t uptobytes) {
+static dontinline textwindows ssize_t sys_sendfile_nt(
+    int outfd, int infd, int64_t *opt_in_out_inoffset, uint32_t uptobytes) {
   ssize_t rc;
-  int64_t offset;
-  struct NtOverlapped overlapped;
-  if (!__isfdkind(outfd, kFdSocket)) return ebadf();
+  int64_t ih, oh, pos, eof, offset;
+  struct NtByHandleFileInformation wst;
   if (!__isfdkind(infd, kFdFile)) return ebadf();
-  if (inout_opt_inoffset) {
-    offset = *inout_opt_inoffset;
-  } else if (!SetFilePointerEx(g_fds.p[infd].handle, 0, &offset, SEEK_CUR)) {
+  if (!__isfdkind(outfd, kFdSocket)) return ebadf();
+  ih = g_fds.p[infd].handle;
+  oh = g_fds.p[outfd].handle;
+  if (!SetFilePointerEx(ih, 0, &pos, SEEK_CUR)) {
     return __winerr();
   }
-  bzero(&overlapped, sizeof(overlapped));
-  overlapped.Pointer = (void *)(intptr_t)offset;
-  overlapped.hEvent = WSACreateEvent();
-  if (TransmitFile(g_fds.p[outfd].handle, g_fds.p[infd].handle, uptobytes, 0,
-                   &overlapped, 0, 0)) {
+  if (opt_in_out_inoffset) {
+    offset = *opt_in_out_inoffset;
+  } else {
+    offset = pos;
+  }
+  if (GetFileInformationByHandle(ih, &wst)) {
+    // TransmitFile() returns EINVAL if `uptobytes` goes past EOF.
+    eof = (uint64_t)wst.nFileSizeHigh << 32 | wst.nFileSizeLow;
+    if (offset + uptobytes > eof) {
+      uptobytes = eof - offset;
+    }
+  } else {
+    return ebadf();
+  }
+  struct NtOverlapped ov = {
+      .Pointer = offset,
+      .hEvent = WSACreateEvent(),
+  };
+  if (TransmitFile(oh, ih, uptobytes, 0, &ov, 0, 0)) {
     rc = uptobytes;
   } else {
-    rc = SendfileBlock(g_fds.p[outfd].handle, &overlapped);
+    BEGIN_BLOCKING_OPERATION;
+    rc = SendfileBlock(oh, &ov);
+    END_BLOCKING_OPERATION;
   }
-  if (rc != -1 && inout_opt_inoffset) {
-    *inout_opt_inoffset = offset + rc;
+  if (rc != -1) {
+    if (opt_in_out_inoffset) {
+      *opt_in_out_inoffset = offset + rc;
+      npassert(SetFilePointerEx(ih, pos, 0, SEEK_SET));
+    } else {
+      npassert(SetFilePointerEx(ih, offset + rc, 0, SEEK_SET));
+    }
   }
-  WSACloseEvent(overlapped.hEvent);
+  WSACloseEvent(ov.hEvent);
   return rc;
 }
 
-static ssize_t sendfile_linux2bsd(int outfd, int infd,
-                                  int64_t *inout_opt_inoffset,
-                                  size_t uptobytes) {
-  int rc;
+static ssize_t sys_sendfile_bsd(int outfd, int infd,
+                                int64_t *opt_in_out_inoffset,
+                                size_t uptobytes) {
+  ssize_t rc;
   int64_t offset, sbytes;
-  if (inout_opt_inoffset) {
-    offset = *inout_opt_inoffset;
+  if (opt_in_out_inoffset) {
+    offset = *opt_in_out_inoffset;
   } else if ((offset = lseek(infd, 0, SEEK_CUR)) == -1) {
     return -1;
   }
   if (IsFreebsd()) {
     rc = sys_sendfile_freebsd(infd, outfd, offset, uptobytes, 0, &sbytes, 0);
+    if (rc == -1 && errno == ENOBUFS) errno = ENOMEM;
   } else {
+    sbytes = uptobytes;
     rc = sys_sendfile_xnu(infd, outfd, offset, &sbytes, 0, 0);
   }
+  if (rc == -1 && errno == ENOTSOCK) errno = EBADF;
   if (rc != -1) {
-    if (inout_opt_inoffset) *inout_opt_inoffset += sbytes;
+    if (opt_in_out_inoffset) {
+      *opt_in_out_inoffset += sbytes;
+    } else {
+      npassert(lseek(infd, offset + sbytes, SEEK_SET) == offset + sbytes);
+    }
     return sbytes;
   } else {
     return -1;
@@ -121,25 +167,57 @@ static ssize_t sendfile_linux2bsd(int outfd, int infd,
  *
  * @param outfd needs to be a socket
  * @param infd needs to be a file
- * @param inout_opt_inoffset may be specified for pread()-like behavior
- * @param uptobytes is usually the number of bytes remaining in file; it
- *     can't exceed INT_MAX-1; some platforms block until everything's
- *     sent, whereas others won't; zero isn't allowed
- * @return number of bytes transmitted which may be fewer than requested
+ * @param opt_in_out_inoffset may be specified for pread()-like behavior
+ *     in which case the file position won't be changed; otherwise, this
+ *     shall read from the file pointer which is advanced accordingly
+ * @param uptobytes is the maximum number of bytes to send; some platforms
+ *     block until everything's sent, whereas others won't; the behavior of
+ *     zero is undefined; this value may overlap the end of file in which
+ *     case what remains is sent; this is silently reduced to `0x7ffff000`
+ * @return number of bytes transmitted which may be fewer than requested in
+ *     which case caller must be prepared to call sendfile() again
+ * @raise ESPIPE on Linux RHEL7+ if offset is used but `infd` isn't seekable,
+ *     otherwise this could be EINVAL
+ * @raise EPIPE on most systems if socket has been shutdown for reading or
+ *     the remote end closed the connection, otherwise this could be EINVAL
+ * @raise EBADF if `outfd` isn't a valid writeable stream sock descriptor
+ * @raise EAGAIN if `O_NONBLOCK` is in play and it would have blocked
+ * @raise EBADF if `infd` isn't a valid readable file descriptor
+ * @raise EFAULT if `opt_in_out_inoffset` is a bad pointer
+ * @raise EINVAL if `*opt_in_out_inoffset` is negative
+ * @raise EOVERFLOW is documented as possible on Linux
+ * @raise EIO if `infd` had a low-level i/o error
+ * @raise ENOMEM if we require more vespene gas
+ * @raise ENOTCONN if `outfd` isn't connected
+ * @raise ENOSYS on NetBSD and OpenBSD
  * @see copy_file_range() for file ↔ file
  * @see splice() for fd ↔ pipe
  */
-ssize_t sendfile(int outfd, int infd, int64_t *inout_opt_inoffset,
+ssize_t sendfile(int outfd, int infd, int64_t *opt_in_out_inoffset,
                  size_t uptobytes) {
-  if (!uptobytes) return einval();
-  if (uptobytes > 0x7ffffffe /* Microsoft's off-by-one */) return eoverflow();
-  if (IsLinux()) {
-    return sys_sendfile(outfd, infd, inout_opt_inoffset, uptobytes);
+  ssize_t rc;
+
+  // We must reduce this due to the uint32_t type conversion on Windows
+  // which has a maximum of 0x7ffffffe. It also makes sendfile(..., -1)
+  // less error prone, since Linux may EINVAL if greater than INT64_MAX
+  uptobytes = MIN(uptobytes, 0x7ffff000);
+
+  if (IsAsan() && opt_in_out_inoffset &&
+      !__asan_is_valid(opt_in_out_inoffset, 8)) {
+    rc = efault();
+  } else if (IsLinux()) {
+    rc = sys_sendfile(outfd, infd, opt_in_out_inoffset, uptobytes);
   } else if (IsFreebsd() || IsXnu()) {
-    return sendfile_linux2bsd(outfd, infd, inout_opt_inoffset, uptobytes);
+    rc = sys_sendfile_bsd(outfd, infd, opt_in_out_inoffset, uptobytes);
   } else if (IsWindows()) {
-    return sendfile_linux2nt(outfd, infd, inout_opt_inoffset, uptobytes);
+    rc = sys_sendfile_nt(outfd, infd, opt_in_out_inoffset, uptobytes);
   } else {
-    return copyfd(infd, inout_opt_inoffset, outfd, NULL, uptobytes, 0);
+    rc = enosys();
   }
+
+  STRACE("sendfile(%d, %d, %p, %'zu) → %ld% m", outfd, infd,
+         DescribeInOutInt64(rc, opt_in_out_inoffset), uptobytes, rc);
+  return rc;
 }
+
+__weak_reference(sendfile, sendfile64);

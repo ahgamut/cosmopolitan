@@ -21,12 +21,13 @@
 /**
  * Copies NUL-terminated UCS-2 or UTF-16 string.
  *
- * DEST and SRC must not overlap unless DEST ≤ SRC.
+ * 𝑑 and 𝑠 must not overlap unless 𝑑 ≤ 𝑠.
  *
- * @param dest is destination memory
- * @param src is a NUL-terminated 16-bit string
- * @return original dest
+ * @param d is dination memory
+ * @param s is a NUL-terminated 16-bit string
+ * @return original d
+ * @asyncsignalsafe
  */
-char16_t *strcpy16(char16_t *dest, const char16_t *src) {
-  return memcpy(dest, src, (strlen16(src) + 1) * sizeof(char16_t));
+char16_t *strcpy16(char16_t *d, const char16_t *s) {
+  return memcpy(d, s, (strlen16(s) + 1) * sizeof(char16_t));
 }

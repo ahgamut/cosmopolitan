@@ -16,13 +16,16 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/strace.internal.h"
+#include "libc/calls/cp.internal.h"
+#include "libc/calls/internal.h"
+#include "libc/calls/struct/fd.internal.h"
 #include "libc/dce.h"
 #include "libc/intrin/asan.internal.h"
-#include "libc/intrin/kprintf.h"
+#include "libc/intrin/strace.internal.h"
 #include "libc/sock/internal.h"
 #include "libc/sock/sock.h"
-#include "libc/sock/sockdebug.h"
+#include "libc/sock/struct/sockaddr.h"
+#include "libc/sock/struct/sockaddr.internal.h"
 #include "libc/sock/syscall_fd.internal.h"
 #include "libc/sysv/errfuns.h"
 
@@ -34,24 +37,31 @@
  * also means getsockname() can be called to retrieve routing details.
  *
  * @return 0 on success or -1 w/ errno
+ * @cancellationpoint
  * @asyncsignalsafe
  * @restartable (unless SO_RCVTIMEO)
  */
-int connect(int fd, const void *addr, uint32_t addrsize) {
+int connect(int fd, const struct sockaddr *addr, uint32_t addrsize) {
   int rc;
+  BEGIN_CANCELLATION_POINT;
+
   if (addr && !(IsAsan() && !__asan_is_valid(addr, addrsize))) {
-    _firewall(addr, addrsize);
-    if (!IsWindows()) {
+    if (fd < g_fds.n && g_fds.p[fd].kind == kFdZip) {
+      rc = enotsock();
+    } else if (!IsWindows()) {
       rc = sys_connect(fd, addr, addrsize);
+    } else if (!__isfdopen(fd)) {
+      rc = ebadf();
     } else if (__isfdkind(fd, kFdSocket)) {
       rc = sys_connect_nt(&g_fds.p[fd], addr, addrsize);
     } else {
-      rc = ebadf();
+      rc = enotsock();
     }
   } else {
     rc = efault();
   }
-  STRACE("connect(%d, %s) -> %d% lm", fd, __describe_sockaddr(addr, addrsize),
-         rc);
+
+  END_CANCELLATION_POINT;
+  STRACE("connect(%d, %s) → %d% lm", fd, DescribeSockaddr(addr, addrsize), rc);
   return rc;
 }

@@ -20,60 +20,19 @@
 
 //	Gets machine state.
 //
-//	@note	please use longerjmp() and setlongerjmp() for fibers
-//	@note	currently only gets general registers
+//	This function goes 14x slower if sigaction() has ever been used to
+//	install a signal handling function. If you don't care about signal
+//	safety and just want fast fibers, then you may override the global
+//	variable `__interruptible` to disable the sigprocmask() calls, for
+//	pure userspace context switching.
+//
+//	@return	0 on success, or -1 w/ errno
+//	@see	makecontext()
+//	@see	swapcontext()
 //	@see	setcontext()
+	.ftrace1
 getcontext:
-	mov	%r8,40(%rdi)
-	mov	%r9,48(%rdi)
-	mov	%r10,56(%rdi)
-	mov	%r11,64(%rdi)
-	mov	%r12,72(%rdi)
-	mov	%r13,80(%rdi)
-	mov	%r14,88(%rdi)
-	mov	%r15,96(%rdi)
-	mov	%rdi,104(%rdi)
-	mov	%rsi,112(%rdi)
-	mov	%rbp,120(%rdi)
-	mov	%rbx,128(%rdi)
-	mov	%rdx,136(%rdi)
-	mov	%rax,144(%rdi)
-	mov	%rcx,152(%rdi)
-	lea	8(%rsp),%rax
-	mov	%rax,160(%rdi)
-	mov	(%rsp),%rax
-	mov	%rax,168(%rdi)
-	xor	%eax,%eax
-	ret
+	.ftrace2
+#include "libc/calls/getcontext.inc"
+	jmp	__getcontextsig
 	.endfn	getcontext,globl
-
-	.end
-////////////////////////////////////////////////////////////////////////////////
-noasan noubsan noinstrument int getcontext(ucontext_t *uc) {
-  asm volatile("mov\t%%r8,%0" : "=m"(uc->uc_mcontext.r8));
-  asm volatile("mov\t%%r9,%0" : "=m"(uc->uc_mcontext.r9));
-  asm volatile("mov\t%%r10,%0" : "=m"(uc->uc_mcontext.r10));
-  asm volatile("mov\t%%r11,%0" : "=m"(uc->uc_mcontext.r11));
-  asm volatile("mov\t%%r12,%0" : "=m"(uc->uc_mcontext.r12));
-  asm volatile("mov\t%%r13,%0" : "=m"(uc->uc_mcontext.r13));
-  asm volatile("mov\t%%r14,%0" : "=m"(uc->uc_mcontext.r14));
-  asm volatile("mov\t%%r15,%0" : "=m"(uc->uc_mcontext.r15));
-  asm volatile("mov\t%%rdi,%0" : "=m"(uc->uc_mcontext.rdi));
-  asm volatile("mov\t%%rsi,%0" : "=m"(uc->uc_mcontext.rsi));
-  asm volatile("mov\t%%rbp,%0" : "=m"(uc->uc_mcontext.rbp));
-  asm volatile("mov\t%%rbx,%0" : "=m"(uc->uc_mcontext.rbx));
-  asm volatile("mov\t%%rdx,%0" : "=m"(uc->uc_mcontext.rdx));
-  asm volatile("mov\t%%rax,%0" : "=m"(uc->uc_mcontext.rax));
-  asm volatile("mov\t%%rcx,%0" : "=m"(uc->uc_mcontext.rcx));
-  asm volatile("lea\t8(%%rsp),%%rax\n\t"
-               "mov\t%%rax,%0"
-               : "=m"(uc->uc_mcontext.rsp)
-               : /* no inputs */
-               : "rax");
-  asm volatile("mov\t(%%rsp),%%rax\n\t"
-               "mov\t%%rax,%0"
-               : "=m"(uc->uc_mcontext.rip)
-               : /* no inputs */
-               : "rax");
-  return 0;
-}

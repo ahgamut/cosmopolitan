@@ -6,7 +6,7 @@ PKGS += LIBC_SOCK
 LIBC_SOCK_ARTIFACTS += LIBC_SOCK_A
 LIBC_SOCK = $(LIBC_SOCK_A_DEPS) $(LIBC_SOCK_A)
 LIBC_SOCK_A = o/$(MODE)/libc/sock/sock.a
-LIBC_SOCK_A_FILES := $(wildcard libc/sock/*)
+LIBC_SOCK_A_FILES := $(wildcard libc/sock/*) $(wildcard libc/sock/struct/*)
 LIBC_SOCK_A_HDRS = $(filter %.h,$(LIBC_SOCK_A_FILES))
 LIBC_SOCK_A_INCS = $(filter %.inc,$(LIBC_SOCK_A_FILES))
 LIBC_SOCK_A_SRCS_C = $(filter %.c,$(LIBC_SOCK_A_FILES))
@@ -25,7 +25,6 @@ LIBC_SOCK_A_CHECKS =				\
 	$(LIBC_SOCK_A_HDRS:%=o/$(MODE)/%.ok)
 
 LIBC_SOCK_A_DIRECTDEPS =			\
-	LIBC_BITS				\
 	LIBC_CALLS				\
 	LIBC_FMT				\
 	LIBC_INTRIN				\
@@ -33,20 +32,18 @@ LIBC_SOCK_A_DIRECTDEPS =			\
 	LIBC_NEXGEN32E				\
 	LIBC_NT_ADVAPI32			\
 	LIBC_NT_IPHLPAPI			\
+	LIBC_NT_IPHLPAPI			\
 	LIBC_NT_KERNEL32			\
 	LIBC_NT_MSWSOCK				\
 	LIBC_NT_NTDLL				\
 	LIBC_NT_WS2_32				\
-	LIBC_NT_IPHLPAPI			\
 	LIBC_RUNTIME				\
 	LIBC_STDIO				\
 	LIBC_STR				\
 	LIBC_STR  				\
-	LIBC_STUBS				\
+	LIBC_SYSV				\
 	LIBC_SYSV_CALLS				\
-	LIBC_TIME				\
-	LIBC_UNICODE				\
-	LIBC_SYSV
+	LIBC_TIME
 
 LIBC_SOCK_A_DEPS :=				\
 	$(call uniq,$(foreach x,$(LIBC_SOCK_A_DIRECTDEPS),$($(x))))
@@ -58,6 +55,10 @@ $(LIBC_SOCK_A):	libc/sock/			\
 $(LIBC_SOCK_A).pkg:				\
 		$(LIBC_SOCK_A_OBJS)		\
 		$(foreach x,$(LIBC_SOCK_A_DIRECTDEPS),$($(x)_A).pkg)
+
+# these assembly files are safe to build on aarch64
+o/$(MODE)/libc/sock/sys_sendfile_xnu.o: libc/sock/sys_sendfile_xnu.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) -c $<
 
 LIBC_SOCK_LIBS = $(foreach x,$(LIBC_SOCK_ARTIFACTS),$($(x)))
 LIBC_SOCK_SRCS = $(foreach x,$(LIBC_SOCK_ARTIFACTS),$($(x)_SRCS))

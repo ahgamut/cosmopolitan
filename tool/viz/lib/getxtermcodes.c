@@ -17,13 +17,12 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "dsp/tty/quant.h"
-#include "libc/bits/xmmintrin.internal.h"
 #include "libc/macros.internal.h"
 #include "tool/viz/lib/graphic.h"
 
 void getxtermcodes(struct TtyRgb *p, const struct Graphic *g) {
   unsigned y, x;
-  unsigned char(*img)[3][g->yn][g->xn] = g->b.p;
+  unsigned char(*img)[3][g->yn][g->xn] = g->b;
   for (y = 0; y < g->yn; ++y) {
     for (x = 0; x < g->xn; ++x) {
       *p++ = rgb2tty((*img)[0][y][x], (*img)[1][y][x], (*img)[2][y][x]);

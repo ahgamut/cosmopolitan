@@ -35,13 +35,16 @@ TEST_LIBC_MEM_DIRECTDEPS =					\
 	LIBC_LOG						\
 	LIBC_MEM						\
 	LIBC_NEXGEN32E						\
-	LIBC_RAND						\
+	LIBC_PROC						\
 	LIBC_RUNTIME						\
+	LIBC_SOCK						\
 	LIBC_STDIO						\
 	LIBC_STR						\
-	LIBC_STUBS						\
 	LIBC_SYSV						\
+	LIBC_SYSV_CALLS						\
 	LIBC_TESTLIB						\
+	LIBC_THREAD						\
+	LIBC_X							\
 	THIRD_PARTY_DLMALLOC					\
 	THIRD_PARTY_LIBCXX
 
@@ -61,7 +64,72 @@ o/$(MODE)/test/libc/mem/%.com.dbg:				\
 		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
 
-$(TEST_LIBC_MEM_OBJS):						\
+o/$(MODE)/test/libc/mem/prog/sock.o:				\
+		test/libc/mem/prog/sock.c			\
+		libc/errno.h					\
+		libc/sock/sock.h				\
+		libc/intrin/bswap.h				\
+		libc/sysv/consts/af.h				\
+		libc/sysv/consts/sock.h
+
+################################################################################
+
+o/$(MODE)/test/libc/mem/prog/life.com.dbg:			\
+		$(LIBC_RUNTIME)					\
+		o/$(MODE)/test/libc/mem/prog/life.o		\
+		$(CRT)						\
+		$(APE)
+	@$(APELINK)
+
+o/$(MODE)/test/libc/mem/prog/life.elf:				\
+		o/$(MODE)/tool/build/assimilate.com		\
+		o/$(MODE)/test/libc/mem/prog/life.com
+	@$(COMPILE) -wACP -T$@					\
+		build/bootstrap/cp.com				\
+		o/$(MODE)/test/libc/mem/prog/life.com		\
+		o/$(MODE)/test/libc/mem/prog/life.elf
+	@$(COMPILE) -wAASSIMILATE -T$@				\
+		o/$(MODE)/tool/build/assimilate.com -bcef	\
+		o/$(MODE)/test/libc/mem/prog/life.elf
+
+o/$(MODE)/test/libc/mem/prog/life.elf.zip.o: private		\
+		ZIPOBJ_FLAGS +=					\
+			-B
+
+################################################################################
+
+o/$(MODE)/test/libc/mem/prog/life.com.zip.o: private		\
+		ZIPOBJ_FLAGS +=					\
+			-B
+
+################################################################################
+
+o/$(MODE)/test/libc/mem/prog/sock.com.dbg:			\
+		$(LIBC_RUNTIME)					\
+		$(LIBC_SOCK)					\
+		o/$(MODE)/test/libc/mem/prog/sock.o		\
+		$(CRT)						\
+		$(APE)
+	@$(APELINK)
+
+o/$(MODE)/test/libc/mem/prog/sock.elf:				\
+		o/$(MODE)/tool/build/assimilate.com		\
+		o/$(MODE)/test/libc/mem/prog/sock.com
+	@$(COMPILE) -wACP -T$@					\
+		build/bootstrap/cp.com				\
+		o/$(MODE)/test/libc/mem/prog/sock.com		\
+		o/$(MODE)/test/libc/mem/prog/sock.elf
+	@$(COMPILE) -wAASSIMILATE -T$@				\
+		o/$(MODE)/tool/build/assimilate.com -cef	\
+		o/$(MODE)/test/libc/mem/prog/sock.elf
+
+o/$(MODE)/test/libc/mem/prog/sock.elf.zip.o: private		\
+		ZIPOBJ_FLAGS +=					\
+			-B
+
+################################################################################
+
+$(TEST_LIBC_MEM_OBJS): private					\
 		DEFAULT_CCFLAGS +=				\
 			-fno-builtin
 

@@ -1,4 +1,5 @@
-#ifndef COSMOPOLITAN_LIBC_ISYSTEM_LOCALE_H_
-#define COSMOPOLITAN_LIBC_ISYSTEM_LOCALE_H_
-#include "libc/unicode/locale.h"
-#endif /* COSMOPOLITAN_LIBC_ISYSTEM_LOCALE_H_ */
+#ifndef _LOCALE_H
+#define _LOCALE_H
+#include "libc/str/locale.h"
+#include "libc/str/unicode.h"
+#endif /* _LOCALE_H */

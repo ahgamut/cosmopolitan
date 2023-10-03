@@ -17,8 +17,8 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
-#include "libc/calls/strace.internal.h"
 #include "libc/errno.h"
+#include "libc/intrin/strace.internal.h"
 #include "libc/log/check.h"
 #include "libc/runtime/runtime.h"
 #include "libc/str/str.h"
@@ -32,7 +32,7 @@
 static int Read1(int);
 static int Read2(int);
 
-noinstrument int ReadSpaces(int fd) {
+dontinstrument int ReadSpaces(int fd) {
   size_t n;
   ssize_t rc;
   for (;;) {
@@ -64,13 +64,13 @@ noinstrument int ReadSpaces(int fd) {
   }
 }
 
-noinstrument int ReadByte(int fd) {
+dontinstrument int ReadByte(int fd) {
   int c;
   if ((c = g_buffer[fd][bp[fd]++] & 255)) return c;
   return ReadSpaces(fd);
 }
 
-noinstrument int ReadChar(int fd) {
+dontinstrument int ReadChar(int fd) {
   int b, a = dx;
   for (;;) {
     dx = ReadByte(fd);
@@ -98,8 +98,7 @@ noinstrument int ReadChar(int fd) {
 }
 
 static int ReadListItem(int fd, int closer, int f(int)) {
-  int i, n, x, y;
-  dword t;
+  int x, y;
   if ((x = f(fd)) > 0) {
     if (Get(x) == MAKE(closer, TERM)) return -0;
     if (Get(x) == MAKE(L'.', TERM)) {
@@ -123,7 +122,7 @@ static int ReadList(int fd, int closer) {
 
 static int TokenizeInteger(int fd, int b) {
   dword a;
-  int c, i, x, y;
+  int c, i;
   for (i = a = 0;; ++i) {
     if ((c = GetDiglet(ToUpper(dx))) != -1 && c < b) {
       a = (a * b) + c;
@@ -146,7 +145,7 @@ static void ConsumeComment(int fd) {
 }
 
 static int ReadAtomRest(int fd, int x) {
-  int y, t, u;
+  int y;
   ax = y = TERM;
   if (x == L'\\') x = ReadChar(fd);
   if (!IsSpace(dx) && !IsParen(dx) && !IsMathAlnum(x) && !IsMathAlnum(dx)) {
@@ -194,7 +193,7 @@ static int TokenizeComplicated(int fd) {
 }
 
 static int Read2(int fd) {
-  int r, f, t, l;
+  int r, l;
   while (IsSpace((l = dx))) ReadChar(fd);
   switch (dx) {
     case L'#':
@@ -280,10 +279,10 @@ static int Read1(int fd) {
 
 int Read(int fd) {
   int r;
-  --__ftrace;
-  --__strace;
+  ftrace_enabled(-1);
+  strace_enabled(-1);
   r = Read1(fd);
-  ++__ftrace;
-  ++__strace;
+  strace_enabled(+1);
+  ftrace_enabled(+1);
   return r;
 }

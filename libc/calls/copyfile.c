@@ -16,12 +16,11 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/calls.h"
 #include "libc/calls/copyfile.h"
+#include "libc/calls/calls.h"
 #include "libc/calls/struct/stat.h"
 #include "libc/calls/syscall_support-nt.internal.h"
 #include "libc/dce.h"
-#include "libc/intrin/kprintf.h"
 #include "libc/nt/createfile.h"
 #include "libc/nt/enum/accessmask.h"
 #include "libc/nt/enum/creationdisposition.h"
@@ -30,6 +29,7 @@
 #include "libc/nt/files.h"
 #include "libc/nt/runtime.h"
 #include "libc/nt/struct/filetime.h"
+#include "libc/runtime/stack.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/at.h"
 #include "libc/sysv/consts/madv.h"
@@ -38,17 +38,24 @@
 
 static textwindows int sys_copyfile_nt(const char *src, const char *dst,
                                        int flags) {
+#pragma GCC push_options
+#pragma GCC diagnostic ignored "-Wframe-larger-than="
+  struct {
+    char16_t src16[PATH_MAX];
+    char16_t dst16[PATH_MAX];
+  } M;
+  CheckLargeStackAllocation(&M, sizeof(M));
+#pragma GCC pop_options
   int64_t fhsrc, fhdst;
   struct NtFileTime accessed, modified;
-  char16_t src16[PATH_MAX], dst16[PATH_MAX];
-  if (__mkntpath(src, src16) == -1) return -1;
-  if (__mkntpath(dst, dst16) == -1) return -1;
-  if (CopyFile(src16, dst16, !!(flags & COPYFILE_NOCLOBBER))) {
+  if (__mkntpath(src, M.src16) == -1) return -1;
+  if (__mkntpath(dst, M.dst16) == -1) return -1;
+  if (CopyFile(M.src16, M.dst16, !!(flags & COPYFILE_NOCLOBBER))) {
     if (flags & COPYFILE_PRESERVE_TIMESTAMPS) {
-      fhsrc = CreateFile(src16, kNtFileReadAttributes, kNtFileShareRead, NULL,
+      fhsrc = CreateFile(M.src16, kNtFileReadAttributes, kNtFileShareRead, NULL,
                          kNtOpenExisting, kNtFileAttributeNormal, 0);
-      fhdst = CreateFile(dst16, kNtFileWriteAttributes, kNtFileShareRead, NULL,
-                         kNtOpenExisting, kNtFileAttributeNormal, 0);
+      fhdst = CreateFile(M.dst16, kNtFileWriteAttributes, kNtFileShareRead,
+                         NULL, kNtOpenExisting, kNtFileAttributeNormal, 0);
       if (fhsrc != -1 && fhdst != -1) {
         GetFileTime(fhsrc, NULL, &accessed, &modified);
         SetFileTime(fhdst, NULL, &accessed, &modified);
@@ -111,7 +118,7 @@ static int sys_copyfile(const char *src, const char *dst, int flags) {
  * @param flags may have COPYFILE_PRESERVE_TIMESTAMPS, COPYFILE_NOCLOBBER
  * @return 0 on success, or -1 w/ errno
  */
-int copyfile(const char *src, const char *dst, int flags) {
+int _copyfile(const char *src, const char *dst, int flags) {
   if (!IsWindows() || startswith(src, "/zip/") || startswith(dst, "/zip/")) {
     return sys_copyfile(src, dst, flags);
   } else {

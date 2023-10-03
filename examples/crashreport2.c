@@ -8,7 +8,8 @@
 ╚─────────────────────────────────────────────────────────────────*/
 #endif
 #include "libc/calls/calls.h"
-#include "libc/log/log.h"
+#include "libc/calls/struct/sigset.h"
+#include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
 
 /**
@@ -23,7 +24,7 @@
  *
  * On supported platforms, this will cause GDB to automatically attach.
  * The nice thing about this, is you can start stepping through your
- * code at the precice instruction where the interrupt happened. See
+ * code at the precise instruction where the interrupt happened. See
  * `libc/log/attachdebugger.c` to see how it works.
  *
  * If you wish to suppress the auto-GDB behavior, then:
@@ -42,7 +43,6 @@
  */
 
 int main(int argc, char *argv[]) {
-  volatile int64_t x;
   ShowCrashReports();
   printf("please press ctrl+\\ and see what happens...\n");
   sigsuspend(0);

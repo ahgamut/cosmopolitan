@@ -56,6 +56,7 @@
 │  SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                      │
 │                                                                              │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/mem/alg.h"
 #include "third_party/regex/tre.inc"
 
 #define CHARCLASS_NAME_MAX 14
@@ -333,7 +334,7 @@ static reg_errcode_t tre_stack_push(tre_stack_t *s,
       if (new_buffer == NULL) {
         return REG_ESPACE;
       }
-      assert(new_size > s->size);
+      unassert(new_size > s->size);
       s->size = new_size;
       s->stack = new_buffer;
       tre_stack_push(s, value);
@@ -1208,7 +1209,7 @@ static reg_errcode_t tre_add_tags(tre_mem_t mem, tre_stack_t *stack,
                 status = REG_ESPACE;
                 break;
               }
-              assert(tnfa->submatch_data[id].parents == NULL);
+              unassert(tnfa->submatch_data[id].parents == NULL);
               tnfa->submatch_data[id].parents = p;
               for (i = 0; parents[i] >= 0; i++) p[i] = parents[i];
               p[i] = -1;
@@ -1253,7 +1254,7 @@ static reg_errcode_t tre_add_tags(tre_mem_t mem, tre_stack_t *stack,
                 next_tag++;
               }
             } else {
-              assert(!IS_TAG(lit));
+              unassert(!IS_TAG(lit));
             }
             break;
           }
@@ -1497,8 +1498,7 @@ static reg_errcode_t tre_add_tags(tre_mem_t mem, tre_stack_t *stack,
       }
 
       default:
-        assert(0);
-        break;
+        __builtin_unreachable();
 
     } /* end switch(symbol) */
   }   /* end while(tre_stack_num_objects(stack) > bottom) */
@@ -1516,7 +1516,7 @@ static reg_errcode_t tre_add_tags(tre_mem_t mem, tre_stack_t *stack,
     num_minimals++;
   }
 
-  assert(tree->num_tags == num_tags);
+  unassert(tree->num_tags == num_tags);
   tnfa->end_tag = num_tags;
   tnfa->num_tags = num_tags;
   tnfa->num_minimals = num_minimals;
@@ -1649,8 +1649,7 @@ static reg_errcode_t tre_copy_ast(tre_mem_t mem, tre_stack_t *stack,
             break;
           }
           default:
-            assert(0);
-            break;
+            __builtin_unreachable();
         }
         break;
     }
@@ -1725,8 +1724,7 @@ static reg_errcode_t tre_expand_ast(tre_mem_t mem, tre_stack_t *stack,
             break;
           }
           default:
-            assert(0);
-            break;
+            __builtin_unreachable();
         }
         break;
       case EXPAND_AFTER_ITER: {
@@ -1800,8 +1798,7 @@ static reg_errcode_t tre_expand_ast(tre_mem_t mem, tre_stack_t *stack,
         break;
       }
       default:
-        assert(0);
-        break;
+        __builtin_unreachable();
     }
   }
 
@@ -1957,14 +1954,13 @@ static reg_errcode_t tre_match_empty(tre_stack_t *stack, tre_ast_node_t *node,
             }
             break;
           case ASSERTION:
-            assert(lit->code_max >= 1 || lit->code_max <= ASSERT_LAST);
+            unassert(lit->code_max >= 1 || lit->code_max <= ASSERT_LAST);
             if (assertions != NULL) *assertions |= lit->code_max;
             break;
           case EMPTY:
             break;
           default:
-            assert(0);
-            break;
+            __builtin_unreachable();
         }
         break;
 
@@ -1978,14 +1974,14 @@ static reg_errcode_t tre_match_empty(tre_stack_t *stack, tre_ast_node_t *node,
         else if (uni->right->nullable)
           STACK_PUSHX(stack, voidptr, uni->right)
         else
-          assert(0);
+          __builtin_unreachable();
         break;
 
       case CATENATION:
         /* The path must go through both children. */
         cat = (tre_catenation_t *)node->obj;
-        assert(cat->left->nullable);
-        assert(cat->right->nullable);
+        unassert(cat->left->nullable);
+        unassert(cat->right->nullable);
         STACK_PUSHX(stack, voidptr, cat->left);
         STACK_PUSHX(stack, voidptr, cat->right);
         break;
@@ -1998,8 +1994,7 @@ static reg_errcode_t tre_match_empty(tre_stack_t *stack, tre_ast_node_t *node,
         break;
 
       default:
-        assert(0);
-        break;
+        __builtin_unreachable();
     }
   }
 
@@ -2187,8 +2182,7 @@ static reg_errcode_t tre_compute_nfl(tre_mem_t mem, tre_stack_t *stack,
       }
 
       default:
-        assert(0);
-        break;
+        __builtin_unreachable();
     }
   }
 
@@ -2251,8 +2245,8 @@ static reg_errcode_t tre_make_trans(tre_pos_and_tags_t *p1,
             (p1->class ? ASSERT_CHAR_CLASS : 0) |
             (p1->neg_classes != NULL ? ASSERT_CHAR_CLASS_NEG : 0);
         if (p1->backref >= 0) {
-          assert((trans->assertions & ASSERT_CHAR_CLASS) == 0);
-          assert(p2->backref < 0);
+          unassert((trans->assertions & ASSERT_CHAR_CLASS) == 0);
+          unassert(p2->backref < 0);
           trans->u.backref = p1->backref;
           trans->assertions |= ASSERT_BACKREF;
         } else
@@ -2362,10 +2356,10 @@ static reg_errcode_t tre_ast_to_tnfa(tre_ast_node_t *node,
 
     case ITERATION:
       iter = (tre_iteration_t *)node->obj;
-      assert(iter->max == -1 || iter->max == 1);
+      unassert(iter->max == -1 || iter->max == 1);
 
       if (iter->max == -1) {
-        assert(iter->min == 0 || iter->min == 1);
+        unassert(iter->min == 0 || iter->min == 1);
         /* Add a transition from each last position in the iterated
            expression to each first position. */
         errcode = tre_make_trans(iter->arg->lastpos, iter->arg->firstpos,
@@ -2388,12 +2382,15 @@ static reg_errcode_t tre_ast_to_tnfa(tre_ast_node_t *node,
  * Compiles regular expression, e.g.
  *
  *     regex_t rx;
- *     EXPECT_EQ(REG_OK, regcomp(&rx, "^[A-Za-z]{2}$", REG_EXTENDED));
- *     EXPECT_EQ(REG_OK, regexec(&rx, "→A", 0, NULL, 0));
+ *     CHECK_EQ(REG_OK, regcomp(&rx, "^[A-Za-z]{2}$", REG_EXTENDED));
+ *     CHECK_EQ(REG_OK, regexec(&rx, "→A", 0, NULL, 0));
  *     regfree(&rx);
  *
- * @param preg points to state, and needs regfree() afterwards
- * @param regex is utf-8 regular expression string
+ * @param preg points to caller allocated memory that's used to store
+ *    your regular expression. This memory needn't be initialized. If
+ *    this function succeeds, then `preg` must be passed to regfree()
+ *    later on, to free its associated resources
+ * @param regex is utf-8 regular expression nul-terminated string
  * @param cflags can have REG_EXTENDED, REG_ICASE, REG_NEWLINE, REG_NOSUB
  * @return REG_OK, REG_NOMATCH, REG_BADPAT, etc.
  * @see regexec(), regfree(), regerror()
@@ -2579,39 +2576,48 @@ error_exit:
 
 /**
  * Frees any memory allocated by regcomp().
+ *
+ * The same object may be destroyed by regfree() multiple times, in
+ * which case subsequent calls do nothing. Once a regex is freed, it may
+ * be passed to regcomp() to reinitialize it.
  */
 void regfree(regex_t *preg) {
-  tre_tnfa_t *tnfa;
   unsigned int i;
+  tre_tnfa_t *tnfa;
   tre_tnfa_transition_t *trans;
-  tnfa = (void *)preg->TRE_REGEX_T_FIELD;
-  if (!tnfa) return;
-  for (i = 0; i < tnfa->num_transitions; i++)
-    if (tnfa->transitions[i].state) {
-      if (tnfa->transitions[i].tags)
-        free(tnfa->transitions[i].tags), tnfa->transitions[i].tags = NULL;
-      if (tnfa->transitions[i].neg_classes)
-        free(tnfa->transitions[i].neg_classes),
-            tnfa->transitions[i].neg_classes = NULL;
+  if ((tnfa = preg->TRE_REGEX_T_FIELD)) {
+    preg->TRE_REGEX_T_FIELD = 0;
+    for (i = 0; i < tnfa->num_transitions; i++)
+      if (tnfa->transitions[i].state) {
+        if (tnfa->transitions[i].tags) {
+          free(tnfa->transitions[i].tags);
+        }
+        if (tnfa->transitions[i].neg_classes) {
+          free(tnfa->transitions[i].neg_classes);
+        }
+      }
+    if (tnfa->transitions) {
+      free(tnfa->transitions);
     }
-  if (tnfa->transitions) free(tnfa->transitions), tnfa->transitions = NULL;
-  if (tnfa->initial) {
-    for (trans = tnfa->initial; trans->state; trans++) {
-      if (trans->tags) free(trans->tags), trans->tags = NULL;
+    if (tnfa->initial) {
+      for (trans = tnfa->initial; trans->state; trans++) {
+        if (trans->tags) {
+          free(trans->tags);
+        }
+      }
+      free(tnfa->initial);
     }
-    free(tnfa->initial), tnfa->initial = NULL;
+    if (tnfa->submatch_data) {
+      for (i = 0; i < tnfa->num_submatches; i++) {
+        if (tnfa->submatch_data[i].parents) {
+          free(tnfa->submatch_data[i].parents);
+        }
+      }
+      free(tnfa->submatch_data);
+    }
+    if (tnfa->tag_directions) free(tnfa->tag_directions);
+    if (tnfa->firstpos_chars) free(tnfa->firstpos_chars);
+    if (tnfa->minimal_tags) free(tnfa->minimal_tags);
+    free(tnfa);
   }
-  if (tnfa->submatch_data) {
-    for (i = 0; i < tnfa->num_submatches; i++)
-      if (tnfa->submatch_data[i].parents)
-        free(tnfa->submatch_data[i].parents),
-            tnfa->submatch_data[i].parents = NULL;
-    free(tnfa->submatch_data), tnfa->submatch_data = NULL;
-  }
-  if (tnfa->tag_directions)
-    free(tnfa->tag_directions), tnfa->tag_directions = NULL;
-  if (tnfa->firstpos_chars)
-    free(tnfa->firstpos_chars), tnfa->firstpos_chars = NULL;
-  if (tnfa->minimal_tags) free(tnfa->minimal_tags), tnfa->minimal_tags = NULL;
-  free(tnfa), tnfa = NULL;
 }

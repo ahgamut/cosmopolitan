@@ -20,17 +20,23 @@
 #include "libc/limits.h"
 #include "libc/macros.internal.h"
 #include "libc/nt/struct/linger.h"
+#include "libc/nt/thunk/msabi.h"
 #include "libc/sock/internal.h"
+#include "libc/sock/struct/linger.h"
 #include "libc/sock/syscall_fd.internal.h"
+#include "libc/stdckdint.h"
 #include "libc/sysv/consts/so.h"
 #include "libc/sysv/consts/sol.h"
 #include "libc/sysv/errfuns.h"
 
+__msabi extern typeof(__sys_setsockopt_nt) *const __imp_setsockopt;
+
 textwindows int sys_setsockopt_nt(struct Fd *fd, int level, int optname,
                                   const void *optval, uint32_t optlen) {
-  int64_t ms;
-  struct timeval *tv;
-  struct linger *linger;
+  int64_t ms, micros;
+  struct SockFd *sockfd;
+  const struct timeval *tv;
+  const struct linger *linger;
   union {
     uint32_t millis;
     struct linger_nt linger;
@@ -46,8 +52,9 @@ textwindows int sys_setsockopt_nt(struct Fd *fd, int level, int optname,
     } else if ((optname == SO_RCVTIMEO || optname == SO_SNDTIMEO) && optval &&
                optlen == sizeof(struct timeval)) {
       tv = optval;
-      if (__builtin_mul_overflow(tv->tv_sec, 1000, &ms) ||
-          __builtin_add_overflow(ms, tv->tv_usec / 1000, &ms) ||
+      if (ckd_mul(&ms, tv->tv_sec, 1000) ||      //
+          ckd_add(&micros, tv->tv_usec, 999) ||  //
+          ckd_add(&ms, ms, micros / 1000) ||     //
           (ms < 0 || ms > 0xffffffff)) {
         u.millis = 0xffffffff;
       } else {
@@ -55,10 +62,18 @@ textwindows int sys_setsockopt_nt(struct Fd *fd, int level, int optname,
       }
       optval = &u.millis;
       optlen = sizeof(u.millis);
+      sockfd = (struct SockFd *)fd->extra;
+      if (optname == SO_RCVTIMEO) {
+        sockfd->rcvtimeo = u.millis;
+      }
+      if (optname == SO_SNDTIMEO) {
+        sockfd->sndtimeo = u.millis;
+      }
+      return 0;
     }
   }
 
-  if (__sys_setsockopt_nt(fd->handle, level, optname, optval, optlen) != -1) {
+  if (__imp_setsockopt(fd->handle, level, optname, optval, optlen) != -1) {
     return 0;
   } else {
     return __winsockerr();

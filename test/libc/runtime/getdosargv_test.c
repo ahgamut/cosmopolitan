@@ -16,9 +16,17 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/calls/calls.h"
+#include "libc/errno.h"
+#include "libc/limits.h"
 #include "libc/mem/mem.h"
 #include "libc/runtime/internal.h"
+#include "libc/runtime/runtime.h"
 #include "libc/testlib/testlib.h"
+
+void SetUpOnce(void) {
+  testlib_enable_tmp_setup_teardown();
+}
 
 TEST(GetDosArgv, empty) {
   size_t max = 4;
@@ -166,6 +174,21 @@ TEST(GetDosArgv, waqQuoting2) {
   EXPECT_STREQ("a\"b c", argv[0]);
   EXPECT_STREQ("d", argv[1]);
   EXPECT_EQ(NULL, argv[2]);
+  free(argv);
+  free(buf);
+}
+
+TEST(GetDosArgv, cmdToil) {
+  size_t max = 4;
+  size_t size = ARG_MAX / 2;
+  char *buf = malloc(size * sizeof(char));
+  char **argv = malloc(max * sizeof(char *));
+  EXPECT_EQ(3, GetDosArgv(u"cmd.exe /C \"echo hi >\"\"\"𝑓𝑜𝑜 bar.txt\"\"\"\"",
+                          buf, size, argv, max));
+  EXPECT_STREQ("cmd.exe", argv[0]);
+  EXPECT_STREQ("/C", argv[1]);
+  EXPECT_STREQ("echo hi >\"𝑓𝑜𝑜 bar.txt\"", argv[2]);
+  EXPECT_EQ(NULL, argv[3]);
   free(argv);
   free(buf);
 }

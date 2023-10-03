@@ -17,16 +17,18 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
+#include "libc/calls/struct/fd.internal.h"
+#include "libc/nt/thunk/msabi.h"
 #include "libc/nt/winsock.h"
 #include "libc/sock/internal.h"
 #include "libc/sock/syscall_fd.internal.h"
-#include "libc/sock/yoink.inc"
-#include "libc/sysv/errfuns.h"
+
+__msabi extern typeof(__sys_bind_nt) *const __imp_bind;
 
 textwindows int sys_bind_nt(struct Fd *fd, const void *addr,
                             uint32_t addrsize) {
-  assert(fd->kind == kFdSocket);
-  if (__sys_bind_nt(fd->handle, addr, addrsize) != -1) {
+  unassert(fd->kind == kFdSocket);
+  if (__imp_bind(fd->handle, addr, addrsize) != -1) {
     return 0;
   } else {
     return __winsockerr();

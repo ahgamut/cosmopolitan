@@ -16,12 +16,10 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/dce.h"
 #include "libc/intrin/asan.internal.h"
-#include "libc/log/check.h"
 #include "libc/nexgen32e/x86feature.h"
-#include "libc/runtime/gc.internal.h"
 #include "libc/runtime/runtime.h"
+#include "libc/str/str.h"
 #include "third_party/mbedtls/bignum_internal.h"
 #include "third_party/mbedtls/ecp.h"
 #include "third_party/mbedtls/ecp_internal.h"
@@ -41,7 +39,7 @@ static bool
 mbedtls_p384_gte( uint64_t p[7] )
 {
     return( (((int64_t)p[6] > 0) |
-             (!p[6] &
+             ((!p[6]) &
               ((p[5] > 0xffffffffffffffff) |
                ((p[5] == 0xffffffffffffffff) &
                 ((p[4] > 0xffffffffffffffff) |
@@ -188,10 +186,18 @@ mbedtls_p384_mul( uint64_t X[12],
     }
     else
     {
-        if( A == X ) A = gc( memcpy( malloc( 6 * 8 ), A, 6 * 8 ) );
-        if( B == X ) B = gc( memcpy( malloc( 6 * 8 ), B, 6 * 8 ) );
+        void *f = 0;
+        if( A == X )
+        {
+            A = f = memcpy( malloc( 6 * 8 ), A, 6 * 8 );
+        }
+        else if( B == X )
+        {
+            B = f = memcpy( malloc( 6 * 8 ), B, 6 * 8 );
+        }
         Mul( X, A, n, B, m );
         mbedtls_platform_zeroize( X + n + m, (12 - n - m) * 8 );
+        free( f );
     }
     mbedtls_p384_mod( X );
 }
@@ -304,7 +310,7 @@ mbedtls_p384_add( uint64_t X[7],
     ADC( X[5], A[5], B[5], c, X[6] );
 #endif
     mbedtls_p384_rum( X );
-    DCHECK_EQ(0, X[6]);
+    MBEDTLS_ASSERT(0 == X[6]);
 }
 
 static void
@@ -349,7 +355,7 @@ mbedtls_p384_sub( uint64_t X[7],
 #endif
     while( (int64_t)X[6] < 0 )
         mbedtls_p384_gro( X );
-    DCHECK_EQ(0, X[6]);
+    MBEDTLS_ASSERT(0 == X[6]);
 }
 
 static void
@@ -377,7 +383,7 @@ mbedtls_p384_hub( uint64_t A[7],
         : "rax", "rcx", "memory", "cc");
     while( (int64_t)A[6] < 0 )
         mbedtls_p384_gro( A );
-    DCHECK_EQ(0, A[6]);
+    MBEDTLS_ASSERT(0 == A[6]);
 #else
     mbedtls_p384_sub(A, A, B);
 #endif
@@ -409,7 +415,7 @@ int mbedtls_p384_double_jac( const mbedtls_ecp_group *G,
     if( IsAsan() ) __asan_verify( P, sizeof( *P ) );
     if( IsAsan() ) __asan_verify( R, sizeof( *R ) );
     if( ( ret = mbedtls_p384_dim( R ) ) ) return( ret );
-    if( ( ret = mbedtls_p384_dim( P ) ) ) return( ret );
+    if( ( ret = mbedtls_p384_dim( (void *)P ) ) ) return( ret );
     mbedtls_platform_zeroize( T, sizeof( T ) );
     mbedtls_p384_mul( T[1], P->Z.p, 6, P->Z.p, 6 );
     mbedtls_p384_add( T[2], P->X.p, T[1] );
@@ -459,11 +465,11 @@ int mbedtls_p384_add_mixed( const mbedtls_ecp_group *G,
     s.Zn  = mbedtls_mpi_limbs( &P->Z );
     s.QXn = mbedtls_mpi_limbs( &Q->X );
     s.QYn = mbedtls_mpi_limbs( &Q->Y );
-    CHECK_LE( s.Xn,  6 );
-    CHECK_LE( s.Yn,  6 );
-    CHECK_LE( s.Zn,  6 );
-    CHECK_LE( s.QXn, 6 );
-    CHECK_LE( s.QYn, 6 );
+    MBEDTLS_ASSERT( s.Xn  <= 6 );
+    MBEDTLS_ASSERT( s.Yn  <= 6 );
+    MBEDTLS_ASSERT( s.Zn  <= 6 );
+    MBEDTLS_ASSERT( s.QXn <= 6 );
+    MBEDTLS_ASSERT( s.QYn <= 6 );
     memcpy( s.X, P->X.p, s.Xn * 8 );
     memcpy( s.Y, P->Y.p, s.Yn * 8 );
     memcpy( s.Z, P->Z.p, s.Zn * 8 );

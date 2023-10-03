@@ -24,11 +24,14 @@
 │ ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR        │
 │ OTHER DEALINGS IN THE SOFTWARE.                                              │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/safemacros.internal.h"
+#include "libc/dce.h"
 #include "libc/dns/servicestxt.h"
 #include "libc/errno.h"
 #include "libc/fmt/conv.h"
+#include "libc/intrin/safemacros.internal.h"
 #include "libc/macros.internal.h"
+#include "libc/mem/mem.h"
+#include "libc/str/str.h"
 
 /**
  * Opens and searches /etc/services to find name for a given port.
@@ -49,36 +52,30 @@
  * @param servprotolen the size of servproto
  * @param buf is a buffer to store the official name of the service
  * @param bufsize is the size of buf
- * @param filepath is the location of the services file
- *          (if NULL, uses /etc/services)
+ * @param path is the location of the services file, which may be NULL
+ *     to use the system-wide default
  * @return 0 on success, -1 on error
  * @note aliases are not read from the file.
  */
 int LookupServicesByPort(const int servport, char *servproto,
                          size_t servprotolen, char *buf, size_t bufsize,
-                         const char *filepath) {
+                         const char *path) {
   FILE *f;
-  char *line;
-  char pathbuf[PATH_MAX];
-  const char *path;
-  size_t linesize;
   int found;
+  char *line;
+  size_t linesize;
+  char pathbuf[256];
   char *name, *port, *proto, *comment, *tok;
-  if (!(path = filepath)) {
-    path = "/etc/services";
-    if (IsWindows()) {
-      path =
-          firstnonnull(GetNtServicesTxtPath(pathbuf, ARRAYLEN(pathbuf)), path);
-    }
-  }
-  if (servprotolen == 0 || bufsize == 0 || !(f = fopen(path, "r"))) {
+  if (!servprotolen ||
+      !(f = fopen(path ? path : GetServicesTxtPath(pathbuf, sizeof(pathbuf)),
+                  "r"))) {
     return -1;
   }
+  found = 0;
   line = NULL;
   linesize = 0;
-  found = 0;
-  strcpy(buf, "");
-  while (found == 0 && (getline(&line, &linesize, f)) != -1) {
+  if (bufsize) *buf = 0;
+  while (!found && (getline(&line, &linesize, f)) != -1) {
     if ((comment = strchr(line, '#'))) *comment = '\0';
     name = strtok_r(line, " \t\r\n\v", &tok);
     port = strtok_r(NULL, "/ \t\r\n\v", &tok);
@@ -90,7 +87,9 @@ int LookupServicesByPort(const int servport, char *servproto,
           break;
         }
         if (!memccpy(buf, name, '\0', bufsize)) {
-          strcpy(buf, "");
+          if (bufsize) {
+            *buf = 0;
+          }
           break;
         }
         found = 1;

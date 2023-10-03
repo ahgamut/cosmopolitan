@@ -19,8 +19,9 @@
 #include "third_party/mbedtls/ssl_invasive.h"
 #include "libc/testlib/testlib.h"
 #include "libc/log/log.h"
-#include "libc/rand/rand.h"
-#include "libc/bits/safemacros.internal.h"
+#include "libc/time/time.h"
+#include "libc/stdio/rand.h"
+#include "libc/intrin/safemacros.internal.h"
 #include "third_party/mbedtls/test/test.inc"
 /*
  * *** THIS FILE WAS MACHINE GENERATED ***
@@ -2269,6 +2270,8 @@ void test_ssl_mock_sanity( )
     unsigned char received[MSGLEN];
     mbedtls_mock_socket socket;
 
+    memset(message, 0, sizeof(message));
+
     mbedtls_mock_socket_init( &socket );
     TEST_ASSERT( mbedtls_mock_tcp_send_b( &socket, message, MSGLEN ) < 0 );
     mbedtls_mock_socket_close( &socket );
@@ -2698,7 +2701,7 @@ void test_ssl_message_queue_insufficient_buffer_wrapper( void ** params )
 void test_ssl_message_mock_uninitialized( )
 {
     enum { MSGLEN = 10 };
-    unsigned char message[MSGLEN], received[MSGLEN];
+    unsigned char message[MSGLEN] = {0}, received[MSGLEN];
     mbedtls_mock_socket client, server;
     mbedtls_test_message_queue server_queue, client_queue;
     mbedtls_test_message_socket_context server_context, client_context;
@@ -3708,7 +3711,7 @@ void test_ssl_decrypt_non_etm_cbc( int cipher_type, int hash_id, int trunc_hmac,
      * hundreds of milliseconds of latency, which we can't have in our pure
      * testing infrastructure.
      */
-    for( i = block_size; i < buflen; i += max( 1, rand64() & 31 ) )
+    for( i = block_size; i < buflen; i += max( 1, _rand64() & 31 ) )
     {
         mbedtls_test_set_step( i );
         /* Restore correct pre-encryption record */
@@ -3746,7 +3749,7 @@ void test_ssl_decrypt_non_etm_cbc( int cipher_type, int hash_id, int trunc_hmac,
      * hundreds of milliseconds of latency, which we can't have in our pure
      * testing infrastructure.
      */
-    for( i = padlen; i <= pad_max_len; i += max( 1, rand64() & 31 ) )
+    for( i = padlen; i <= pad_max_len; i += max( 1, _rand64() & 31 ) )
     {
         mbedtls_test_set_step( i );
         /* Restore correct pre-encryption record */

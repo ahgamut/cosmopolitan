@@ -16,25 +16,66 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/atomic.h"
 #include "libc/calls/calls.h"
 #include "libc/errno.h"
-#include "libc/intrin/pthread.h"
-#include "libc/nexgen32e/threaded.h"
+#include "libc/intrin/atomic.h"
+#include "libc/intrin/kprintf.h"
+#include "libc/intrin/weaken.h"
+#include "libc/thread/thread.h"
+#include "libc/thread/tls.h"
+#include "third_party/nsync/mu.h"
 
 /**
- * Tries to acquire mutex.
+ * Locks mutex if it isn't locked already.
+ *
+ * Unlike pthread_mutex_lock() this function won't block and instead
+ * returns an error immediately if the lock couldn't be acquired.
+ *
+ * @return 0 on success, or errno on error
+ * @raise EBUSY if lock is already held
+ * @raise ENOTRECOVERABLE if `mutex` is corrupted
  */
-int pthread_mutex_trylock(pthread_mutex_t *mutex) {
-  int rc, me, owner;
-  me = gettid();
-  owner = 0;
-  if (!atomic_compare_exchange_strong(&mutex->lock, &owner, me) &&
-      owner == me) {
-    rc = 0;
-    ++mutex->reent;
-  } else {
-    rc = EBUSY;
+errno_t pthread_mutex_trylock(pthread_mutex_t *mutex) {
+  int t;
+
+  if (__tls_enabled &&                               //
+      mutex->_type == PTHREAD_MUTEX_NORMAL &&        //
+      mutex->_pshared == PTHREAD_PROCESS_PRIVATE &&  //
+      _weaken(nsync_mu_trylock)) {
+    if (_weaken(nsync_mu_trylock)((nsync_mu *)mutex)) {
+      return 0;
+    } else {
+      return EBUSY;
+    }
   }
-  return rc;
+
+  if (mutex->_type == PTHREAD_MUTEX_NORMAL) {
+    if (!atomic_exchange_explicit(&mutex->_lock, 1, memory_order_acquire)) {
+      return 0;
+    } else {
+      return EBUSY;
+    }
+  }
+
+  t = gettid();
+  if (mutex->_owner == t) {
+    if (mutex->_type != PTHREAD_MUTEX_ERRORCHECK) {
+      if (mutex->_depth < 63) {
+        ++mutex->_depth;
+        return 0;
+      } else {
+        return EAGAIN;
+      }
+    } else {
+      return EBUSY;
+    }
+  }
+
+  if (!atomic_exchange_explicit(&mutex->_lock, 1, memory_order_acquire)) {
+    mutex->_depth = 0;
+    mutex->_owner = t;
+    return 0;
+  } else {
+    return EBUSY;
+  }
 }

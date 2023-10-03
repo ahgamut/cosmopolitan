@@ -1,129 +1,89 @@
 #ifndef COSMOPOLITAN_LIBC_SYSV_CONSTS_SIO_H_
 #define COSMOPOLITAN_LIBC_SYSV_CONSTS_SIO_H_
-#include "libc/runtime/symbolic.h"
-
-#define SIOCADDDLCI SYMBOLIC(SIOCADDDLCI)
-#define SIOCADDMULTI SYMBOLIC(SIOCADDMULTI)
-#define SIOCADDRT SYMBOLIC(SIOCADDRT)
-#define SIOCATMARK SYMBOLIC(SIOCATMARK)
-#define SIOCDARP SYMBOLIC(SIOCDARP)
-#define SIOCDELDLCI SYMBOLIC(SIOCDELDLCI)
-#define SIOCDELMULTI SYMBOLIC(SIOCDELMULTI)
-#define SIOCDELRT SYMBOLIC(SIOCDELRT)
-#define SIOCDEVPRIVATE SYMBOLIC(SIOCDEVPRIVATE)
-#define SIOCDIFADDR SYMBOLIC(SIOCDIFADDR)
-#define SIOCDRARP SYMBOLIC(SIOCDRARP)
-#define SIOCGARP SYMBOLIC(SIOCGARP)
-#define SIOCGIFADDR SYMBOLIC(SIOCGIFADDR)
-#define SIOCGIFBR SYMBOLIC(SIOCGIFBR)
-#define SIOCGIFBRDADDR SYMBOLIC(SIOCGIFBRDADDR)
-#define SIOCGIFCONF SYMBOLIC(SIOCGIFCONF)
-#define SIOCGIFCOUNT SYMBOLIC(SIOCGIFCOUNT)
-#define SIOCGIFDSTADDR SYMBOLIC(SIOCGIFDSTADDR)
-#define SIOCGIFENCAP SYMBOLIC(SIOCGIFENCAP)
-#define SIOCGIFFLAGS SYMBOLIC(SIOCGIFFLAGS)
-#define SIOCGIFHWADDR SYMBOLIC(SIOCGIFHWADDR)
-#define SIOCGIFINDEX SYMBOLIC(SIOCGIFINDEX)
-#define SIOCGIFMAP SYMBOLIC(SIOCGIFMAP)
-#define SIOCGIFMEM SYMBOLIC(SIOCGIFMEM)
-#define SIOCGIFMETRIC SYMBOLIC(SIOCGIFMETRIC)
-#define SIOCGIFMTU SYMBOLIC(SIOCGIFMTU)
-#define SIOCGIFNAME SYMBOLIC(SIOCGIFNAME)
-#define SIOCGIFNETMASK SYMBOLIC(SIOCGIFNETMASK)
-#define SIOCGIFPFLAGS SYMBOLIC(SIOCGIFPFLAGS)
-#define SIOCGIFSLAVE SYMBOLIC(SIOCGIFSLAVE)
-#define SIOCGIFTXQLEN SYMBOLIC(SIOCGIFTXQLEN)
-#define SIOCGPGRP SYMBOLIC(SIOCGPGRP)
-#define SIOCGRARP SYMBOLIC(SIOCGRARP)
-#define SIOCGSTAMP SYMBOLIC(SIOCGSTAMP)
-#define SIOCGSTAMPNS SYMBOLIC(SIOCGSTAMPNS)
-#define SIOCPROTOPRIVATE SYMBOLIC(SIOCPROTOPRIVATE)
-#define SIOCRTMSG SYMBOLIC(SIOCRTMSG)
-#define SIOCSARP SYMBOLIC(SIOCSARP)
-#define SIOCSIFADDR SYMBOLIC(SIOCSIFADDR)
-#define SIOCSIFBR SYMBOLIC(SIOCSIFBR)
-#define SIOCSIFBRDADDR SYMBOLIC(SIOCSIFBRDADDR)
-#define SIOCSIFDSTADDR SYMBOLIC(SIOCSIFDSTADDR)
-#define SIOCSIFENCAP SYMBOLIC(SIOCSIFENCAP)
-#define SIOCSIFFLAGS SYMBOLIC(SIOCSIFFLAGS)
-#define SIOCSIFHWADDR SYMBOLIC(SIOCSIFHWADDR)
-#define SIOCSIFHWBROADCAST SYMBOLIC(SIOCSIFHWBROADCAST)
-#define SIOCSIFLINK SYMBOLIC(SIOCSIFLINK)
-#define SIOCSIFMAP SYMBOLIC(SIOCSIFMAP)
-#define SIOCSIFMEM SYMBOLIC(SIOCSIFMEM)
-#define SIOCSIFMETRIC SYMBOLIC(SIOCSIFMETRIC)
-#define SIOCSIFMTU SYMBOLIC(SIOCSIFMTU)
-#define SIOCSIFNAME SYMBOLIC(SIOCSIFNAME)
-#define SIOCSIFNETMASK SYMBOLIC(SIOCSIFNETMASK)
-#define SIOCSIFPFLAGS SYMBOLIC(SIOCSIFPFLAGS)
-#define SIOCSIFSLAVE SYMBOLIC(SIOCSIFSLAVE)
-#define SIOCSIFTXQLEN SYMBOLIC(SIOCSIFTXQLEN)
-#define SIOCSPGRP SYMBOLIC(SIOCSPGRP)
-#define SIOCSRARP SYMBOLIC(SIOCSRARP)
-#define SIOGIFINDEX SYMBOLIC(SIOGIFINDEX)
-
 #if !(__ASSEMBLER__ + __LINKER__ + 0)
 COSMOPOLITAN_C_START_
 
-extern const long SIOCADDDLCI;
-extern const long SIOCADDMULTI;
-extern const long SIOCADDRT;
-extern const long SIOCATMARK;
-extern const long SIOCDARP;
-extern const long SIOCDELDLCI;
-extern const long SIOCDELMULTI;
-extern const long SIOCDELRT;
-extern const long SIOCDEVPRIVATE;
-extern const long SIOCDIFADDR;
-extern const long SIOCDRARP;
-extern const long SIOCGARP;
-extern const long SIOCGIFADDR;
-extern const long SIOCGIFBR;
-extern const long SIOCGIFBRDADDR;
-extern const long SIOCGIFCONF;
-extern const long SIOCGIFCOUNT;
-extern const long SIOCGIFDSTADDR;
-extern const long SIOCGIFENCAP;
-extern const long SIOCGIFFLAGS;
-extern const long SIOCGIFHWADDR;
-extern const long SIOCGIFINDEX;
-extern const long SIOCGIFMAP;
-extern const long SIOCGIFMEM;
-extern const long SIOCGIFMETRIC;
-extern const long SIOCGIFMTU;
-extern const long SIOCGIFNAME;
-extern const long SIOCGIFNETMASK;
-extern const long SIOCGIFPFLAGS;
-extern const long SIOCGIFSLAVE;
-extern const long SIOCGIFTXQLEN;
-extern const long SIOCGPGRP;
-extern const long SIOCGRARP;
-extern const long SIOCGSTAMP;
-extern const long SIOCGSTAMPNS;
-extern const long SIOCPROTOPRIVATE;
-extern const long SIOCRTMSG;
-extern const long SIOCSARP;
-extern const long SIOCSIFADDR;
-extern const long SIOCSIFBR;
-extern const long SIOCSIFBRDADDR;
-extern const long SIOCSIFDSTADDR;
-extern const long SIOCSIFENCAP;
-extern const long SIOCSIFFLAGS;
-extern const long SIOCSIFHWADDR;
-extern const long SIOCSIFHWBROADCAST;
-extern const long SIOCSIFLINK;
-extern const long SIOCSIFMAP;
-extern const long SIOCSIFMEM;
-extern const long SIOCSIFMETRIC;
-extern const long SIOCSIFMTU;
-extern const long SIOCSIFNAME;
-extern const long SIOCSIFNETMASK;
-extern const long SIOCSIFPFLAGS;
-extern const long SIOCSIFSLAVE;
-extern const long SIOCSIFTXQLEN;
-extern const long SIOCSPGRP;
-extern const long SIOCSRARP;
-extern const long SIOGIFINDEX;
+extern const unsigned long SIOCADDDLCI;
+extern const unsigned long SIOCADDMULTI;
+extern const unsigned long SIOCADDRT;
+extern const unsigned long SIOCDARP;
+extern const unsigned long SIOCDELDLCI;
+extern const unsigned long SIOCDELMULTI;
+extern const unsigned long SIOCDELRT;
+extern const unsigned long SIOCDEVPRIVATE;
+extern const unsigned long SIOCDIFADDR;
+extern const unsigned long SIOCDRARP;
+extern const unsigned long SIOCGARP;
+extern const unsigned long SIOCGIFADDR;
+extern const unsigned long SIOCGIFBR;
+extern const unsigned long SIOCGIFBRDADDR;
+extern const unsigned long SIOCGIFCONF;
+extern const unsigned long SIOCGIFCOUNT;
+extern const unsigned long SIOCGIFDSTADDR;
+extern const unsigned long SIOCGIFENCAP;
+extern const unsigned long SIOCGIFFLAGS;
+extern const unsigned long SIOCGIFHWADDR;
+extern const unsigned long SIOCGIFINDEX;
+extern const unsigned long SIOCGIFMAP;
+extern const unsigned long SIOCGIFMEM;
+extern const unsigned long SIOCGIFMETRIC;
+extern const unsigned long SIOCGIFMTU;
+extern const unsigned long SIOCGIFNAME;
+extern const unsigned long SIOCGIFNETMASK;
+extern const unsigned long SIOCGIFPFLAGS;
+extern const unsigned long SIOCGIFSLAVE;
+extern const unsigned long SIOCGIFTXQLEN;
+extern const unsigned long SIOCGPGRP;
+extern const unsigned long SIOCGRARP;
+extern const unsigned long SIOCGSTAMP;
+extern const unsigned long SIOCGSTAMPNS;
+extern const unsigned long SIOCPROTOPRIVATE;
+extern const unsigned long SIOCRTMSG;
+extern const unsigned long SIOCSARP;
+extern const unsigned long SIOCSIFADDR;
+extern const unsigned long SIOCSIFBR;
+extern const unsigned long SIOCSIFBRDADDR;
+extern const unsigned long SIOCSIFDSTADDR;
+extern const unsigned long SIOCSIFENCAP;
+extern const unsigned long SIOCSIFFLAGS;
+extern const unsigned long SIOCSIFHWADDR;
+extern const unsigned long SIOCSIFHWBROADCAST;
+extern const unsigned long SIOCSIFLINK;
+extern const unsigned long SIOCSIFMAP;
+extern const unsigned long SIOCSIFMEM;
+extern const unsigned long SIOCSIFMETRIC;
+extern const unsigned long SIOCSIFMTU;
+extern const unsigned long SIOCSIFNAME;
+extern const unsigned long SIOCSIFNETMASK;
+extern const unsigned long SIOCSIFPFLAGS;
+extern const unsigned long SIOCSIFSLAVE;
+extern const unsigned long SIOCSIFTXQLEN;
+extern const unsigned long SIOCSPGRP;
+extern const unsigned long SIOCSRARP;
+extern const unsigned long SIOGIFINDEX;
+
+#define SIOCGIFCONF    SIOCGIFCONF
+#define SIOCGIFADDR    SIOCGIFADDR
+#define SIOCSIFADDR    SIOCSIFADDR
+#define SIOCDIFADDR    SIOCDIFADDR
+#define SIOCGIFBRDADDR SIOCGIFBRDADDR
+#define SIOCGIFNETMASK SIOCGIFNETMASK
+#define SIOCGIFFLAGS   SIOCGIFFLAGS
+#define SIOCSIFFLAGS   SIOCSIFFLAGS
+#define SIOCGIFMETRIC  SIOCGIFMETRIC
+#define SIOCSIFMETRIC  SIOCSIFMETRIC
+#define SIOCSIFBRDADDR SIOCSIFBRDADDR
+#define SIOCSIFNETMASK SIOCSIFNETMASK
+#define SIOCGIFDSTADDR SIOCGIFDSTADDR
+#define SIOCSIFDSTADDR SIOCSIFDSTADDR
+#define SIOCGIFMTU     SIOCGIFMTU
+#define SIOCSIFMTU     SIOCSIFMTU
+
+#define SIOCGPGRP SIOCGPGRP
+#define SIOCSPGRP SIOCSPGRP
+
+#define SIOCADDMULTI SIOCADDMULTI
+#define SIOCDELMULTI SIOCDELMULTI
 
 COSMOPOLITAN_C_END_
 #endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */

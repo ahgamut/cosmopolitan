@@ -30,10 +30,13 @@
 #include "libc/tinymath/complex.internal.h"
 
 asm(".ident\t\"\\n\\n\
+OpenBSD libm (ISC License)\\n\
+Copyright (c) 2008 Stephen L. Moshier <steve@moshier.net>\"");
+asm(".ident\t\"\\n\\n\
 Musl libc (MIT License)\\n\
 Copyright 2005-2014 Rich Felker, et. al.\"");
 asm(".include \"libc/disclaimer.inc\"");
-/* clang-format off */
+// clang-format off
 
 
 /* origin: OpenBSD /usr/src/lib/libm/src/s_catan.c */
@@ -142,3 +145,7 @@ double complex catan(double complex z)
 	w = CMPLX(w, 0.25 * log(a));
 	return w;
 }
+
+#if LDBL_MANT_DIG == 53 && LDBL_MAX_EXP == 1024
+__weak_reference(catan, catanl);
+#endif

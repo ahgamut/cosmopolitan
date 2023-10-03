@@ -16,7 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/pushpop.h"
+#include "libc/intrin/pushpop.internal.h"
 #include "libc/limits.h"
 #include "libc/macros.internal.h"
 #include "libc/mem/mem.h"
@@ -26,13 +26,15 @@
 #include "libc/str/str.h"
 #include "libc/testlib/testlib.h"
 
+__static_yoink("realloc");
+
 TEST(grow, testNull_hasAllocatingBehavior) {
   void *p = NULL;
   size_t capacity = 0;
   EXPECT_TRUE(__grow(&p, &capacity, 1, 0));
   EXPECT_NE(NULL, p);
   EXPECT_EQ(32, capacity);
-  free_s(&p);
+  free(p);
 }
 
 TEST(grow, testCapacity_isInUnits_withTerminatorGuarantee) {
@@ -41,7 +43,7 @@ TEST(grow, testCapacity_isInUnits_withTerminatorGuarantee) {
   EXPECT_TRUE(__grow(&p, &capacity, 8, 0));
   EXPECT_NE(NULL, p);
   EXPECT_EQ(32 / 8 + 1, capacity);
-  free_s(&p);
+  free(p);
 }
 
 TEST(grow, testStackMemory_convertsToDynamic) {
@@ -69,7 +71,7 @@ TEST(grow, testGrowth_clearsNewMemory) {
   EXPECT_GT(capacity, 123);
   for (i = 0; i < 123; ++i) ASSERT_EQ('a', p[i]);
   for (i = 123; i < capacity; ++i) ASSERT_EQ(0, p[i]);
-  free_s(&p);
+  free(p);
 }
 
 TEST(grow, testBonusParam_willGoAboveAndBeyond) {
@@ -77,11 +79,11 @@ TEST(grow, testBonusParam_willGoAboveAndBeyond) {
   char *p = malloc(capacity);
   EXPECT_TRUE(__grow(&p, &capacity, 1, 0));
   EXPECT_LT(capacity, 1024);
-  free_s(&p);
+  free(p);
   p = malloc((capacity = 32));
   EXPECT_TRUE(__grow(&p, &capacity, 1, 1024));
   EXPECT_GT(capacity, 1024);
-  free_s(&p);
+  free(p);
 }
 
 TEST(grow, testOverflow_returnsFalseAndDoesNotFree) {
@@ -95,6 +97,5 @@ TEST(grow, testOverflow_returnsFalseAndDoesNotFree) {
     EXPECT_EQ(1, p[0]);
     EXPECT_EQ(2, p[1]);
     EXPECT_EQ(3, p[2]);
-    free_s(&p);
   }
 }

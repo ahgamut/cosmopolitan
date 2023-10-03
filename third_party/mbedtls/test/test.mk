@@ -11,6 +11,9 @@ THIRD_PARTY_MBEDTLS_TEST_INCS = $(filter %.inc,$(THIRD_PARTY_MBEDTLS_TEST_FILES)
 THIRD_PARTY_MBEDTLS_TEST_OBJS =											\
 	$(THIRD_PARTY_MBEDTLS_TEST_SRCS:%.c=o/$(MODE)/%.o)
 
+# TOOD(jart): Re-enable me once we can mock out time.
+# o/$(MODE)/third_party/mbedtls/test/test_suite_x509parse.com
+
 THIRD_PARTY_MBEDTLS_TEST_COMS =											\
 	o/$(MODE)/third_party/mbedtls/test/test_suite_aes.cbc.com						\
 	o/$(MODE)/third_party/mbedtls/test/test_suite_aes.cfb.com						\
@@ -76,7 +79,6 @@ THIRD_PARTY_MBEDTLS_TEST_COMS =											\
 	o/$(MODE)/third_party/mbedtls/test/test_suite_ssl.com							\
 	o/$(MODE)/third_party/mbedtls/test/test_suite_timing.com						\
 	o/$(MODE)/third_party/mbedtls/test/test_suite_version.com						\
-	o/$(MODE)/third_party/mbedtls/test/test_suite_x509parse.com						\
 	o/$(MODE)/third_party/mbedtls/test/test_suite_x509write.com						\
 	o/$(MODE)/third_party/mbedtls/test/secp384r1_test.com							\
 	o/$(MODE)/third_party/mbedtls/test/everest_test.com
@@ -101,16 +103,13 @@ THIRD_PARTY_MBEDTLS_TEST_DIRECTDEPS =										\
 	LIBC_MEM												\
 	LIBC_NEXGEN32E												\
 	LIBC_NT_KERNEL32											\
-	LIBC_RAND												\
 	LIBC_RUNTIME												\
 	LIBC_STDIO												\
 	LIBC_STR												\
 	LIBC_SYSV												\
 	LIBC_TIME												\
 	LIBC_TESTLIB												\
-	LIBC_UNICODE												\
 	LIBC_X													\
-	LIBC_ZIPOS												\
 	THIRD_PARTY_COMPILER_RT											\
 	THIRD_PARTY_GDTOA											\
 	THIRD_PARTY_MBEDTLS
@@ -133,18 +132,11 @@ o/$(MODE)/third_party/mbedtls/test/%.com.dbg:									\
 		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
 
-o/$(MODE)/third_party/mbedtls/test/%.com: o/$(MODE)/third_party/mbedtls/test/%.com.dbg
-	@$(COMPILE) -AOBJCOPY -T$@ $(OBJCOPY) -S -O binary $< $@
-
 o/$(MODE)/third_party/mbedtls/test/%.com.runs: o/$(MODE)/third_party/mbedtls/test/%.com
-	@$(COMPILE) -ACHECK -tT$@ $< $(TESTARGS)
+	@$(COMPILE) -ACHECK -wtT$@ $< $(TESTARGS)
 
-$(THIRD_PARTY_MBEDTLS_TEST_OBJS):										\
-		OVERRIDE_CFLAGS +=										\
-			-DSTACK_FRAME_UNLIMITED
-
-o/$(MODE)/third_party/mbedtls/test/lib.o:									\
-			OVERRIDE_CFLAGS +=									\
+o/$(MODE)/third_party/mbedtls/test/lib.o: private								\
+			CFLAGS +=										\
 				-fdata-sections									\
 				-ffunction-sections
 
@@ -410,6 +402,7 @@ o/$(MODE)/third_party/mbedtls/test/test_suite_cipher.padding.com.dbg:						\
 		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
 
+o/$(MODE)/third_party/mbedtls/test/test_suite_ctr_drbg.com.runs: private .UNVEIL += rwc:o/tmp
 o/$(MODE)/third_party/mbedtls/test/test_suite_ctr_drbg.com: o/$(MODE)/third_party/mbedtls/test/test_suite_ctr_drbg.com.dbg
 o/$(MODE)/third_party/mbedtls/test/test_suite_ctr_drbg.com.dbg:							\
 		$(THIRD_PARTY_MBEDTLS_TEST_DEPS)								\
@@ -588,6 +581,7 @@ o/$(MODE)/third_party/mbedtls/test/test_suite_hkdf.com.dbg:							\
 		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
 
+o/$(MODE)/third_party/mbedtls/test/test_suite_hmac_drbg.misc.com.runs: private .UNVEIL += rwc:o/tmp
 o/$(MODE)/third_party/mbedtls/test/test_suite_hmac_drbg.misc.com: o/$(MODE)/third_party/mbedtls/test/test_suite_hmac_drbg.misc.com.dbg
 o/$(MODE)/third_party/mbedtls/test/test_suite_hmac_drbg.misc.com.dbg:						\
 		$(THIRD_PARTY_MBEDTLS_TEST_DEPS)								\
@@ -670,6 +664,7 @@ o/$(MODE)/third_party/mbedtls/test/test_suite_memory_buffer_alloc.com.dbg:					\
 		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
 
+o/$(MODE)/third_party/mbedtls/test/test_suite_mpi.com.runs: private .UNVEIL += rwc:o/tmp
 o/$(MODE)/third_party/mbedtls/test/test_suite_mpi.com: o/$(MODE)/third_party/mbedtls/test/test_suite_mpi.com.dbg
 o/$(MODE)/third_party/mbedtls/test/test_suite_mpi.com.dbg:							\
 		$(THIRD_PARTY_MBEDTLS_TEST_DEPS)								\
@@ -1363,4 +1358,19 @@ o/$(MODE)/third_party/mbedtls/test/secp384r1_test.com.dbg:							\
 		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
 
-o/$(MODE)/third_party/mbedtls/test/test_suite_asn1parse.com.runs: QUOTA = -M512m
+o/$(MODE)/third_party/mbedtls/test/test_suite_asn1parse.com.runs: private QUOTA = -M512m
+
+# these need to be explictly defined because landlock make won't sandbox
+# prerequisites with a trailing slash.
+o/$(MODE)/third_party/mbedtls/test/data/.zip.o:									\
+		third_party/mbedtls/test/data
+o/$(MODE)/third_party/mbedtls/test/data/dir-maxpath/.zip.o:							\
+		third_party/mbedtls/test/data/dir-maxpath
+o/$(MODE)/third_party/mbedtls/test/data/dir1/.zip.o:								\
+		third_party/mbedtls/test/data/dir1
+o/$(MODE)/third_party/mbedtls/test/data/dir2/.zip.o:								\
+		third_party/mbedtls/test/data/dir2
+o/$(MODE)/third_party/mbedtls/test/data/dir3/.zip.o:								\
+		third_party/mbedtls/test/data/dir3
+o/$(MODE)/third_party/mbedtls/test/data/dir4/.zip.o:								\
+		third_party/mbedtls/test/data/dir4

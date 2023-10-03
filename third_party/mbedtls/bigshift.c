@@ -15,8 +15,6 @@
 │ See the License for the specific language governing permissions and          │
 │ limitations under the License.                                               │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/assert.h"
-#include "libc/log/log.h"
 #include "libc/macros.internal.h"
 #include "libc/str/str.h"
 #include "third_party/mbedtls/bignum.h"
@@ -72,14 +70,13 @@ static inline void shld(mbedtls_mpi_uint *p, size_t n, size_t m, char k)
 int mbedtls_mpi_shift_l(mbedtls_mpi *X, size_t k)
 {
     int r;
-    size_t b, n, m, l, z;
+    size_t b, n, m, l;
     MPI_VALIDATE_RET(X);
     l = mbedtls_mpi_bitlen(X);
     b = l + k;
     n = BITS_TO_LIMBS(b);
     m = k / biL;
     k = k % biL;
-    z = X->n;
     if (n > X->n && (r = mbedtls_mpi_grow(X, n))) 
         return r;
     if (k)
@@ -104,7 +101,6 @@ void ShiftRightPure(mbedtls_mpi_uint *p, size_t n, unsigned char k) {
 int mbedtls_mpi_shift_r(mbedtls_mpi *X, size_t k)
 {
     size_t n;
-    mbedtls_mpi_uint x, y;
     MPI_VALIDATE_RET(X);
     k = MIN(k, X->n * biL);
     n = k / biL;

@@ -16,15 +16,16 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/safemacros.internal.h"
+#include "libc/errno.h"
 #include "libc/fmt/conv.h"
+#include "libc/intrin/safemacros.internal.h"
 #include "libc/macros.internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/ex.h"
 #include "libc/sysv/consts/exit.h"
-#include "third_party/getopt/getopt.h"
+#include "third_party/getopt/getopt.internal.h"
 
 #define USAGE \
   " [FLAGS] OPERAND..\n\
@@ -52,7 +53,7 @@ void PrintUsage(int rc, FILE *f) {
 void GetOpts(int argc, char *argv[]) {
   int opt;
   bits_ = 64;
-  while ((opt = getopt(argc, argv, "?hbs")) != -1) {
+  while ((opt = getopt(argc, argv, "hbs")) != -1) {
     switch (opt) {
       case 's':
         succinct_ = true;
@@ -60,7 +61,6 @@ void GetOpts(int argc, char *argv[]) {
       case 'b':
         bits_ = atoi(optarg);
         break;
-      case '?':
       case 'h':
         PrintUsage(EXIT_SUCCESS, stdout);
       default:
@@ -251,7 +251,7 @@ const struct Descriptors {
      "STOS, and SCAS). In 64-bit mode, only 64-bit (RDI) and 32-bit (EDI) "
      "address sizes are supported. In non-64-bit modes, only 32-bit (EDI) "
      "and 16-bit (DI) address sizes are supported. The implicit ES "
-     "segment register cannot be overriden by a segment prefix."},
+     "segment register cannot be overridden by a segment prefix."},
 
     {"Z", "r",
      "The instruction has no ModR/M byte; the three least-significant "

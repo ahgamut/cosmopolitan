@@ -71,8 +71,13 @@
 #include "third_party/unzip/crypt.h"
 #include "libc/log/log.h"
 #include "libc/mem/mem.h"
-#include "libc/runtime/gc.internal.h"
+#include "libc/mem/gc.internal.h"
 #include "third_party/unzip/unzvers.h"
+#include "third_party/unzip/globals.h"
+
+#if __GNUC__ >= 11 /* [jart] worth looking into */
+#pragma GCC diagnostic ignored "-Wrestrict"
+#endif
 
 #ifndef WINDLL          /* The WINDLL port uses windll/windll.c instead... */
 
@@ -3621,7 +3626,7 @@ static ZCONST char Far long_op_ambig_err[] =
 static ZCONST char Far long_op_not_sup_err[] =
    "long option '%s' not supported\n";
 
-static ZCONST char Far no_arg_files_err[] = "argument files not enabled\n";
+/* static ZCONST char Far no_arg_files_err[] = "argument files not enabled\n"; */
 
 
 /* below removed as only used for processing argument files */

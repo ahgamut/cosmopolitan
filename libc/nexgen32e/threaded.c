@@ -16,13 +16,20 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/nexgen32e/threaded.h"
+#include "libc/thread/tls.h"
 
 /**
  * Contains TID of main thread or 0 if threading isn't enabled.
  */
 int __threaded;
 
+/**
+ * Set to true if sigaction() has installed signal handlers.
+ */
+bool __interruptible;
+
+#ifdef __x86_64__
 bool __tls_enabled;
+#endif
 
 unsigned __tls_index;

@@ -16,17 +16,18 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/alg/reverse.internal.h"
-#include "libc/bits/pushpop.h"
-#include "libc/bits/weaken.h"
 #include "libc/calls/calls.h"
-#include "libc/calls/strace.internal.h"
 #include "libc/fmt/fmt.h"
 #include "libc/intrin/kprintf.h"
+#include "libc/intrin/pushpop.internal.h"
+#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/weaken.h"
+#include "libc/limits.h"
 #include "libc/log/color.internal.h"
 #include "libc/log/internal.h"
 #include "libc/log/libfatal.internal.h"
 #include "libc/log/log.h"
+#include "libc/mem/reverse.internal.h"
 #include "libc/nt/runtime.h"
 #include "libc/runtime/internal.h"
 #include "libc/runtime/runtime.h"
@@ -166,10 +167,16 @@ static char *__ubsan_itpcpy(char *p, struct UbsanTypeDescriptor *t,
   }
 }
 
+static size_t __ubsan_strlen(const char *s) {
+  size_t i = 0;
+  while (s[i]) ++i;
+  return i;
+}
+
 static const char *__ubsan_dubnul(const char *s, unsigned i) {
   size_t n;
   while (i--) {
-    if ((n = __strlen(s))) {
+    if ((n = __ubsan_strlen(s))) {
       s += n + 1;
     } else {
       return NULL;
@@ -193,20 +200,28 @@ static uintptr_t __ubsan_extend(struct UbsanTypeDescriptor *t, uintptr_t x) {
 }
 
 static wontreturn void __ubsan_unreachable(void) {
-  for (;;) __builtin_trap();
+  for (;;) abort();
 }
 
 static void __ubsan_exit(void) {
   kprintf("your ubsan runtime needs\n"
-          "\tSTATIC_YOINK(\"__die\");\n"
+          "\t__static_yoink(\"__die\");\n"
           "in order to show you backtraces\n");
-  __restorewintty();
   _Exit(99);
 }
 
-dontdiscard static __ubsan_die_f *__ubsan_die(void) {
-  if (weaken(__die)) {
-    return weaken(__die);
+static char *__ubsan_stpcpy(char *d, const char *s) {
+  size_t i;
+  for (i = 0;; ++i) {
+    if (!(d[i] = s[i])) {
+      return d + i;
+    }
+  }
+}
+
+__wur static __ubsan_die_f *__ubsan_die(void) {
+  if (_weaken(__die)) {
+    return _weaken(__die);
   } else {
     return __ubsan_exit;
   }
@@ -218,10 +233,10 @@ static void __ubsan_warning(const struct UbsanSourceLocation *loc,
           loc->line, SUBTLE, description, RESET);
 }
 
-dontdiscard __ubsan_die_f *__ubsan_abort(const struct UbsanSourceLocation *loc,
-                                         const char *description) {
-  kprintf("\n%s:%d: %subsan error%s: %s\n", loc->file, loc->line, RED2, RESET,
-          description);
+__wur __ubsan_die_f *__ubsan_abort(const struct UbsanSourceLocation *loc,
+                                   const char *description) {
+  kprintf("\n%s:%d: %subsan error%s: %s (tid %d)\n", loc->file, loc->line, RED2,
+          RESET, description, gettid());
   return __ubsan_die();
 }
 
@@ -246,11 +261,11 @@ static char *__ubsan_describe_shift_out_of_bounds(
   char *p = buf;
   lhs = __ubsan_extend(info->lhs_type, lhs);
   rhs = __ubsan_extend(info->rhs_type, rhs);
-  p = __stpcpy(p, __ubsan_describe_shift(info, lhs, rhs)), *p++ = ' ';
+  p = __ubsan_stpcpy(p, __ubsan_describe_shift(info, lhs, rhs)), *p++ = ' ';
   p = __ubsan_itpcpy(p, info->lhs_type, lhs), *p++ = ' ';
-  p = __stpcpy(p, info->lhs_type->name), *p++ = ' ';
+  p = __ubsan_stpcpy(p, info->lhs_type->name), *p++ = ' ';
   p = __ubsan_itpcpy(p, info->rhs_type, rhs), *p++ = ' ';
-  p = __stpcpy(p, info->rhs_type->name);
+  p = __ubsan_stpcpy(p, info->rhs_type->name);
   return buf;
 }
 
@@ -272,12 +287,12 @@ void __ubsan_handle_shift_out_of_bounds_abort(
 void __ubsan_handle_out_of_bounds(struct UbsanOutOfBoundsInfo *info,
                                   uintptr_t index) {
   char buf[512], *p = buf;
-  p = __stpcpy(p, info->index_type->name);
-  p = __stpcpy(p, " index ");
+  p = __ubsan_stpcpy(p, info->index_type->name);
+  p = __ubsan_stpcpy(p, " index ");
   p = __ubsan_itpcpy(p, info->index_type, index);
-  p = __stpcpy(p, " into ");
-  p = __stpcpy(p, info->array_type->name);
-  p = __stpcpy(p, " out of bounds");
+  p = __ubsan_stpcpy(p, " into ");
+  p = __ubsan_stpcpy(p, info->array_type->name);
+  p = __ubsan_stpcpy(p, " out of bounds");
   __ubsan_abort(&info->location, buf)();
   __ubsan_unreachable();
 }
@@ -294,19 +309,19 @@ static __ubsan_die_f *__ubsan_type_mismatch_handler(
   if (!pointer) return __ubsan_abort(&info->location, "null pointer access");
   kind = __ubsan_dubnul(kUbsanTypeCheckKinds, info->type_check_kind);
   if (info->alignment && (pointer & (info->alignment - 1))) {
-    p = __stpcpy(p, "unaligned ");
-    p = __stpcpy(p, kind), *p++ = ' ';
-    p = __stpcpy(p, info->type->name), *p++ = ' ', *p++ = '@';
+    p = __ubsan_stpcpy(p, "unaligned ");
+    p = __ubsan_stpcpy(p, kind), *p++ = ' ';
+    p = __ubsan_stpcpy(p, info->type->name), *p++ = ' ', *p++ = '@';
     p = __ubsan_itpcpy(p, info->type, pointer);
-    p = __stpcpy(p, " align ");
+    p = __ubsan_stpcpy(p, " align ");
     p = __intcpy(p, info->alignment);
   } else {
-    p = __stpcpy(p, "insufficient size ");
-    p = __stpcpy(p, kind);
-    p = __stpcpy(p, " address 0x");
+    p = __ubsan_stpcpy(p, "insufficient size ");
+    p = __ubsan_stpcpy(p, kind);
+    p = __ubsan_stpcpy(p, " address 0x");
     p = __fixcpy(p, pointer, sizeof(pointer) * CHAR_BIT);
-    p = __stpcpy(p, " with insufficient space for object of type ");
-    p = __stpcpy(p, info->type->name);
+    p = __ubsan_stpcpy(p, " with insufficient space for object of type ");
+    p = __ubsan_stpcpy(p, info->type->name);
   }
   return __ubsan_abort(&info->location, buf);
 }

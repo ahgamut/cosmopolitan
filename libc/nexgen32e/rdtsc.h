@@ -32,12 +32,35 @@ COSMOPOLITAN_C_START_
 #define mfence_lfence_rdtsc_lfence() \
   __RDTSC("mfence\n\tlfence\n\trdtsc\n\tlfence")
 
+#ifdef __x86__
 #define __RDTSC(ASM)                                                       \
   ({                                                                       \
     uint64_t Rax, Rdx;                                                     \
     asm volatile(ASM : "=a"(Rax), "=d"(Rdx) : /* no inputs */ : "memory"); \
     Rdx << 32 | Rax;                                                       \
   })
+#elif defined(__aarch64__)
+#define __RDTSC(ASM)                                \
+  ({                                                \
+    uint64_t _Ts;                                   \
+    asm volatile("mrs\t%0,cntvct_el0" : "=r"(_Ts)); \
+    _Ts * 48; /* the fudge factor */                \
+  })
+#elif defined(__powerpc64__)
+#define __RDTSC(ASM)                           \
+  ({                                           \
+    uint64_t _Ts;                              \
+    asm volatile("mfspr\t%0,268" : "=r"(_Ts)); \
+    _Ts;                                       \
+  })
+#elif defined(__riscv)
+#define __RDTSC(ASM)                         \
+  ({                                         \
+    uint64_t _Ts;                            \
+    asm volatile("rdcycle\t%0" : "=r"(_Ts)); \
+    _Ts;                                     \
+  })
+#endif
 
 COSMOPOLITAN_C_END_
 #endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */

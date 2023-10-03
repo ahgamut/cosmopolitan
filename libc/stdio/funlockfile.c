@@ -16,12 +16,13 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/stdio/internal.h"
 #include "libc/stdio/stdio.h"
+#include "libc/thread/thread.h"
 
 /**
  * Releases lock on stdio object.
  */
-void(funlockfile)(FILE *f) {
-  f->lock.attr = PTHREAD_MUTEX_RECURSIVE;
+void funlockfile(FILE *f) {
   pthread_mutex_unlock(&f->lock);
 }

@@ -16,7 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/rand/rand.h"
+#include "libc/stdio/rand.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
 #include "libc/testlib/ezbench.h"
@@ -32,7 +32,7 @@
 int ecp_mod_p384_old(mbedtls_mpi *);
 
 int GetEntropy(void *c, unsigned char *p, size_t n) {
-  rngset(p, n, rand64, -1);
+  rngset(p, n, _rand64, -1);
   return 0;
 }
 
@@ -59,14 +59,6 @@ TEST(secp384r1, testIsTheSame) {
 
 TEST(secp384r1, needsDownwardCorrection) {
   int i;
-  uint64_t P[6] = {
-      0x00000000ffffffff,  //
-      0xffffffff00000000,  //
-      0xfffffffffffffffe,  //
-      0xffffffffffffffff,  //
-      0xffffffffffffffff,  //
-      0xffffffffffffffff,  //
-  };
   uint64_t X[12] = {
       0xffffffffffffffff,  //
       0xffffffffffffffff,  //

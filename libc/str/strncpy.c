@@ -16,6 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/macros.internal.h"
 #include "libc/str/str.h"
 
 /**
@@ -24,48 +25,21 @@
  * 1. If SRC is too long, it's truncated and *not* NUL-terminated.
  * 2. If SRC is too short, the remainder is zero-filled.
  *
- * Please note this function isn't designed to prevent untrustworthy
- * data from modifying memory without authorization; the memccpy()
- * function can be used for that purpose.
- *
- * Here's an example of the only use case we know of for strncpy:
- *
- *     static const struct People {
- *       char name[8];
- *       int age;
- *     } kPeople[] = {
- *         {"alice", 29},  //
- *         {"bob", 42},    //
- *     };
- *
- *     int GetAge(const char *name) {
- *       char k[8];
- *       int m, l, r;
- *       l = 0;
- *       r = ARRAYLEN(kPeople) - 1;
- *       strncpy(k, name, 8);
- *       while (l <= r) {
- *         m = (l + r) >> 1;
- *         if (READ64BE(kPeople[m].name) < READ64BE(k)) {
- *           l = m + 1;
- *         } else if (READ64BE(kPeople[m].name) > READ64BE(k)) {
- *           r = m - 1;
- *         } else {
- *           return kPeople[m].age;
- *         }
- *       }
- *       return -1;
- *     }
- *
- * @return dest
- * @see stpncpy(), memccpy()
+ * @param dst is output buffer
+ * @param src is a nul-terminated string
+ * @param dstlen is size of `dst` buffer
+ * @return dst
  * @asyncsignalsafe
+ * @see stpncpy()
+ * @see strlcpy()
+ * @see memccpy()
  */
-char *strncpy(char *dest, const char *src, size_t stride) {
-  size_t i;
-  for (i = 0; i < stride; ++i) {
-    if (!(dest[i] = src[i])) break;
-  }
-  bzero(dest + i, stride - i);
-  return dest;
+char *strncpy(char *dst, const char *src, size_t dstlen) {
+  size_t srclen, cpylen, zerlen;
+  srclen = strlen(src);
+  cpylen = MIN(srclen, dstlen);
+  if (cpylen) memcpy(dst, src, cpylen);
+  zerlen = dstlen - cpylen;
+  if (zerlen) bzero(dst + cpylen, zerlen);
+  return dst;
 }

@@ -17,10 +17,11 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
-#include "libc/bits/bits.h"
-#include "libc/bits/bswap.h"
+#include "libc/intrin/bits.h"
+#include "libc/intrin/bswap.h"
 #include "libc/macros.internal.h"
 #include "libc/str/str.h"
+#include "libc/str/tab.internal.h"
 #include "net/http/http.h"
 
 static const struct ContentTypeExtension {
@@ -41,6 +42,7 @@ static const struct ContentTypeExtension {
     {"css", "text/css"},                       //
     {"csv", "text/csv"},                       //
     {"diff", "text/plain"},                    //
+    {"diff", "text/plain"},                    //
     {"doc", "application/msword"},             //
     {"epub", "application/epub+zip"},          //
     {"gif", "image/gif"},                      //
@@ -60,6 +62,7 @@ static const struct ContentTypeExtension {
     {"md", "text/plain"},                      //
     {"mid", "audio/midi"},                     //
     {"midi", "audio/midi"},                    //
+    {"mjs", "text/javascript"},                //
     {"mp2", "audio/mpeg"},                     //
     {"mp3", "audio/mpeg"},                     //
     {"mp4", "video/mp4"},                      //
@@ -70,6 +73,7 @@ static const struct ContentTypeExtension {
     {"ogv", "video/ogg"},                      //
     {"ogx", "application/ogg"},                //
     {"otf", "font/otf"},                       //
+    {"patch", "text/plain"},                   //
     {"pdf", "application/pdf"},                //
     {"png", "image/png"},                      //
     {"rar", "application/vnd.rar"},            //
@@ -115,7 +119,7 @@ static const char *BisectContentType(uint64_t ext) {
   l = 0;
   r = ARRAYLEN(kContentTypeExtension) - 1;
   while (l <= r) {
-    m = (l + r) >> 1;
+    m = (l & r) + ((l ^ r) >> 1);  // floor((a+b)/2)
     c = CompareInts(READ64BE(kContentTypeExtension[m].ext), ext);
     if (c < 0) {
       l = m + 1;

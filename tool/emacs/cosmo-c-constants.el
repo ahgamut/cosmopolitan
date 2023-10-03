@@ -27,11 +27,11 @@
     "__STDC_NO_COMPLEX__"
     "__STDC_NO_THREADS__"
     "__STDC_NO_VLA__"
+    "__FLT_EVAL_METHOD__"
     "__STDC_WANT_LIB_EXT1__"))
 
 (defconst cosmo-c-constants-limits
-  '("IMAGE_BASE_VIRTUAL"
-    "IMAGE_BASE_REAL"
+  '("IMAGE_BASE_REAL"
     "IMAGE_BASE_PHYSICAL"
     "CHAR_MAX"
     "SCHAR_MAX"
@@ -42,6 +42,7 @@
     "LLONG_MAX"
     "LONG_LONG_MAX"
     "SIZE_MAX"
+    "SSIZE_MAX"
     "INT8_MAX"
     "INT16_MAX"
     "INT32_MAX"
@@ -101,14 +102,14 @@
     "DBL_MIN"
     "DBL_MAX"
     "FLT_MIN"
-    "FLT_MAX"))
+    "FLT_MAX"
+    "PIPE_BUF"))
 
 (defconst cosmo-c-constants-math
   '("NAN"
     "INFINITY"
     "M_E"
     "M_LOG2_10"
-    "M_LOG10_2"
     "M_LOG2E"
     "M_LOG10E"
     "M_LN2"
@@ -148,6 +149,7 @@
     "FLT_MIN_EXP"
     "HLF_MAX"
     "HLF_MIN"
+    "FLT_EVAL_METHOD"
     "LDBL_DECIMAL_DIG"
     "LDBL_DIG"
     "LDBL_EPSILON"

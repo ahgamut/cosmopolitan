@@ -1,6 +1,7 @@
 #ifndef COSMOPOLITAN_LIBC_CALLS_STRUCT_DIRENT_H_
 #define COSMOPOLITAN_LIBC_CALLS_STRUCT_DIRENT_H_
 #if !(__ASSEMBLER__ + __LINKER__ + 0)
+COSMOPOLITAN_C_START_
 
 struct dirent {      /* linux getdents64 abi */
   uint64_t d_ino;    /* inode number */
@@ -13,13 +14,20 @@ struct dirent {      /* linux getdents64 abi */
 struct dirstream;
 typedef struct dirstream DIR;
 
-DIR *fdopendir(int) dontdiscard;
-DIR *opendir(const char *) dontdiscard;
+DIR *fdopendir(int) __wur;
+DIR *opendir(const char *) __wur;
 int closedir(DIR *);
 int dirfd(DIR *);
 long telldir(DIR *);
 struct dirent *readdir(DIR *);
+int readdir_r(DIR *, struct dirent *, struct dirent **);
 void rewinddir(DIR *);
+void seekdir(DIR *, long);
+int alphasort(const struct dirent **, const struct dirent **);
+int versionsort(const struct dirent **, const struct dirent **);
+int scandir(const char *, struct dirent ***, int (*)(const struct dirent *),
+            int (*)(const struct dirent **, const struct dirent **));
 
+COSMOPOLITAN_C_END_
 #endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
 #endif /* COSMOPOLITAN_LIBC_CALLS_STRUCT_DIRENT_H_ */

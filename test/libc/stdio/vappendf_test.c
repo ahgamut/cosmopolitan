@@ -16,15 +16,12 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/bits.h"
-#include "libc/intrin/kprintf.h"
-#include "libc/stdio/append.internal.h"
+#include "libc/intrin/bits.h"
+#include "libc/mem/mem.h"
+#include "libc/stdio/append.h"
+#include "libc/str/str.h"
 #include "libc/testlib/ezbench.h"
 #include "libc/testlib/testlib.h"
-
-static void PrintMemory(void *p) {
-  kprintf("%#.*hhs%n", malloc_usable_size(p), p);
-}
 
 TEST(vappendf, test) {
   char *b = 0;
@@ -174,7 +171,6 @@ TEST(appendd, nontrivialAmountOfMemory) {
 }
 
 BENCH(vappendf, bench) {
-  const char t[] = {0};
   char *b = 0;
   EZBENCH2("appendf", donothing, appendf(&b, "hello"));
   EZBENCH2("kappendf", donothing, kappendf(&b, "hello"));

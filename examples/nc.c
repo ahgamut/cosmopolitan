@@ -14,6 +14,8 @@
 #include "libc/macros.internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/sock/sock.h"
+#include "libc/sock/struct/linger.h"
+#include "libc/sock/struct/pollfd.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/af.h"
@@ -23,7 +25,7 @@
 #include "libc/sysv/consts/so.h"
 #include "libc/sysv/consts/sock.h"
 #include "libc/sysv/consts/sol.h"
-#include "third_party/getopt/getopt.h"
+#include "third_party/getopt/getopt.internal.h"
 
 /**
  * @fileoverview netcat clone
@@ -34,7 +36,8 @@
  * Here's an example usage:
  *
  *     make -j8 o//examples/nc.com
- *     printf 'GET /\r\nHost: justine.lol\r\n\r\n' | o//examples/nc.com justine.lol 80
+ *     printf 'GET /\r\nHost: justine.lol\r\n\r\n' | o//examples/nc.com
+ * justine.lol 80
  *
  * Once upon time we called this command "telnet"
  */
@@ -42,10 +45,10 @@
 int main(int argc, char *argv[]) {
   ssize_t rc;
   size_t i, got;
+  int opt, sock;
   char buf[1500];
   bool halfclose = true;
   const char *host, *port;
-  int opt, err, toto, sock;
   struct addrinfo *ai = NULL;
   struct linger linger = {true, 1};
   struct pollfd fds[2] = {{-1, POLLIN}, {-1, POLLIN}};

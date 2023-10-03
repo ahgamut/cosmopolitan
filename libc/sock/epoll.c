@@ -32,13 +32,17 @@
 │  OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.        │
 │                                                                              │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/sock/epoll.h"
 #include "libc/assert.h"
+#include "libc/calls/cp.internal.h"
 #include "libc/calls/internal.h"
+#include "libc/calls/sig.internal.h"
 #include "libc/calls/state.internal.h"
+#include "libc/calls/struct/sigset.internal.h"
 #include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
-#include "libc/intrin/spinlock.h"
+#include "libc/intrin/strace.internal.h"
 #include "libc/limits.h"
 #include "libc/macros.internal.h"
 #include "libc/mem/mem.h"
@@ -66,10 +70,10 @@
 #include "libc/nt/synchronization.h"
 #include "libc/nt/winsock.h"
 #include "libc/runtime/runtime.h"
-#include "libc/sock/epoll.h"
 #include "libc/sock/internal.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/epoll.h"
+#include "libc/sysv/consts/sig.h"
 #include "libc/sysv/errfuns.h"
 
 /**
@@ -379,7 +383,7 @@ static textwindows int afd_poll(int64_t afd_device_handle,
                                 struct NtIoStatusBlock *io_status_block) {
   NtStatus status;
   /* Blocking operation is not supported.*/
-  assert(io_status_block);
+  npassert(io_status_block);
   io_status_block->Status = kNtStatusPending;
   status =
       NtDeviceIoControlFile(afd_device_handle, 0, NULL, io_status_block,
@@ -426,11 +430,11 @@ static textwindows void queue__detach_node(struct QueueNode *node) {
   node->next->prev = node->prev;
 }
 
-static textwindows bool queue_is_enqueued(const struct QueueNode *node) {
+forceinline bool queue_is_enqueued(const struct QueueNode *node) {
   return node->prev != node;
 }
 
-static textwindows bool queue_is_empty(const struct Queue *queue) {
+forceinline bool queue_is_empty(const struct Queue *queue) {
   return !queue_is_enqueued(&queue->head);
 }
 
@@ -559,7 +563,7 @@ static textwindows int ts_tree_add(struct TsTree *ts_tree,
 }
 
 static textwindows void port__free(struct PortState *port) {
-  assert(port != NULL);
+  npassert(port);
   free(port);
 }
 
@@ -587,7 +591,7 @@ err1:
 }
 
 static textwindows int sock__cancel_poll(struct SockState *sock_state) {
-  assert(sock_state->poll_status == kPollPending);
+  npassert(sock_state->poll_status == kPollPending);
   if (afd_cancel_poll(poll_group_get_afd_device_handle(sock_state->poll_group),
                       &sock_state->io_status_block) < 0) {
     return -1;
@@ -703,13 +707,13 @@ static textwindows void reflock__await_event(void *address) {
 static textwindows void reflock_ref(struct RefLock *reflock) {
   long state = InterlockedAdd(&reflock->state, REFLOCK__REF);
   /* Verify that the counter didn 't overflow and the lock isn' t destroyed.*/
-  assert((state & REFLOCK__DESTROY_MASK) == 0);
+  npassert((state & REFLOCK__DESTROY_MASK) == 0);
 }
 
 static textwindows void reflock_unref(struct RefLock *reflock) {
   long state = InterlockedAdd(&reflock->state, -REFLOCK__REF);
   /* Verify that the lock was referenced and not already destroyed.*/
-  assert((state & REFLOCK__DESTROY_MASK & ~REFLOCK__DESTROY) == 0);
+  npassert((state & REFLOCK__DESTROY_MASK & ~REFLOCK__DESTROY) == 0);
   if (state == REFLOCK__DESTROY) reflock__signal_event(reflock);
 }
 
@@ -745,10 +749,10 @@ static textwindows void reflock_unref_and_destroy(struct RefLock *reflock) {
   state = InterlockedAdd(&reflock->state, REFLOCK__DESTROY - REFLOCK__REF);
   ref_count = state & REFLOCK__REF_MASK;
   /* Verify that the lock was referenced and not already destroyed. */
-  assert((state & REFLOCK__DESTROY_MASK) == REFLOCK__DESTROY);
+  npassert((state & REFLOCK__DESTROY_MASK) == REFLOCK__DESTROY);
   if (ref_count != 0) reflock__await_event(reflock);
   state = InterlockedExchange(&reflock->state, REFLOCK__POISON);
-  assert(state == REFLOCK__DESTROY);
+  npassert(state == REFLOCK__DESTROY);
 }
 
 static textwindows void ts_tree_node_unref_and_destroy(
@@ -776,13 +780,13 @@ static textwindows void poll_group_release(struct PollGroup *poll_group) {
   struct PortState *port_state = poll_group->port_state;
   struct Queue *poll_group_queue = port_get_poll_group_queue(port_state);
   poll_group->group_size--;
-  assert(poll_group->group_size < MAX_GROUP_SIZE);
+  npassert(poll_group->group_size < MAX_GROUP_SIZE);
   queue_move_to_end(poll_group_queue, &poll_group->queue_node);
   /* Poll groups are currently only freed when the epoll port is closed. */
 }
 
 static textwindows void sock__free(struct SockState *sock_state) {
-  assert(sock_state != NULL);
+  npassert(sock_state != NULL);
   free(sock_state);
 }
 
@@ -828,7 +832,7 @@ static textwindows void sock_force_delete(struct PortState *port_state,
 }
 
 static textwindows void poll_group_delete(struct PollGroup *poll_group) {
-  assert(poll_group->group_size == 0);
+  npassert(poll_group->group_size == 0);
   CloseHandle(poll_group->afd_device_handle);
   queue_remove(&poll_group->queue_node);
   free(poll_group);
@@ -840,7 +844,7 @@ static textwindows int port_delete(struct PortState *port_state) {
   struct SockState *sock_state;
   struct PollGroup *poll_group;
   /* At this point the IOCP port should have been closed.*/
-  assert(!port_state->iocp_handle);
+  npassert(!port_state->iocp_handle);
   while ((tree_node = tree_root(&port_state->sock_tree)) != NULL) {
     sock_state = sock_state_from_tree_node(tree_node);
     sock_force_delete(port_state, sock_state);
@@ -853,14 +857,14 @@ static textwindows int port_delete(struct PortState *port_state) {
     poll_group = poll_group_from_queue_node(queue_node);
     poll_group_delete(poll_group);
   }
-  assert(queue_is_empty(&port_state->sock_update_queue));
+  npassert(queue_is_empty(&port_state->sock_update_queue));
   DeleteCriticalSection(&port_state->lock);
   port__free(port_state);
   return 0;
 }
 
 static textwindows int64_t port_get_iocp_handle(struct PortState *port_state) {
-  assert(port_state->iocp_handle);
+  npassert(port_state->iocp_handle);
   return port_state->iocp_handle;
 }
 
@@ -934,7 +938,7 @@ static textwindows uint32_t sock__afd_events_to_epoll_events(uint32_t a) {
 
 static textwindows int sock_update(struct PortState *port_state,
                                    struct SockState *sock_state) {
-  assert(!sock_state->delete_pending);
+  npassert(!sock_state->delete_pending);
   if ((sock_state->poll_status == kPollPending) &&
       !(sock_state->user_events & KNOWN_EVENTS & ~sock_state->pending_events)) {
     /* All the events the user is interested in are already being
@@ -944,7 +948,7 @@ static textwindows int sock_update(struct PortState *port_state,
        updated event mask. */
   } else if (sock_state->poll_status == kPollPending) {
     /* A poll operation is already pending, but it's not monitoring for
-       all the *events that the user is interested in .Therefore, cancel
+       all the *events that the user is interested in. Therefore, cancel
        the pending *poll operation; when we receive it's completion
        package, a new poll *operation will be submitted with the correct
        event mask. */
@@ -979,7 +983,7 @@ static textwindows int sock_update(struct PortState *port_state,
     sock_state->poll_status = kPollPending;
     sock_state->pending_events = sock_state->user_events;
   } else {
-    unreachable;
+    __builtin_unreachable();
   }
   port_cancel_socket_update(port_state, sock_state);
   return 0;
@@ -1406,6 +1410,7 @@ err:
   return -1;
 }
 
+#if SupportsWindows()
 textwindows int sys_close_epoll_nt(int fd) {
   struct PortState *port_state;
   struct TsTreeNode *tree_node;
@@ -1423,6 +1428,7 @@ err:
   err_check_handle(g_fds.p[fd].handle);
   return -1;
 }
+#endif
 
 /**
  * Creates new epoll instance.
@@ -1432,8 +1438,14 @@ err:
  * @return epoll file descriptor, or -1 on failure
  */
 int epoll_create(int size) {
-  if (size <= 0) return einval();
-  return epoll_create1(0);
+  int rc;
+  if (size <= 0) {
+    rc = einval();
+  } else {
+    rc = epoll_create1(0);
+  }
+  STRACE("epoll_create(%d) → %d% m", size, rc);
+  return rc;
 }
 
 /**
@@ -1444,13 +1456,16 @@ int epoll_create(int size) {
  * @return epoll file descriptor, or -1 on failure
  */
 int epoll_create1(int flags) {
-  int fd;
-  if (flags & ~O_CLOEXEC) return einval();
-  if (!IsWindows()) {
-    return __fixupnewfd(sys_epoll_create(1337), flags);
+  int rc;
+  if (flags & ~O_CLOEXEC) {
+    rc = einval();
+  } else if (!IsWindows()) {
+    rc = __fixupnewfd(sys_epoll_create(1337), flags);
   } else {
-    return sys_epoll_create1_nt(flags);
+    rc = sys_epoll_create1_nt(flags);
   }
+  STRACE("epoll_create1(%#x) → %d% m", flags, rc);
+  return rc;
 }
 
 /**
@@ -1467,30 +1482,33 @@ int epoll_create1(int flags) {
  * @param fd is file descriptor to monitor
  * @param ev is ignored if op is EPOLL_CTL_DEL
  * @param ev->events can have these flags:
- *     - EPOLLIN: trigger on fd readable
- *     - EPOLLOUT: trigger on fd writeable
- *     - EPOLLERR: trigger on fd error (superfluous: always reported)
- *     - EPOLLHUP: trigger on fd remote hangup (superfluous: always reported)
- *     - EPOLLPRI: trigger on fd exceptional conditions, e.g. oob
- *     - EPOLLONESHOT: report event(s) only once
- *     - EPOLLEXCLUSIVE: not supported on windows
- *     - EPOLLWAKEUP: not supported on windows
- *     - EPOLLET: edge triggered mode (not supported on windows)
- *     - EPOLLRDNORM
- *     - EPOLLRDBAND
- *     - EPOLLWRNORM
- *     - EPOLLWRBAND
- *     - EPOLLRDHUP
- *     - EPOLLMSG
+ *     - `EPOLLIN`: trigger on fd readable
+ *     - `EPOLLOUT`: trigger on fd writeable
+ *     - `EPOLLERR`: trigger on fd error (superfluous: always reported)
+ *     - `EPOLLHUP`: trigger on fd remote hangup (superfluous: always reported)
+ *     - `EPOLLPRI`: trigger on fd exceptional conditions, e.g. oob
+ *     - `EPOLLONESHOT`: report event(s) only once
+ *     - `EPOLLEXCLUSIVE`: not supported on windows
+ *     - `EPOLLWAKEUP`: not supported on windows
+ *     - `EPOLLET`: edge triggered mode (not supported on windows)
+ *     - `EPOLLRDNORM`
+ *     - `EPOLLRDBAND`
+ *     - `EPOLLWRNORM`
+ *     - `EPOLLWRBAND`
+ *     - `EPOLLRDHUP`
+ *     - `EPOLLMSG`
  * @error ENOTSOCK on Windows if fd isn't a socket :(
  * @return 0 on success, or -1 w/ errno
  */
 int epoll_ctl(int epfd, int op, int fd, struct epoll_event *ev) {
+  int rc;
   if (!IsWindows()) {
-    return sys_epoll_ctl(epfd, op, fd, ev);
+    rc = sys_epoll_ctl(epfd, op, fd, ev);
   } else {
-    return sys_epoll_ctl_nt(epfd, op, fd, ev);
+    rc = sys_epoll_ctl_nt(epfd, op, fd, ev);
   }
+  STRACE("epoll_ctl(%d, %d, %d, %p) → %d% m", epfd, op, fd, ev, rc);
+  return rc;
 }
 
 /**
@@ -1500,13 +1518,62 @@ int epoll_ctl(int epfd, int op, int fd, struct epoll_event *ev) {
  * @param maxevents is array length of events
  * @param timeoutms is milliseconds, 0 to not block, or -1 for forever
  * @return number of events stored, 0 on timeout, or -1 w/ errno
+ * @cancellationpoint
  * @norestart
  */
 int epoll_wait(int epfd, struct epoll_event *events, int maxevents,
                int timeoutms) {
+  int e, rc;
+  BEGIN_CANCELLATION_POINT;
   if (!IsWindows()) {
-    return sys_epoll_wait(epfd, events, maxevents, timeoutms);
+    e = errno;
+    rc = sys_epoll_wait(epfd, events, maxevents, timeoutms);
+    if (rc == -1 && errno == ENOSYS) {
+      errno = e;
+      rc = sys_epoll_pwait(epfd, events, maxevents, timeoutms, 0, 0);
+    }
   } else {
-    return sys_epoll_wait_nt(epfd, events, maxevents, timeoutms);
+    rc = sys_epoll_wait_nt(epfd, events, maxevents, timeoutms);
   }
+  END_CANCELLATION_POINT;
+  STRACE("epoll_wait(%d, %p, %d, %d) → %d% m", epfd, events, maxevents,
+         timeoutms, rc);
+  return rc;
+}
+
+/**
+ * Receives socket events.
+ *
+ * @param events will receive information about what happened
+ * @param maxevents is array length of events
+ * @param timeoutms is milliseconds, 0 to not block, or -1 for forever
+ * @param sigmask is an optional sigprocmask() to use during call
+ * @return number of events stored, 0 on timeout, or -1 w/ errno
+ * @cancellationpoint
+ * @norestart
+ */
+int epoll_pwait(int epfd, struct epoll_event *events, int maxevents,
+                int timeoutms, const sigset_t *sigmask) {
+  int e, rc;
+  sigset_t oldmask;
+  BEGIN_CANCELLATION_POINT;
+  if (!IsWindows()) {
+    e = errno;
+    rc = sys_epoll_pwait(epfd, events, maxevents, timeoutms, sigmask,
+                         sizeof(*sigmask));
+    if (rc == -1 && errno == ENOSYS) {
+      errno = e;
+      if (sigmask) sys_sigprocmask(SIG_SETMASK, sigmask, &oldmask);
+      rc = sys_epoll_wait(epfd, events, maxevents, timeoutms);
+      if (sigmask) sys_sigprocmask(SIG_SETMASK, &oldmask, 0);
+    }
+  } else {
+    if (sigmask) __sig_mask(SIG_SETMASK, sigmask, &oldmask);
+    rc = sys_epoll_wait_nt(epfd, events, maxevents, timeoutms);
+    if (sigmask) __sig_mask(SIG_SETMASK, &oldmask, 0);
+  }
+  END_CANCELLATION_POINT;
+  STRACE("epoll_pwait(%d, %p, %d, %d) → %d% m", epfd, events, maxevents,
+         timeoutms, DescribeSigset(0, sigmask), rc);
+  return rc;
 }

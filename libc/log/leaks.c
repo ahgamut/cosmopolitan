@@ -16,28 +16,32 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/bits.h"
-#include "libc/calls/strace.internal.h"
+#include "libc/dce.h"
 #include "libc/intrin/asan.internal.h"
+#include "libc/intrin/bits.h"
+#include "libc/intrin/cmpxchg.h"
 #include "libc/intrin/kprintf.h"
-#include "libc/intrin/lockcmpxchg.h"
+#include "libc/intrin/strace.internal.h"
 #include "libc/mem/mem.h"
 #include "libc/runtime/internal.h"
 #include "libc/runtime/memtrack.internal.h"
 #include "libc/runtime/runtime.h"
+#include "libc/runtime/symbols.internal.h"
 #include "libc/testlib/testlib.h"
+#include "libc/thread/posixthread.internal.h"
+#include "libc/thread/tls.h"
 
-STATIC_YOINK("__get_symbol_by_addr");
+__static_yoink("GetSymbolByAddr");
 
 #define MAXLEAKS 1000
 
 static bool once;
 static bool hasleaks;
 
-static noasan void CheckLeak(void *x, void *y, size_t n, void *a) {
+static dontasan void CheckLeak(void *x, void *y, size_t n, void *a) {
   if (n) {
     if (IsAsan()) {
-      if (__asan_get_heap_size(x)) {
+      if (__asan_get_heap_size(x) && !__asan_is_leaky(x)) {
         hasleaks = true;
       }
     } else {
@@ -46,16 +50,17 @@ static noasan void CheckLeak(void *x, void *y, size_t n, void *a) {
   }
 }
 
-static noasan void OnMemory(void *x, void *y, size_t n, void *a) {
+static dontasan void OnMemory(void *x, void *y, size_t n, void *a) {
   static int i;
   if (n) {
     if (MAXLEAKS) {
       if (i < MAXLEAKS) {
         ++i;
         kprintf("%p %,lu bytes [dlmalloc]", x, n);
-        if (IsAsan()) {
-          __asan_print_trace(x);
+        if (__asan_is_leaky(x)) {
+          kprintf(" [leaky]");
         }
+        __asan_print_trace(x);
         kprintf("\n");
       } else if (i == MAXLEAKS) {
         ++i;
@@ -65,7 +70,7 @@ static noasan void OnMemory(void *x, void *y, size_t n, void *a) {
   }
 }
 
-static noasan bool HasLeaks(void) {
+static dontasan bool HasLeaks(void) {
   malloc_inspect_all(CheckLeak, 0);
   return hasleaks;
 }
@@ -77,12 +82,20 @@ static noasan bool HasLeaks(void) {
  * services that depend on malloc() cannot be used, after calling this
  * function.
  */
-noasan void CheckForMemoryLeaks(void) {
+dontasan void CheckForMemoryLeaks(void) {
   struct mallinfo mi;
-  if (!_lockcmpxchg(&once, false, true)) {
-    kprintf("CheckForMemoryLeaks() may only be called once\n");
-    exit(1);
+  if (!IsAsan()) return;  // we need traces to exclude leaky
+  if (!GetSymbolTable()) {
+    kprintf("CheckForMemoryLeaks() needs the symbol table\n");
+    return;
   }
+  if (!_cmpxchg(&once, false, true)) {
+    kprintf("CheckForMemoryLeaks() may only be called once\n");
+    exit(0);
+  }
+  _pthread_unwind(_pthread_self());
+  _pthread_unkey(__get_tls());
+  _pthread_ungarbage();
   __cxa_finalize(0);
   STRACE("checking for memory leaks% m");
   if (!IsAsan()) {
@@ -109,10 +122,9 @@ noasan void CheckForMemoryLeaks(void) {
     }
     malloc_inspect_all(OnMemory, 0);
     kprintf("\n");
-    __print_maps();
+    /* __print_maps(); */
     /* PrintSystemMappings(2); */
     /* PrintGarbage(); */
-    __restorewintty();
     _Exit(78);
   }
 }

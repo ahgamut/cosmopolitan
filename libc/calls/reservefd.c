@@ -16,26 +16,18 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/assert.h"
-#include "libc/bits/weaken.h"
-#include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
 #include "libc/calls/state.internal.h"
-#include "libc/calls/strace.internal.h"
-#include "libc/calls/struct/sigset.h"
-#include "libc/dce.h"
+#include "libc/calls/struct/fd.internal.h"
+#include "libc/intrin/atomic.h"
 #include "libc/intrin/cmpxchg.h"
-#include "libc/intrin/spinlock.h"
+#include "libc/intrin/extend.internal.h"
 #include "libc/macros.internal.h"
-#include "libc/mem/mem.h"
-#include "libc/runtime/directmap.internal.h"
 #include "libc/runtime/memtrack.internal.h"
-#include "libc/runtime/runtime.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/map.h"
-#include "libc/sysv/consts/prot.h"
-#include "libc/sysv/consts/sig.h"
-#include "libc/sysv/errfuns.h"
+
+// TODO(jart): make more of this code lockless
 
 static volatile size_t mapsize;
 
@@ -47,40 +39,18 @@ static volatile size_t mapsize;
  * @asyncsignalsafe
  */
 int __ensurefds_unlocked(int fd) {
-  uint64_t addr;
-  int prot, flags;
-  size_t size, chunk;
-  struct DirectMap dm;
+  size_t n;
   if (fd < g_fds.n) return fd;
-  STRACE("__ensurefds(%d) extending", fd);
-  size = mapsize;
-  chunk = FRAMESIZE;
-  if (IsAsan()) chunk *= 8;
-  addr = kMemtrackFdsStart + size;
-  prot = PROT_READ | PROT_WRITE;
-  flags = MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED;
-  dm = sys_mmap((char *)addr, chunk, prot, flags, -1, 0);
-  TrackMemoryInterval(&_mmi, addr >> 16, (addr + chunk - 1) >> 16, dm.maphandle,
-                      prot, flags, false, false, 0, chunk);
-  if (IsAsan()) {
-    addr = (addr >> 3) + 0x7fff8000;
-    dm = sys_mmap((char *)addr, FRAMESIZE, prot, flags, -1, 0);
-    TrackMemoryInterval(&_mmi, addr >> 16, addr >> 16, dm.maphandle, prot,
-                        flags, false, false, 0, FRAMESIZE);
-  }
-  if (!size) {
-    g_fds.p = memcpy((char *)kMemtrackFdsStart, g_fds.__init_p,
-                     sizeof(g_fds.__init_p));
-  }
-  g_fds.n = (size + chunk) / sizeof(*g_fds.p);
-  mapsize = size + chunk;
+  n = fd + 1;
+  g_fds.e = _extend(g_fds.p, n * sizeof(*g_fds.p), g_fds.e, MAP_PRIVATE,
+                    kMemtrackFdsStart + kMemtrackFdsSize);
+  g_fds.n = n;
   return fd;
 }
 
 /**
  * Grows file descriptor array memory if needed.
  * @asyncsignalsafe
- * @threadsafe
  */
 int __ensurefds(int fd) {
   __fds_lock();
@@ -94,9 +64,10 @@ int __ensurefds(int fd) {
  * @asyncsignalsafe
  */
 int __reservefd_unlocked(int start) {
-  int fd;
+  int fd, f1, f2;
   for (;;) {
-    for (fd = MAX(start, g_fds.f); fd < g_fds.n; ++fd) {
+    f1 = atomic_load_explicit(&g_fds.f, memory_order_acquire);
+    for (fd = MAX(start, f1); fd < g_fds.n; ++fd) {
       if (!g_fds.p[fd].kind) {
         break;
       }
@@ -104,7 +75,11 @@ int __reservefd_unlocked(int start) {
     fd = __ensurefds_unlocked(fd);
     bzero(g_fds.p + fd, sizeof(*g_fds.p));
     if (_cmpxchg(&g_fds.p[fd].kind, kFdEmpty, kFdReserved)) {
-      _cmpxchg(&g_fds.f, fd, fd + 1);
+      // g_fds.f isn't guarded by our mutex
+      do {
+        f2 = MAX(fd + 1, f1);
+      } while (!atomic_compare_exchange_weak_explicit(
+          &g_fds.f, &f1, f2, memory_order_release, memory_order_relaxed));
       return fd;
     }
   }
@@ -113,7 +88,6 @@ int __reservefd_unlocked(int start) {
 /**
  * Finds open file descriptor slot.
  * @asyncsignalsafe
- * @threadsafe
  */
 int __reservefd(int start) {
   int fd;

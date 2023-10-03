@@ -20,6 +20,7 @@
 #include "libc/limits.h"
 #include "libc/runtime/runtime.h"
 #include "libc/testlib/testlib.h"
+#include "libc/time/struct/tm.h"
 #include "libc/time/time.h"
 
 textstartup static void strftime_test_init(void) {
@@ -27,7 +28,7 @@ textstartup static void strftime_test_init(void) {
 }
 const void *const strftime_test_ctor[] initarray = {strftime_test_init};
 
-testonly char *FormatTime(const char *fmt, struct tm *tm) {
+char *FormatTime(const char *fmt, struct tm *tm) {
   static char buf[64];
   strftime(buf, sizeof(buf), fmt, tm);
   return &buf[0];

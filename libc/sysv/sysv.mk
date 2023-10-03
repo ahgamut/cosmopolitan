@@ -33,18 +33,24 @@ LIBC_SYSV_A_DIRECTDEPS =				\
 LIBC_SYSV_A_FILES :=					\
 	libc/sysv/macros.internal.h			\
 	libc/sysv/errfuns.h				\
+	libc/sysv/hostos.S				\
+	libc/sysv/syscon.S				\
+	libc/sysv/syslib.S				\
 	libc/sysv/syscount.S				\
 	libc/sysv/restorert.S				\
-	libc/sysv/syscall.S				\
+	libc/sysv/syscall2.S				\
+	libc/sysv/syscall3.S				\
 	libc/sysv/systemfive.S				\
-	libc/sysv/errno_location.greg.c			\
+	libc/sysv/sysret.c				\
+	libc/sysv/sysv.c				\
 	libc/sysv/errno.c				\
-	libc/sysv/gettls.greg.c				\
 	libc/sysv/errfun.S				\
+	libc/sysv/errfun2.c				\
 	libc/sysv/strace.greg.c				\
 	libc/sysv/describeos.greg.c			\
 	$(wildcard libc/sysv/consts/*)			\
-	$(wildcard libc/sysv/errfuns/*)
+	$(wildcard libc/sysv/errfuns/*)			\
+	$(wildcard libc/sysv/dos2errno/*)
 
 LIBC_SYSV_A_SRCS =					\
 	$(LIBC_SYSV_A_SRCS_A)				\
@@ -69,14 +75,31 @@ $(LIBC_SYSV_A).pkg:					\
 		$(LIBC_SYSV_A_OBJS)			\
 		$(foreach x,$(LIBC_SYSV_A_DIRECTDEPS),$($(x)_A).pkg)
 
-$(LIBC_SYSV_A_OBJS):					\
-		o/libc/sysv/consts/syscon.internal.inc
+o/$(MODE)/libc/sysv/sysv.o				\
+o/$(MODE)/libc/sysv/errno.o				\
+o/$(MODE)/libc/sysv/sysret.o				\
+o/$(MODE)/libc/sysv/errfun2.o				\
+o/$(MODE)/libc/sysv/sysret.o: private			\
+		CFLAGS +=				\
+			-ffreestanding			\
+			-fno-stack-protector		\
+			-fno-sanitize=all
 
-o/libc/sysv/consts/syscon.internal.inc:			\
-		libc/sysv/consts/syscon.internal.h	\
-		libc/macros.internal.h			\
-		libc/macros-cpp.internal.inc		\
-		libc/macros.internal.inc
+ifeq ($(ARCH),aarch64)
+o/$(MODE)/libc/sysv/sysv.o: private			\
+		CFLAGS +=				\
+			-ffixed-x0			\
+			-ffixed-x1			\
+			-ffixed-x2			\
+			-ffixed-x3			\
+			-ffixed-x4			\
+			-ffixed-x5			\
+			-ffixed-x8			\
+			-ffixed-x16			\
+			-fomit-frame-pointer		\
+			-foptimize-sibling-calls	\
+			-Os
+endif
 
 #───────────────────────────────────────────────────────────────────────────────
 
@@ -86,8 +109,8 @@ LIBC_SYSV_CALLS =					\
 
 LIBC_SYSV_ARTIFACTS += LIBC_SYSV_CALLS_A
 LIBC_SYSV_CALLS_A = o/$(MODE)/libc/sysv/calls.a
-LIBC_SYSV_CALLS_A_SRCS := $(wildcard libc/sysv/calls/*.s)
-LIBC_SYSV_CALLS_A_OBJS = $(LIBC_SYSV_CALLS_A_SRCS:%.s=o/$(MODE)/%.o)
+LIBC_SYSV_CALLS_A_SRCS := $(wildcard libc/sysv/calls/*.S)
+LIBC_SYSV_CALLS_A_OBJS = $(LIBC_SYSV_CALLS_A_SRCS:%.S=o/$(MODE)/%.o)
 LIBC_SYSV_CALLS_A_CHECKS = $(LIBC_SYSV_CALLS_A).pkg
 
 LIBC_SYSV_CALLS_A_DIRECTDEPS =				\
@@ -104,9 +127,6 @@ $(LIBC_SYSV_CALLS_A):					\
 $(LIBC_SYSV_CALLS_A).pkg:				\
 		$(LIBC_SYSV_CALLS_A_OBJS)		\
 		$(foreach x,$(LIBC_SYSV_CALLS_A_DIRECTDEPS),$($(x)_A).pkg)
-
-$(LIBC_SYSV_CALLS_A_OBJS):				\
-		o/libc/sysv/macros.internal.inc
 
 #───────────────────────────────────────────────────────────────────────────────
 
@@ -135,8 +155,31 @@ $(LIBC_SYSV_MACHCALLS_A).pkg:				\
 		$(LIBC_SYSV_MACHCALLS_A_OBJS)		\
 		$(foreach x,$(LIBC_SYSV_MACHCALLS_A_DIRECTDEPS),$($(x)_A).pkg)
 
-$(LIBC_SYSV_MACHCALLS_A_OBJS):				\
-		o/libc/sysv/macros.internal.inc
+#───────────────────────────────────────────────────────────────────────────────
+
+# let aarch64 compile these
+o/$(MODE)/libc/sysv/syscon.o: libc/sysv/syscon.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) $<
+o/$(MODE)/libc/sysv/hostos.o: libc/sysv/hostos.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) $<
+o/$(MODE)/libc/sysv/syslib.o: libc/sysv/syslib.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) $<
+o/$(MODE)/libc/sysv/syscount.o: libc/sysv/syscount.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) $<
+o/$(MODE)/libc/sysv/syscall2.o: libc/sysv/syscall2.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) $<
+o/$(MODE)/libc/sysv/syscall3.o: libc/sysv/syscall3.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) $<
+o/$(MODE)/libc/sysv/restorert.o: libc/sysv/restorert.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) $<
+o/$(MODE)/libc/sysv/calls/%.o: libc/sysv/calls/%.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) $<
+o/$(MODE)/libc/sysv/consts/%.o: libc/sysv/consts/%.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) $<
+o/$(MODE)/libc/sysv/errfuns/%.o: libc/sysv/errfuns/%.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) $<
+o/$(MODE)/libc/sysv/dos2errno/%.o: libc/sysv/dos2errno/%.S
+	@$(COMPILE) -AOBJECTIFY.S $(OBJECTIFY.S) $(OUTPUT_OPTION) $<
 
 #───────────────────────────────────────────────────────────────────────────────
 

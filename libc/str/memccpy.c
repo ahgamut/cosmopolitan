@@ -16,7 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/bits/bits.h"
+#include "libc/intrin/bits.h"
 #include "libc/str/str.h"
 
 /**
@@ -46,11 +46,11 @@
  * @asyncsignalsafe
  */
 void *memccpy(void *dst, const void *src, int c, size_t n) {
+  char *d;
   size_t i;
-  unsigned char *d;
-  const unsigned char *s;
+  const char *s;
   for (d = dst, s = src, i = 0; i < n; ++i) {
-    if ((d[i] = s[i]) == (c & 255)) {
+    if (((d[i] = s[i]) & 255) == (c & 255)) {
       return d + i + 1;
     }
   }
