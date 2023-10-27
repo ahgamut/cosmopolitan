@@ -144,6 +144,7 @@ else
   BRAND=cosmo
 fi
 
+BRAND=cosmo
 CC="$COSMO/o/third_party/gcc/bin/$ARCH-linux-$BRAND-gcc"
 CRT="$COSMO/o/$MODE/libc/crt/crt.o"
 LDLIBS="$COSMO/o/$MODE/cosmopolitan.a"
