@@ -138,13 +138,12 @@ else
   COSMOS=${COSMOS:-/opt/cosmos/$ARCH}
 fi
 
-if [ -x "$COSMO/o/third_party/gcc/bin/x86_64-linux-musl-gcc" ]; then
-  BRAND=musl
-else
+if [ -x "$COSMO/o/third_party/gcc/bin/x86_64-linux-cosmo-gcc" ]; then
   BRAND=cosmo
+else
+  BRAND=musl
 fi
 
-BRAND=cosmo
 CC="$COSMO/o/third_party/gcc/bin/$ARCH-linux-$BRAND-gcc"
 CRT="$COSMO/o/$MODE/libc/crt/crt.o"
 LDLIBS="$COSMO/o/$MODE/cosmopolitan.a"
