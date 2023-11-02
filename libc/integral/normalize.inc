@@ -94,6 +94,14 @@
 #include "libc/integral/llp64.inc"
 #endif
 
+#ifndef EXIT_SUCCESS
+#define EXIT_SUCCESS 0
+#endif
+
+#ifndef EXIT_FAILURE
+#define EXIT_FAILURE 1
+#endif
+
 #if !(__ASSEMBLER__ + __LINKER__ + 0)
 #ifdef __STDC__
 #include "libc/integral/c.inc"
