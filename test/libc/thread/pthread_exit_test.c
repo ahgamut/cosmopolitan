@@ -16,6 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/intrin/cxaatexit.internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/testlib/subprocess.h"
 #include "libc/testlib/testlib.h"
@@ -65,4 +66,22 @@ TEST(pthread_exit, detachedOrphanedChild_runsAtexitHandlers) {
   ASSERT_EQ(0, pthread_attr_destroy(&attr));
   pthread_exit(0);
   EXITS(CHILD);
+}
+
+void OnMainThreadExit(void *arg) {
+  _Exit((long)arg);
+}
+
+TEST(__cxa_thread_atexit, exit_wontInvokeThreadDestructors) {
+  SPAWN(fork);
+  __cxa_thread_atexit(OnMainThreadExit, (void *)123L, 0);
+  exit(0);
+  EXITS(0);
+}
+
+TEST(__cxa_thread_atexit, pthread_exit_willInvokeThreadDestructors) {
+  SPAWN(fork);
+  __cxa_thread_atexit(OnMainThreadExit, (void *)123L, 0);
+  pthread_exit(0);
+  EXITS(123);
 }

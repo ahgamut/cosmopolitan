@@ -16,15 +16,8 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/calls.h"
-#include "libc/intrin/bits.h"
+#include "libc/intrin/cxaatexit.internal.h"
 
-/**
- * Returns true if executable image is supported by APE Loader.
- */
-bool IsApeLoadable(char buf[8]) {
-  return READ32LE(buf) == READ32LE("\177ELF") ||
-         READ64LE(buf) == READ64LE("MZqFpD='") ||
-         READ64LE(buf) == READ64LE("jartsr='") ||
-         READ64LE(buf) == READ64LE("APEDBG='");
+int __cxa_thread_atexit(void *fun, void *arg, void *dso_symbol) {
+  return __cxa_thread_atexit_impl(fun, arg, dso_symbol);
 }

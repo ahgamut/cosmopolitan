@@ -17,68 +17,45 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
-#include "libc/dce.h"
-#include "libc/errno.h"
-#include "libc/nt/files.h"
-#include "libc/sysv/consts/f.h"
-#include "libc/sysv/consts/o.h"
-#include "libc/testlib/testlib.h"
+#include "libc/runtime/runtime.h"
+#include "libc/stdio/stdio.h"
+#include "third_party/getopt/getopt.internal.h"
 
-int pipefd[2];
-int stdoutBack;
+/**
+ * @fileoverview `verynice foo` launches `foo` as low priority as possible
+ *
+ * This is particularly useful on Linux systems with a spinning disk
+ * where the classic `nice` command doesn't do much.
+ */
 
-void SetUpOnce(void) {
-  testlib_enable_tmp_setup_teardown();
+const char *prog;
+
+static wontreturn void PrintUsage(int rc, int fd) {
+  tinyprint(fd, "Usage: ", prog, " COMMAND...\n", NULL);
+  exit(rc);
 }
 
-void CaptureStdout(void) {
-  ASSERT_NE(-1, (stdoutBack = dup(1)));
-  ASSERT_SYS(0, 0, pipe(pipefd));
-  ASSERT_NE(-1, dup2(pipefd[1], 1));
-}
+int main(int argc, char *argv[]) {
 
-void RestoreStdout(void) {
-  ASSERT_SYS(0, 1, dup2(stdoutBack, 1));
-  ASSERT_SYS(0, 0, close(stdoutBack));
-  ASSERT_SYS(0, 0, close(pipefd[1]));
-  ASSERT_SYS(0, 0, close(pipefd[0]));
-}
+  prog = argv[0];
+  if (!prog) prog = "verynice";
 
-TEST(specialfile, devNull) {
-  ASSERT_SYS(0, 3, creat("/dev/null", 0644));
-  // qemu-aarch64 defines o_largefile wrong
-  ASSERT_EQ(O_WRONLY, fcntl(3, F_GETFL) & ~(O_LARGEFILE | 0x00008000));
-  ASSERT_SYS(0, 2, write(3, "hi", 2));
-  ASSERT_SYS(0, 2, pwrite(3, "hi", 2, 0));
-  ASSERT_SYS(0, 2, pwrite(3, "hi", 2, 2));
-  ASSERT_SYS(0, 0, lseek(3, 0, SEEK_END));
-  ASSERT_SYS(0, 0, lseek(3, 0, SEEK_CUR));
-  if (!IsLinux()) {
-    // rhel7 doesn't have this behavior
-    ASSERT_SYS(0, 2, lseek(3, 2, SEEK_CUR));
-    ASSERT_SYS(0, 2, lseek(3, 2, SEEK_END));
+  int opt;
+  while ((opt = getopt(argc, argv, "h")) != -1) {
+    switch (opt) {
+      case 'h':
+        PrintUsage(0, 1);
+      default:
+        PrintUsage(1, 2);
+    }
   }
-  ASSERT_SYS(0, 0, close(3));
-}
+  if (optind == argc) {
+    tinyprint(2, prog, ": missing command\n", NULL);
+    exit(1);
+  }
 
-TEST(specialfile, devNullRead) {
-  char buf[8] = {0};
-  ASSERT_SYS(0, 3, open("/dev/null", O_RDONLY));
-  // qemu-aarch64 defines o_largefile wrong
-  ASSERT_EQ(O_RDONLY, fcntl(3, F_GETFL) & ~(O_LARGEFILE | 0x00008000));
-  ASSERT_SYS(0, 0, read(3, buf, 8));
-  ASSERT_SYS(0, 0, close(3));
-}
-
-TEST(specialfile, devStdout) {
-  char buf[8] = {8};
-  CaptureStdout();
-  ASSERT_SYS(0, 6, creat("/dev/stdout", 0644));
-  ASSERT_SYS(0, 2, write(6, "hi", 2));
-  ASSERT_EQ(2, read(pipefd[0], buf, 8));
-  ASSERT_STREQ("hi", buf);
-  ASSERT_SYS(ESPIPE, -1, pwrite(6, "hi", 2, 0));
-  ASSERT_SYS(ESPIPE, -1, lseek(6, 0, SEEK_END));
-  ASSERT_SYS(0, 0, close(6));
-  RestoreStdout();
+  verynice();
+  execvp(argv[optind], argv + optind);
+  perror(argv[optind]);
+  exit(127);
 }

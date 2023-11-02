@@ -1,11 +1,14 @@
-#ifndef __COSMOPOLITAN__
+#ifdef __COSMOPOLITAN__
+#undef __COSMOPOLITAN__
+#endif
+
 #define __COSMOPOLITAN_MAJOR__ 3
 #define __COSMOPOLITAN_MINOR__ 0
-#define __COSMOPOLITAN_PATCH__ 0
+#define __COSMOPOLITAN_PATCH__ 1
 #define __COSMOPOLITAN__                                                   \
   (100000000 * __COSMOPOLITAN_MAJOR__ + 1000000 * __COSMOPOLITAN_MINOR__ + \
    __COSMOPOLITAN_PATCH__)
-#endif
+
 #ifndef __COUNTER__
 #define __COUNTER__ __LINE__
 #endif
@@ -100,13 +103,5 @@
 #endif
 #ifdef __cplusplus
 #include "libc/integral/cxx.inc"
-#endif
-
-#ifndef EXIT_SUCCESS
-#define EXIT_SUCCESS 0
-#endif
-
-#ifndef EXIT_FAILURE
-#define EXIT_FAILURE 1
 #endif
 #endif

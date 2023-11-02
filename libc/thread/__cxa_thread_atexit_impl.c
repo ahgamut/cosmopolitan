@@ -16,15 +16,32 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/calls.h"
-#include "libc/intrin/bits.h"
+#include "libc/intrin/cxaatexit.internal.h"
+#include "libc/mem/mem.h"
 
-/**
- * Returns true if executable image is supported by APE Loader.
- */
-bool IsApeLoadable(char buf[8]) {
-  return READ32LE(buf) == READ32LE("\177ELF") ||
-         READ64LE(buf) == READ64LE("MZqFpD='") ||
-         READ64LE(buf) == READ64LE("jartsr='") ||
-         READ64LE(buf) == READ64LE("APEDBG='");
+struct Dtor {
+  void *fun;
+  void *arg;
+  struct Dtor *next;
+};
+
+static _Thread_local struct Dtor *__cxa_thread_atexit_list;
+
+void __cxa_thread_finalize(void) {
+  struct Dtor *dtor;
+  while ((dtor = __cxa_thread_atexit_list)) {
+    __cxa_thread_atexit_list = dtor->next;
+    ((void (*)(void *))dtor->fun)(dtor->arg);
+    free(dtor);
+  }
+}
+
+int __cxa_thread_atexit_impl(void *fun, void *arg, void *dso_symbol) {
+  struct Dtor *dtor;
+  if (!(dtor = malloc(sizeof(struct Dtor)))) return -1;
+  dtor->fun = fun;
+  dtor->arg = arg;
+  dtor->next = __cxa_thread_atexit_list;
+  __cxa_thread_atexit_list = dtor;
+  return 0;
 }

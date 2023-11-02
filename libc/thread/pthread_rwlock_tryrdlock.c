@@ -1,7 +1,7 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
 │vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
 ╞══════════════════════════════════════════════════════════════════════════════╡
-│ Copyright 2022 Justine Alexandra Roberts Tunney                              │
+│ Copyright 2023 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
 │ Permission to use, copy, modify, and/or distribute this software for         │
 │ any purpose with or without fee is hereby granted, provided that the         │
@@ -16,40 +16,22 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/calls.h"
-#include "libc/dce.h"
-#include "libc/str/blake2.h"
-#include "libc/str/str.h"
-#include "libc/sysv/errfuns.h"
+#include "libc/errno.h"
 #include "libc/thread/thread.h"
+#include "third_party/nsync/mu.h"
 
 /**
- * Returns filesystem pathname of named semaphore.
+ * Attempts acquiring read lock on read-write lock.
  *
- * @param name is `name` of semaphore which should begin with slash
- * @param buf is temporary storage with at least `size` bytes
- * @param size is size of `buf` in bytes
- * @return pointer to file system path
- * @raise ENAMETOOLONG if constructed path would exceed `size`
+ * @return 0 if lock was acquired, otherwise an errno
+ * @raise EBUSY if lock is currently held in write mode
+ * @raise EAGAIN if maximum number of read locks are held
+ * @raise EINVAL if `rwlock` doesn't refer to an initialized r/w lock
  */
-const char *sem_path_np(const char *name, char *buf, size_t size) {
-  char *p;
-  unsigned n;
-  const char *path, *a;
-  uint8_t digest[BLAKE2B256_DIGEST_LENGTH];
-  a = "/tmp/", n = 5;
-  if (IsLinux() && isdirectory("/dev/shm")) {
-    a = "/dev/shm/", n = 9;
-  }
-  if (n + BLAKE2B256_DIGEST_LENGTH * 2 + 4 < size) {
-    BLAKE2B256(name, strlen(name), digest);
-    p = mempcpy(buf, a, n);
-    p = hexpcpy(p, digest, BLAKE2B256_DIGEST_LENGTH);
-    p = mempcpy(p, ".sem", 5);
-    path = buf;
+errno_t pthread_rwlock_tryrdlock(pthread_rwlock_t *rwlock) {
+  if (nsync_mu_rtrylock((nsync_mu *)rwlock)) {
+    return 0;
   } else {
-    enametoolong();
-    path = 0;
+    return EBUSY;
   }
-  return path;
 }

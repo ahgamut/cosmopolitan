@@ -1,7 +1,7 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
 │vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
 ╞══════════════════════════════════════════════════════════════════════════════╡
-│ Copyright 2023 Justine Alexandra Roberts Tunney                              │
+│ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
 │ Permission to use, copy, modify, and/or distribute this software for         │
 │ any purpose with or without fee is hereby granted, provided that the         │
@@ -17,14 +17,29 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
-#include "libc/intrin/bits.h"
+#include "libc/dce.h"
+#include "libc/str/blake2.h"
+#include "libc/str/str.h"
 
 /**
- * Returns true if executable image is supported by APE Loader.
+ * Returns filesystem pathname of named semaphore.
+ *
+ * @param name is `name` of semaphore which should begin with slash
+ * @param buf is temporary storage with at least 78 bytes
+ * @return pointer to file system path
+ * @raise ENAMETOOLONG if constructed path would exceed `size`
  */
-bool IsApeLoadable(char buf[8]) {
-  return READ32LE(buf) == READ32LE("\177ELF") ||
-         READ64LE(buf) == READ64LE("MZqFpD='") ||
-         READ64LE(buf) == READ64LE("jartsr='") ||
-         READ64LE(buf) == READ64LE("APEDBG='");
+void shm_path_np(const char *name, char buf[hasatleast 78]) {
+  char *p;
+  unsigned n;
+  const char *a;
+  uint8_t digest[BLAKE2B256_DIGEST_LENGTH];
+  a = "/tmp/", n = 5;
+  if (IsLinux() && isdirectory("/dev/shm")) {
+    a = "/dev/shm/", n = 9;
+  }
+  BLAKE2B256(name, strlen(name), digest);
+  p = mempcpy(buf, a, n);
+  p = hexpcpy(p, digest, BLAKE2B256_DIGEST_LENGTH);
+  mempcpy(p, ".sem", 5);
 }
