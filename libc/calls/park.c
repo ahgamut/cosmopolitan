@@ -16,50 +16,40 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/assert.h"
-#include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
-#include "libc/calls/struct/sigset.internal.h"
-#include "libc/calls/syscall_support-nt.internal.h"
-#include "libc/errno.h"
+#include "libc/calls/sig.internal.h"
 #include "libc/intrin/atomic.h"
-#include "libc/nt/enum/wait.h"
-#include "libc/nt/runtime.h"
 #include "libc/nt/synchronization.h"
+#include "libc/sysv/consts/sicode.h"
 #include "libc/sysv/errfuns.h"
 #include "libc/thread/posixthread.internal.h"
-#include "libc/thread/thread.h"
-#include "libc/thread/tls.h"
 #ifdef __x86_64__
 
+// returns 0 on timeout or spurious wakeup
+// raises EINTR if a signal delivery interrupted wait operation
+// raises ECANCELED if this POSIX thread was canceled in masked mode
 static textwindows int _park_thread(uint32_t msdelay, sigset_t waitmask,
                                     bool restartable) {
-  int rc;
-  int64_t sem;
-  sigset_t om;
-  uint32_t wi;
-  struct PosixThread *pt;
-  pt = _pthread_self();
-  pt->pt_flags &= ~PT_RESTARTABLE;
-  if (restartable) pt->pt_flags |= PT_RESTARTABLE;
-  pt->pt_semaphore = sem = CreateSemaphore(0, 0, 1, 0);
-  pthread_cleanup_push((void *)CloseHandle, (void *)sem);
-  atomic_store_explicit(&pt->pt_blocker, PT_BLOCKER_SEM, memory_order_release);
-  om = __sig_beginwait(waitmask);
-  if ((rc = _check_signal(restartable)) != -1) {
-    if ((wi = WaitForSingleObject(sem, msdelay)) != -1u) {
-      if (restartable && !(pt->pt_flags & PT_RESTARTABLE)) rc = eintr();
-      rc |= _check_signal(restartable);
-    } else {
-      rc = __winerr();
-    }
+  int sig;
+  if (_check_cancel() == -1) return -1;
+  if ((sig = __sig_get(waitmask))) {
+    int handler_was_called = __sig_relay(sig, SI_KERNEL, waitmask);
+    if (_check_cancel() == -1) return -1;
+    if (!restartable || handler_was_called == 1) return eintr();
   }
-  __sig_finishwait(om);
-  atomic_store_explicit(&pt->pt_blocker, PT_BLOCKER_CPU, memory_order_release);
-  pt->pt_flags &= ~PT_RESTARTABLE;
-  pthread_cleanup_pop(true);
-  pt->pt_semaphore = 0;
-  return rc;
+  int expect = 0;
+  atomic_int futex = 0;
+  struct PosixThread *pt = _pthread_self();
+  pt->pt_blkmask = waitmask;
+  atomic_store_explicit(&pt->pt_blocker, &futex, memory_order_release);
+  bool32 ok = WaitOnAddress(&futex, &expect, sizeof(int), msdelay);
+  atomic_store_explicit(&pt->pt_blocker, 0, memory_order_release);
+  if (ok && (sig = __sig_get(waitmask))) {
+    int handler_was_called = __sig_relay(sig, SI_KERNEL, waitmask);
+    if (_check_cancel() == -1) return -1;
+    if (!restartable || handler_was_called == 1) return eintr();
+  }
+  return 0;
 }
 
 textwindows int _park_norestart(uint32_t msdelay, sigset_t waitmask) {

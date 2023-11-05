@@ -1,7 +1,7 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
 │vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
 ╞══════════════════════════════════════════════════════════════════════════════╡
-│ Copyright 2021 Justine Alexandra Roberts Tunney                              │
+│ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
 │ Permission to use, copy, modify, and/or distribute this software for         │
 │ any purpose with or without fee is hereby granted, provided that the         │
@@ -16,40 +16,20 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/stdckdint.h"
-#include "libc/zip.internal.h"
+#include "libc/calls/internal.h"
+#include "libc/intrin/atomic.h"
+#include "libc/intrin/weaken.h"
+#include "libc/thread/posixthread.internal.h"
+#ifdef __x86_64__
 
-/**
- * Determines if ZIP EOCD record seems legit.
- */
-int IsZipEocd32(const uint8_t *p, size_t n, size_t i) {
-  size_t offset;
-  if (i > n || n - i < kZipCdirHdrMinSize) {
-    return kZipErrorEocdOffsetOverflow;
+textwindows int _check_cancel(void) {
+  if (_weaken(_pthread_cancel_ack) &&  //
+      _pthread_self() && !(_pthread_self()->pt_flags & PT_NOCANCEL) &&
+      atomic_load_explicit(&_pthread_self()->pt_canceled,
+                           memory_order_acquire)) {
+    return _weaken(_pthread_cancel_ack)();
   }
-  if (READ32LE(p + i) != kZipCdirHdrMagic) {
-    return kZipErrorEocdMagicNotFound;
-  }
-  if (i + ZIP_CDIR_HDRSIZE(p + i) > n) {
-    return kZipErrorEocdSizeOverflow;
-  }
-  if (ZIP_CDIR_DISK(p + i) != ZIP_CDIR_STARTINGDISK(p + i)) {
-    return kZipErrorEocdDiskMismatch;
-  }
-  if (ZIP_CDIR_RECORDSONDISK(p + i) != ZIP_CDIR_RECORDS(p + i)) {
-    return kZipErrorEocdRecordsMismatch;
-  }
-  if (ZIP_CDIR_RECORDS(p + i) * kZipCfileHdrMinSize > ZIP_CDIR_SIZE(p + i)) {
-    return kZipErrorEocdRecordsOverflow;
-  }
-  if (ZIP_CDIR_OFFSET(p + i) == 0xFFFFFFFFu) {
-    return kZipErrorEocdRecordsOverflow;
-  }
-  if (ckd_add(&offset, ZIP_CDIR_OFFSET(p + i), ZIP_CDIR_SIZE(p + i))) {
-    return kZipErrorEocdOffsetSizeOverflow;
-  }
-  if (offset > i) {
-    return kZipErrorCdirOffsetPastEocd;
-  }
-  return kZipOk;
+  return 0;
 }
+
+#endif /* __x86_64__ */

@@ -1,7 +1,7 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
 │vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
 ╞══════════════════════════════════════════════════════════════════════════════╡
-│ Copyright 2021 Justine Alexandra Roberts Tunney                              │
+│ Copyright 2023 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
 │ Permission to use, copy, modify, and/or distribute this software for         │
 │ any purpose with or without fee is hereby granted, provided that the         │
@@ -16,40 +16,57 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/stdckdint.h"
-#include "libc/zip.internal.h"
+#include "libc/atomic.h"
+#include "libc/calls/calls.h"
+#include "libc/calls/struct/sigaction.h"
+#include "libc/runtime/clktck.h"
+#include "libc/runtime/runtime.h"
+#include "libc/sysv/consts/sa.h"
+#include "libc/sysv/consts/sig.h"
+#include "libc/testlib/testlib.h"
+#include "libc/thread/thread.h"
 
-/**
- * Determines if ZIP EOCD record seems legit.
- */
-int IsZipEocd32(const uint8_t *p, size_t n, size_t i) {
-  size_t offset;
-  if (i > n || n - i < kZipCdirHdrMinSize) {
-    return kZipErrorEocdOffsetOverflow;
+jmp_buf jb;
+int pfds[2];
+atomic_bool isdone;
+volatile bool canjmp;
+
+void OnSignal(int sig) {
+  if (canjmp) {
+    canjmp = false;
+    longjmp(jb, 1);
   }
-  if (READ32LE(p + i) != kZipCdirHdrMagic) {
-    return kZipErrorEocdMagicNotFound;
+}
+
+void *ReadWorker(void *arg) {
+  int got;
+  char buf[8];
+  while (!isdone) {
+    if (!(got = setjmp(jb))) {
+      canjmp = true;
+      read(pfds[0], buf, sizeof(buf));
+      abort();
+    }
   }
-  if (i + ZIP_CDIR_HDRSIZE(p + i) > n) {
-    return kZipErrorEocdSizeOverflow;
+  return 0;
+}
+
+TEST(eintr, longjmp) {
+  pthread_t th;
+  struct sigaction sa = {
+      .sa_handler = OnSignal,
+      .sa_flags = SA_SIGINFO | SA_NODEFER,
+  };
+  sigaction(SIGUSR1, &sa, 0);
+  ASSERT_SYS(0, 0, pipe(pfds));
+  ASSERT_EQ(0, pthread_create(&th, 0, ReadWorker, 0));
+  for (int i = 0; i < 10; ++i) {
+    pthread_kill(th, SIGUSR1);
+    usleep(1. / CLK_TCK * 1e6);
   }
-  if (ZIP_CDIR_DISK(p + i) != ZIP_CDIR_STARTINGDISK(p + i)) {
-    return kZipErrorEocdDiskMismatch;
-  }
-  if (ZIP_CDIR_RECORDSONDISK(p + i) != ZIP_CDIR_RECORDS(p + i)) {
-    return kZipErrorEocdRecordsMismatch;
-  }
-  if (ZIP_CDIR_RECORDS(p + i) * kZipCfileHdrMinSize > ZIP_CDIR_SIZE(p + i)) {
-    return kZipErrorEocdRecordsOverflow;
-  }
-  if (ZIP_CDIR_OFFSET(p + i) == 0xFFFFFFFFu) {
-    return kZipErrorEocdRecordsOverflow;
-  }
-  if (ckd_add(&offset, ZIP_CDIR_OFFSET(p + i), ZIP_CDIR_SIZE(p + i))) {
-    return kZipErrorEocdOffsetSizeOverflow;
-  }
-  if (offset > i) {
-    return kZipErrorCdirOffsetPastEocd;
-  }
-  return kZipOk;
+  isdone = true;
+  pthread_kill(th, SIGUSR1);
+  ASSERT_EQ(0, pthread_join(th, 0));
+  ASSERT_SYS(0, 0, close(pfds[1]));
+  ASSERT_SYS(0, 0, close(pfds[0]));
 }
