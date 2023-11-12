@@ -16,24 +16,64 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/assert.h"
-#include "libc/calls/calls.h"
-#include "libc/calls/struct/sigset.internal.h"
-#include "libc/errno.h"
-#include "libc/fmt/itoa.h"
-#include "libc/intrin/describebacktrace.internal.h"
-#include "libc/runtime/runtime.h"
+#include <pthread.h>
+#include <signal.h>
+#include <stdlib.h>
+#include <unistd.h>
 
-/**
- * Handles assert() failure.
- */
-void __assert_fail(const char *expr, const char *file, int line) {
-  char ibuf[12];
-  sigset_t m = __sig_block();
-  FormatInt32(ibuf, line);
-  tinyprint(2, file, ":", ibuf, ": \e[31;1massert(", expr,
-            ") failed\e[0m (cosmoaddr2line ", program_invocation_name, " ",
-            DescribeBacktrace(__builtin_frame_address(0)), ")\n", NULL);
-  __sig_unblock(m);
-  abort();
+volatile sig_atomic_t signal_handled_count;
+
+void reentrant_signal_handler(int signum) {
+
+  // waste stack memory to test raise() won't recurse
+  volatile char burn_stack[3500];
+  burn_stack[3000] = 0;
+  burn_stack[0] = 3;
+
+  // Increment the count to indicate the signal was handled
+  if (++signal_handled_count == 10000) return;
+
+  // Re-raise the signal to test reentrancy
+  raise(signum | burn_stack[3000]);
+}
+
+void *child_thread_func(void *arg) {
+  // Send SIGUSR2 to the main thread
+  pthread_kill(*((pthread_t *)arg), SIGUSR2);
+  return NULL;
+}
+
+int main() {
+  pthread_t main_thread_id = pthread_self();
+  pthread_t child_thread;
+  struct sigaction sa;
+
+  // Install the signal handler for SIGUSR2
+  sa.sa_handler = reentrant_signal_handler;
+  sigemptyset(&sa.sa_mask);
+  sa.sa_flags = 0;
+  if (sigaction(SIGUSR2, &sa, NULL) == -1) {
+    exit(1);  // Failed to install signal handler
+  }
+
+  // Create the child thread
+  if (pthread_create(&child_thread, NULL, &child_thread_func,
+                     &main_thread_id) != 0) {
+    exit(2);  // Failed to create child thread
+  }
+
+  // Wait for the signal to be handled
+  while (signal_handled_count < 10000) {
+    // Busy wait
+  }
+
+  // Wait for child thread to finish
+  pthread_join(child_thread, NULL);
+
+  // Check if the signal was handled reentrantly
+  if (signal_handled_count == 10000) {
+    exit(0);  // Success
+  } else {
+    exit(3);  // The signal was not handled twice as expected
+  }
 }

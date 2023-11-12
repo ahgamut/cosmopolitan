@@ -16,24 +16,40 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/assert.h"
-#include "libc/calls/calls.h"
-#include "libc/calls/struct/sigset.internal.h"
-#include "libc/errno.h"
-#include "libc/fmt/itoa.h"
-#include "libc/intrin/describebacktrace.internal.h"
-#include "libc/runtime/runtime.h"
+#include <signal.h>
+#include <stdlib.h>
 
-/**
- * Handles assert() failure.
- */
-void __assert_fail(const char *expr, const char *file, int line) {
-  char ibuf[12];
-  sigset_t m = __sig_block();
-  FormatInt32(ibuf, line);
-  tinyprint(2, file, ":", ibuf, ": \e[31;1massert(", expr,
-            ") failed\e[0m (cosmoaddr2line ", program_invocation_name, " ",
-            DescribeBacktrace(__builtin_frame_address(0)), ")\n", NULL);
-  __sig_unblock(m);
-  abort();
+volatile sig_atomic_t signal_received = 0;
+
+void signal_handler(int signum) {
+  // Set the flag to indicate the signal was received
+  signal_received = 1;
+}
+
+int main() {
+  // Install the signal handler
+  struct sigaction sa;
+  sa.sa_handler = signal_handler;
+  sigemptyset(&sa.sa_mask);
+  sa.sa_flags = 0;
+
+  if (sigaction(SIGUSR1, &sa, NULL) == -1) {
+    // Failed to install signal handler
+    exit(1);
+  }
+
+  // Raise the signal
+  if (raise(SIGUSR1) != 0) {
+    // Failed to raise signal
+    exit(2);
+  }
+
+  // Check if the signal was received
+  if (signal_received == 1) {
+    // Signal was successfully caught
+    exit(0);
+  } else {
+    // Signal was not caught
+    exit(3);
+  }
 }

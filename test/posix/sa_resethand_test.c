@@ -16,24 +16,24 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/assert.h"
-#include "libc/calls/calls.h"
-#include "libc/calls/struct/sigset.internal.h"
-#include "libc/errno.h"
-#include "libc/fmt/itoa.h"
-#include "libc/intrin/describebacktrace.internal.h"
-#include "libc/runtime/runtime.h"
+#include <signal.h>
 
-/**
- * Handles assert() failure.
- */
-void __assert_fail(const char *expr, const char *file, int line) {
-  char ibuf[12];
-  sigset_t m = __sig_block();
-  FormatInt32(ibuf, line);
-  tinyprint(2, file, ":", ibuf, ": \e[31;1massert(", expr,
-            ") failed\e[0m (cosmoaddr2line ", program_invocation_name, " ",
-            DescribeBacktrace(__builtin_frame_address(0)), ")\n", NULL);
-  __sig_unblock(m);
-  abort();
+volatile int gotsig;
+
+void OnSig(int sig) {
+  gotsig = sig;
+}
+
+int main() {
+  struct sigaction sa;
+  sa.sa_handler = OnSig;
+  sa.sa_flags = SA_RESETHAND;
+  sigemptyset(&sa.sa_mask);
+  if (sigaction(SIGUSR1, &sa, 0)) return 1;
+  if (sigaction(SIGUSR1, 0, &sa)) return 2;
+  if (sa.sa_handler != OnSig) return 3;
+  if (raise(SIGUSR1)) return 4;
+  if (gotsig != SIGUSR1) return 5;
+  if (sigaction(SIGUSR1, 0, &sa)) return 6;
+  if (sa.sa_handler != SIG_DFL) return 7;
 }
