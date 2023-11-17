@@ -1,7 +1,7 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
 │vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
 ╞══════════════════════════════════════════════════════════════════════════════╡
-│ Copyright 2020 Justine Alexandra Roberts Tunney                              │
+│ Copyright 2023 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
 │ Permission to use, copy, modify, and/or distribute this software for         │
 │ any purpose with or without fee is hereby granted, provided that the         │
@@ -16,21 +16,14 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/fmt/itoa.h"
-#include "libc/testlib/testlib.h"
+#include "libc/calls/syscall-sysv.internal.h"
+#include "libc/dce.h"
+#include "libc/runtime/syslib.internal.h"
 
-TEST(itoa64radix16, test) {
-  char buf[21];
-  EXPECT_EQ(5, uint64toarray_radix16(0x31337, buf));
-  EXPECT_STREQ("31337", buf);
-  EXPECT_EQ(2, uint64toarray_radix16(0x13, buf));
-  EXPECT_STREQ("13", buf);
-  EXPECT_EQ(3, uint64toarray_radix16(0x113, buf));
-  EXPECT_STREQ("113", buf);
-}
-
-TEST(itoa64fixed16, test) {
-  char buf[21];
-  EXPECT_EQ(8, uint64toarray_fixed16(0x31337, buf, 32));
-  EXPECT_STREQ("00031337", buf);
+int sys_mprotect(void *data, size_t size, int prot) {
+  if (IsXnuSilicon()) {
+    return _sysret(__syslib->__mprotect(data, size, prot));
+  } else {
+    return __sys_mprotect(data, size, prot);
+  }
 }

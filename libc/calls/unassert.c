@@ -1,7 +1,7 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
 │vi: set net ft=c ts=2 sts=2 sw=2 fenc=utf-8                                :vi│
 ╞══════════════════════════════════════════════════════════════════════════════╡
-│ Copyright 2020 Justine Alexandra Roberts Tunney                              │
+│ Copyright 2023 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
 │ Permission to use, copy, modify, and/or distribute this software for         │
 │ any purpose with or without fee is hereby granted, provided that the         │
@@ -16,26 +16,30 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/fmt/conv.h"
+#include "libc/assert.h"
+#include "libc/calls/calls.h"
+#include "libc/calls/struct/sigset.internal.h"
+#include "libc/errno.h"
 #include "libc/fmt/itoa.h"
-#include "libc/mem/reverse.internal.h"
+#include "libc/intrin/describebacktrace.internal.h"
+#include "libc/runtime/runtime.h"
+#include "libc/runtime/symbols.internal.h"
 
-dontinline size_t uint64toarray(uint64_t i, char *a, int r) {
-  size_t j;
-  j = 0;
-  do {
-    a[j++] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"[i % r];
-    i /= r;
-  } while (i > 0);
-  a[j] = '\0';
-  reverse(a, j);
-  return j;
-}
-
-size_t int64toarray(int64_t i, char *a, int r) {
-  if (i < 0) {
-    *a++ = '-';
-    i = -(uint64_t)i;
-  }
-  return uint64toarray(i, a, r);
+/**
+ * Handles unassert() failure.
+ *
+ * Unlike __assert_fail() this doesn't call abort() and instead uses a
+ * trapping assembly opcode. Standards require that abort() do a great
+ * number of things. By doing this instead, we guarantee the backtrace
+ * reported to the signal handler is clean and focused on the problem.
+ */
+void(unassert)(const char *expr, const char *file, int line) {
+  char ibuf[12];
+  sigset_t m = __sig_block();
+  FormatInt32(ibuf, line);
+  tinyprint(2, file, ":", ibuf, ": \e[31;1munassert(", expr,
+            ") failed\e[0m (cosmoaddr2line ", FindDebugBinary(), " ",
+            DescribeBacktrace(__builtin_frame_address(0)), ")\n", NULL);
+  __sig_unblock(m);
+  notpossible;
 }

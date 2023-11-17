@@ -16,29 +16,40 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/assert.h"
-#include "libc/calls/calls.h"
-#include "libc/calls/struct/sigset.internal.h"
-#include "libc/errno.h"
-#include "libc/fmt/itoa.h"
-#include "libc/intrin/describebacktrace.internal.h"
-#include "libc/runtime/runtime.h"
+#include "libc/proc/ntspawn.h"
 
-/**
- * Handles unassert() failure.
- *
- * Unlike __assert_fail() this doesn't call abort() and instead uses a
- * trapping assembly opcode. Standards require that abort() do a great
- * number of things. By doing this instead, we guarantee the backtrace
- * reported to the signal handler is clean and focused on the problem.
- */
-void __unassert_fail(const char *expr, const char *file, int line) {
-  char ibuf[12];
-  sigset_t m = __sig_block();
-  FormatInt32(ibuf, line);
-  tinyprint(2, file, ":", ibuf, ": \e[31;1munassert(", expr,
-            ") failed\e[0m (cosmoaddr2line ", program_invocation_name, " ",
-            DescribeBacktrace(__builtin_frame_address(0)), ")\n", NULL);
-  __sig_unblock(m);
-  notpossible;
+static inline int IsAlpha(int c) {
+  return ('A' <= c && c <= 'Z') || ('a' <= c && c <= 'z');
+}
+
+textwindows void mungentpath(char *path) {
+  char *p;
+
+  // turn colon into semicolon
+  // unless it already looks like a dos path
+  for (p = path; *p; ++p) {
+    if (p[0] == ':' && p[1] != '\\') {
+      p[0] = ';';
+    }
+  }
+
+  // turn /c/... into c:\...
+  p = path;
+  if (p[0] == '/' && IsAlpha(p[1]) && p[2] == '/') {
+    p[0] = p[1];
+    p[1] = ':';
+  }
+  for (; *p; ++p) {
+    if (p[0] == ';' && p[1] == '/' && IsAlpha(p[2]) && p[3] == '/') {
+      p[1] = p[2];
+      p[2] = ':';
+    }
+  }
+
+  // turn slash into backslash
+  for (p = path; *p; ++p) {
+    if (*p == '/') {
+      *p = '\\';
+    }
+  }
 }

@@ -21,6 +21,7 @@
 #include "libc/intrin/describeflags.internal.h"
 #include "libc/intrin/directmap.internal.h"
 #include "libc/intrin/strace.internal.h"
+#include "libc/runtime/syslib.internal.h"
 
 /**
  * Unmaps memory directly with system.
@@ -32,10 +33,12 @@
  */
 int sys_munmap(void *p, size_t n) {
   int rc;
-  if (!IsMetal()) {
-    rc = __sys_munmap(p, n);
-  } else {
+  if (IsXnuSilicon()) {
+    rc = _sysret(__syslib->__munmap(p, n));
+  } else if (IsMetal()) {
     rc = sys_munmap_metal(p, n);
+  } else {
+    rc = __sys_munmap(p, n);
   }
   KERNTRACE("sys_munmap(%p /* %s */, %'zu) → %d", p,
             DescribeFrame((intptr_t)p >> 16), n, rc);

@@ -16,6 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/assert.h"
 #include "libc/atomic.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/sigset.internal.h"
@@ -34,8 +35,8 @@
 #include "libc/elf/struct/phdr.h"
 #include "libc/errno.h"
 #include "libc/fmt/itoa.h"
+#include "libc/intrin/atomic.h"
 #include "libc/intrin/bits.h"
-#include "libc/intrin/kprintf.h"
 #include "libc/intrin/strace.internal.h"
 #include "libc/limits.h"
 #include "libc/nt/dll.h"
@@ -69,11 +70,6 @@
  * @kudos jacereda for figuring out how to do this
  */
 
-#define XNU_RTLD_LAZY   1
-#define XNU_RTLD_NOW    2
-#define XNU_RTLD_LOCAL  4
-#define XNU_RTLD_GLOBAL 8
-
 #define AMD_REXB    0x41
 #define AMD_REXW    0x48
 #define AMD_MOV_IMM 0xb8
@@ -83,11 +79,16 @@
 #define ARM_IDX_OFF 21
 #define ARM_MOV_NEX 0xf2800000u
 
+#define XNU_RTLD_LAZY   1
+#define XNU_RTLD_NOW    2
+#define XNU_RTLD_LOCAL  4
+#define XNU_RTLD_GLOBAL 8
+
 #define HELPER \
   "#include <dlfcn.h>\n\
 #include <stdio.h>\n\
 #include <stdlib.h>\n\
-int main(int argc, char *argv[]) {\n\
+int main(int argc, char **argv, char **envp) {\n\
   char *ep;\n\
   long addr;\n\
   if (argc != 2) {\n\
@@ -111,7 +112,7 @@ struct Loaded {
   char *base;
   char *entry;
   Elf64_Ehdr eh;
-  Elf64_Phdr ph[30];
+  Elf64_Phdr ph[25];
 };
 
 static struct {
@@ -201,7 +202,7 @@ static char *elf_map(int fd, Elf64_Ehdr *ehdr, Elf64_Phdr *phdr, long pagesz,
                      char *interp_path, size_t interp_size) {
   Elf64_Addr maxva = 0;
   Elf64_Addr minva = -1;
-  for (Elf64_Phdr *p = phdr; p < &phdr[ehdr->e_phnum]; p++) {
+  for (Elf64_Phdr *p = phdr; p < phdr + ehdr->e_phnum; p++) {
     if (p->p_type != PT_LOAD) {
       continue;
     }
@@ -227,18 +228,31 @@ static char *elf_map(int fd, Elf64_Ehdr *ehdr, Elf64_Phdr *phdr, long pagesz,
       }
       continue;
     }
-    int prot = elf2prot(p->p_flags);
     Elf64_Addr skew = p->p_vaddr & (pagesz - 1);
     Elf64_Off off = p->p_offset - skew;
-    if (__sys_mmap(base + p->p_vaddr - skew, skew + p->p_filesz, prot,
+    Elf64_Addr a = p->p_vaddr + p->p_filesz;
+    Elf64_Addr b = (a + (pagesz - 1)) & -pagesz;
+    Elf64_Addr c = p->p_vaddr + p->p_memsz;
+    int prot2 = elf2prot(p->p_flags);
+    int prot1 = prot2;
+    if (b > a) {
+      prot1 |= PROT_WRITE;
+      prot1 &= ~PROT_EXEC;
+    }
+    if (__sys_mmap(base + p->p_vaddr - skew, skew + p->p_filesz, prot1,
                    MAP_FIXED | MAP_PRIVATE, fd, off, off) == MAP_FAILED) {
       return MAP_FAILED;
     }
-    Elf64_Addr fend = (p->p_vaddr + p->p_filesz + (pagesz - 1)) & -pagesz;
-    Elf64_Addr mend = p->p_vaddr + p->p_memsz;
-    if (mend > fend && __sys_mmap(base + fend, mend - fend, prot,
-                                  MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS, -1,
-                                  0, 0) == MAP_FAILED) {
+    if (b > a) {
+      bzero(base + a, b - a);
+    }
+    if (c > b && __sys_mmap(base + b, c - b, prot2,
+                            MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS, -1, 0,
+                            0) == MAP_FAILED) {
+      return MAP_FAILED;
+    }
+    if (prot1 != prot2 &&
+        sys_mprotect(base + p->p_vaddr - skew, skew + p->p_filesz, prot2)) {
       return MAP_FAILED;
     }
   }
@@ -263,8 +277,8 @@ static bool elf_slurp(struct Loaded *l, int fd, const char *file) {
   return true;
 }
 
-static bool elf_load(struct Loaded *l, const char *file, long pagesz,
-                     char *interp_path, size_t interp_size) {
+static dontinline bool elf_load(struct Loaded *l, const char *file, long pagesz,
+                                char *interp_path, size_t interp_size) {
   int fd;
   if ((fd = open(file, O_RDONLY | O_CLOEXEC)) == -1) {
     return false;
@@ -302,14 +316,14 @@ static dontinline void elf_exec(const char *file, char **envp) {
   // get microprocessor page size
   long pagesz = getauxval(AT_PAGESZ);
 
-  // load executable
+  // load helper executable into address space
   struct Loaded prog;
   char interp_path[256] = {0};
   if (!elf_load(&prog, file, pagesz, interp_path, sizeof(interp_path))) {
     return;
   }
 
-  // load platform libc
+  // load platform c library into address space
   struct Loaded interp;
   if (!elf_load(&interp, interp_path, pagesz, 0, 0)) {
     return;
@@ -343,6 +357,7 @@ static dontinline void elf_exec(const char *file, char **envp) {
   FormatInt64(address_argument, (uintptr_t)foreign_helper);
 
   // push auxiliary values
+  // these tell the platform libc how to load the executable
   *--sp = 0;
   unsigned long key, val;
   for (av = (Elf64_auxv_t *)__auxv; (key = av->a_type); ++av) {
@@ -409,12 +424,12 @@ static char *dlerror_set(const char *str) {
   return dlerror_buf;
 }
 
-static char *foreign_alloc_block(void) {
+static dontinline char *foreign_alloc_block(void) {
   char *p = 0;
   size_t sz = 65536;
   if (!IsWindows()) {
     p = __sys_mmap(0, sz, PROT_READ | PROT_WRITE | PROT_EXEC,
-                   MAP_PRIVATE | MAP_ANONYMOUS, -1, 0, 0);
+                   MAP_PRIVATE | MAP_ANONYMOUS | MAP_JIT, -1, 0, 0);
     if (p == MAP_FAILED) {
       p = 0;
     }
@@ -433,7 +448,7 @@ static char *foreign_alloc_block(void) {
   return p;
 }
 
-static void *foreign_alloc(size_t n) {
+static dontinline void *foreign_alloc(size_t n) {
   void *res;
   static char *block;
   static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
@@ -505,10 +520,14 @@ static void *foreign_thunk_sysv(void *func) {
   *p++ = 0xff;
   *p++ = 0xe2;
 #elif defined(__aarch64__)
-  if (!(p = code = foreign_alloc(36))) return 0;  // 16 + 16 + 4 = 36
-  p = movimm(p, 5, (uintptr_t)func);
-  p = movimm(p, 10, (uintptr_t)foreign_tramp);
-  *(uint32_t *)p = 0xd63f0140;  // blr x10
+  __jit_begin();
+  if ((p = code = foreign_alloc(36))) {
+    p = movimm(p, 5, (uintptr_t)func);
+    p = movimm(p, 10, (uintptr_t)foreign_tramp);
+    *(uint32_t *)p = 0xd61f0140;  // br x10
+    __clear_cache(code, p + 4);
+  }
+  __jit_end();
 #else
 #error "unsupported architecture"
 #endif

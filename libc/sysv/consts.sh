@@ -234,6 +234,7 @@ syscon	mmap	MAP_INHERIT				-1			-1			-1			-1			-1			-1			0x00000080		-1			# make
 syscon	mmap	MAP_HASSEMAPHORE			0			0			0x00000200		0x00000200		0x00000200		0			0x00000200		0			# does it matter on x86?
 syscon	mmap	MAP_NOSYNC				0			0			0			0			0x00000800		0			0			0			# flush to physical media only when necessary rather than gratuitously; be sure to use write() rather than ftruncate() with this!
 syscon	mmap	MAP_CONCEAL				0			0			0			0			0x00020000		0x00008000		0x00008000		0			# omit from core dumps; MAP_NOCORE on FreeBSD
+syscon	mmap	MAP_JIT					0			0			0			0x00000800		0			0			0			0			# omit from core dumps; MAP_NOCORE on FreeBSD
 syscon	compat	MAP_NOCORE				0			0			0			0			0x00020000		0x00008000		0x00008000		0			# use MAP_CONCEAL
 syscon	compat	MAP_ANON				0x00000020		0x00000020		0x00001000		0x00001000		0x00001000		0x00001000		0x00001000		0x00000020		# bsd consensus; faked nt
 syscon	compat	MAP_EXECUTABLE				0x00001000		0x00001000		0			0			0			0			0			0			# ignored
@@ -469,7 +470,7 @@ syscon	rlimit	RLIMIT_RSS				5			5			5			5			5			5			5			127			# max physical mem
 syscon	rlimit	RLIMIT_NPROC				6			6			7			7			7			7			7			127			# max number of processes; see fork()→EAGAIN; bsd consensus
 syscon	rlimit	RLIMIT_NOFILE				7			7			8			8			8			8			8			127			# max number of open files; see accept()→EMFILE/ENFILE; bsd consensus
 syscon	rlimit	RLIMIT_MEMLOCK				8			8			6			6			6			6			6			127			# max locked-in-memory address space; bsd consensus
-syscon	rlimit	RLIMIT_AS				9			9			5			5			10			2			10			0			# max virtual memory size in bytes; this one actually works; fudged as RLIMIT_DATA on OpenBSD
+syscon	rlimit	RLIMIT_AS				9\			9			5			5			10			2			10			0			# max virtual memory size in bytes; this one actually works; fudged as RLIMIT_DATA on OpenBSD
 syscon	rlimit	RLIMIT_LOCKS				10			10			127			127			127			127			127			127			# max flock() / fcntl() locks; bsd consensus
 syscon	rlimit	RLIMIT_SIGPENDING			11			11			127			127			127			127			127			127			# max sigqueue() can enqueue; bsd consensus
 syscon	rlimit	RLIMIT_MSGQUEUE				12			12			127			127			127			127			127			127			# meh posix message queues; bsd consensus
