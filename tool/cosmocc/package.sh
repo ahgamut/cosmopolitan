@@ -9,11 +9,12 @@
 set -ex
 
 OUTDIR=${1:-cosmocc}
+MAXPROC=${MAXPROC:-2}
 
-make -j8 m= \
+make -j$MAXPROC m= \
   o//tool/build/apelink.com
 
-make -j8 m=x86_64 \
+make -j$MAXPROC m=x86_64 \
   o/cosmocc.h.txt \
   o/x86_64/ape/ape.lds \
   o/x86_64/libc/crt/crt.o \
@@ -36,7 +37,7 @@ make -j8 m=x86_64 \
   o/x86_64/third_party/make/make.com.dbg \
   o/x86_64/third_party/ctags/ctags.com.dbg
 
-make -j8 m=aarch64 \
+make -j$MAXPROC m=aarch64 \
   o/aarch64/ape/ape.elf \
   o/aarch64/ape/aarch64.lds \
   o/aarch64/libc/crt/crt.o \
