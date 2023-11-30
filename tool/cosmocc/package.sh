@@ -11,6 +11,7 @@ set -ex
 OUTDIR=${1:-cosmocc}
 AMD64=${2:-x86_64}
 ARM64=${3:-aarch64}
+MAXPROC=${MAXPROC:-2}
 
 make -j8 m= \
   o//tool/build/apelink.com
