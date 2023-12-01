@@ -31,8 +31,10 @@
 #include "libc/intrin/cmpxchg.h"
 #include "libc/intrin/directmap.internal.h"
 #include "libc/intrin/extend.internal.h"
+#include "libc/intrin/likely.h"
 #include "libc/intrin/strace.internal.h"
 #include "libc/intrin/weaken.h"
+#include "libc/limits.h"
 #include "libc/runtime/internal.h"
 #include "libc/runtime/memtrack.internal.h"
 #include "libc/runtime/zipos.internal.h"
@@ -48,6 +50,8 @@
 #include "libc/thread/thread.h"
 #include "libc/thread/tls.h"
 #include "libc/zip.internal.h"
+
+#define MAX_REFS (INT_MAX >> 1)
 
 static char *__zipos_mapend;
 static size_t __zipos_maptotal;
@@ -78,7 +82,24 @@ static void *__zipos_mmap_space(size_t mapsize) {
   return start + offset;
 }
 
+struct ZiposHandle *__zipos_keep(struct ZiposHandle *h) {
+  int refs = atomic_fetch_add_explicit(&h->refs, 1, memory_order_relaxed);
+  unassert(!VERY_UNLIKELY(refs > MAX_REFS));
+  return h;
+}
+
+static bool __zipos_drop(struct ZiposHandle *h) {
+  if (!atomic_fetch_sub_explicit(&h->refs, 1, memory_order_release)) {
+    atomic_thread_fence(memory_order_acquire);
+    return true;
+  }
+  return false;
+}
+
 void __zipos_free(struct ZiposHandle *h) {
+  if (!__zipos_drop(h)) {
+    return;
+  }
   if (IsAsan()) {
     __asan_poison((char *)h + sizeof(struct ZiposHandle),
                   h->mapsize - sizeof(struct ZiposHandle), kAsanHeapFree);
@@ -100,7 +121,7 @@ StartOver:
   while ((h = *ph)) {
     if (h->mapsize >= mapsize) {
       if (!_cmpxchg(ph, h, h->next)) goto StartOver;
-      h->next = 0;
+      atomic_store_explicit(&h->refs, 0, memory_order_relaxed);
       break;
     }
     ph = &h->next;
@@ -181,8 +202,9 @@ static int __zipos_load(struct Zipos *zipos, size_t cf, int flags,
         return eio();
     }
   }
-  h->pos = 0;
+  atomic_store_explicit(&h->pos, 0, memory_order_relaxed);
   h->cfile = cf;
+  unassert(size < SIZE_MAX);
   h->size = size;
   if (h->mem) {
     minfd = 3;
@@ -207,6 +229,27 @@ static int __zipos_load(struct Zipos *zipos, size_t cf, int flags,
   }
   __zipos_free(h);
   return -1;
+}
+
+void __zipos_postdup(int oldfd, int newfd) {
+  if (oldfd == newfd) {
+    return;
+  }
+  if (__isfdkind(newfd, kFdZip)) {
+    __zipos_free((struct ZiposHandle *)(intptr_t)g_fds.p[newfd].handle);
+    if (!__isfdkind(oldfd, kFdZip)) {
+      __fds_lock();
+      bzero(g_fds.p + newfd, sizeof(*g_fds.p));
+      __fds_unlock();
+    }
+  }
+  if (__isfdkind(oldfd, kFdZip)) {
+    __zipos_keep((struct ZiposHandle *)(intptr_t)g_fds.p[oldfd].handle);
+    __fds_lock();
+    __ensurefds_unlocked(newfd);
+    g_fds.p[newfd] = g_fds.p[oldfd];
+    __fds_unlock();
+  }
 }
 
 /**
