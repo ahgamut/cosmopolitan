@@ -16,6 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include <assert.h>
 #include <dispatch/dispatch.h>
 #include <dlfcn.h>
 #include <errno.h>
@@ -35,6 +36,10 @@
 #include <unistd.h>
 
 #define pagesz         16384
+#define VARNAME        "COSMOPOLITAN_PROGRAM_EXECUTABLE="
+#define VARSIZE        (sizeof(VARNAME) - 1)
+/* maximum path size that cosmo can take */
+#define PATHSIZE       (PATH_MAX < 1024 ? PATH_MAX : 1024)
 #define SYSLIB_MAGIC   ('s' | 'l' << 8 | 'i' << 16 | 'b' << 24)
 #define SYSLIB_VERSION 8
 
@@ -194,11 +199,15 @@ union ElfPhdrBuf {
 
 struct PathSearcher {
   int literally;
+  int indirect;
   unsigned long namelen;
   const char *name;
   const char *syspath;
-  char path[1024];
+  char varname[VARSIZE];
+  char path[PATHSIZE];
 };
+_Static_assert(offsetof(struct PathSearcher, varname) + VARSIZE ==
+               offsetof(struct PathSearcher, path), "struct layout");
 
 struct ApeLoader {
   struct PathSearcher ps;
@@ -220,16 +229,8 @@ static int StrCmp(const char *l, const char *r) {
 }
 
 static const char *BaseName(const char *s) {
-  int c;
-  const char *b = "";
-  if (s) {
-    while ((c = *s++)) {
-      if (c == '/') {
-        b = s;
-      }
-    }
-  }
-  return b;
+  const char *b = strrchr(s, '/');
+  return b ? b + 1 : s;
 }
 
 static char *GetEnv(char **p, const char *s) {
@@ -297,6 +298,14 @@ static long Print(int fd, const char *s, ...) {
   return write(fd, b, n);
 }
 
+static int GetIndirectOffset(const char *arg0) {
+  char *tail = strrchr(arg0, '.');
+  if (tail && !StrCmp(tail + 1, "ape")) {
+    return tail - arg0;
+  }
+  return 0;
+}
+
 static void Perror(const char *thing, long rc, const char *reason) {
   char ibuf[21];
   ibuf[0] = 0;
@@ -312,11 +321,28 @@ __attribute__((__noreturn__)) static void Pexit(const char *c, int failed,
 }
 
 static char AccessCommand(struct PathSearcher *ps, unsigned long pathlen) {
-  if (pathlen + 1 + ps->namelen + 1 > sizeof(ps->path)) return 0;
+  if (!pathlen && *ps->name != '/') {
+    if (!getcwd(ps->path, sizeof(ps->path) - 1 - ps->namelen)) {
+      Pexit("getcwd", -errno, "failed");
+    }
+    pathlen = strlen(ps->path);
+  } else if (pathlen + 1 + ps->namelen + 1 > sizeof(ps->path)) {
+    return 0;
+  }
   if (pathlen && ps->path[pathlen - 1] != '/') ps->path[pathlen++] = '/';
   memmove(ps->path + pathlen, ps->name, ps->namelen);
   ps->path[pathlen + ps->namelen] = 0;
-  return !access(ps->path, X_OK);
+  if (!access(ps->path, X_OK)) {
+    if (ps->indirect) {
+      ps->namelen -= 4;
+      ps->path[pathlen + ps->namelen] = 0;
+      if (access(ps->path, X_OK) < 0) {
+        Pexit(ps->path, -errno, "access(X_OK)");
+      }
+    }
+    return 1;
+  }
+  return 0;
 }
 
 static char SearchPath(struct PathSearcher *ps) {
@@ -870,11 +896,12 @@ static const char *TryElf(struct ApeLoader *M, union ElfEhdrBuf *ebuf,
 
 int main(int argc, char **argv, char **envp) {
   unsigned i;
-  int c, n, fd, rc;
   struct ApeLoader *M;
   long *sp, *sp2, *auxv;
   union ElfEhdrBuf *ebuf;
-  char *p, *pe, *exe, *prog, *execfn;
+  int c, n, fd, rc;
+  char *p, *pe, *exe, *prog, *shell, *execfn;
+  char **varpos;
 
   /* allocate loader memory in program's arg block */
   n = sizeof(struct ApeLoader);
@@ -938,9 +965,13 @@ int main(int argc, char **argv, char **envp) {
 
   /* getenv("_") is close enough to at_execfn */
   execfn = argc > 0 ? argv[0] : 0;
+  varpos = 0;
   for (i = 0; envp[i]; ++i) {
     if (envp[i][0] == '_' && envp[i][1] == '=') {
       execfn = envp[i] + 2;
+    } else if (!memcmp(VARNAME, envp[i], VARSIZE)) {
+      assert(!varpos);
+      varpos = envp + i;
     }
   }
 
@@ -951,20 +982,46 @@ int main(int argc, char **argv, char **envp) {
   /* create new bottom of stack for spawned program
      system v abi aligns this on a 16-byte boundary
      grows down the alloc by poking the guard pages */
-  n = (auxv - sp + AUXV_WORDS + 1) * sizeof(long);
+  n = (auxv - sp + !varpos + AUXV_WORDS + 1) * sizeof(long);
   sp2 = (long *)__builtin_alloca(n);
   if ((long)sp2 & 15) ++sp2;
   for (; n > 0; n -= pagesz) {
     ((char *)sp2)[n - 1] = 0;
   }
   memmove(sp2, sp, (auxv - sp) * sizeof(long));
+
   argv = (char **)(sp2 + 1);
   envp = (char **)(sp2 + 1 + argc + 1);
-  auxv = sp2 + (auxv - sp);
+  if (varpos) {
+    varpos = (char **)((long *)varpos - sp + sp2);
+  } else {
+    varpos = envp + i++;
+    *(envp + i) = 0;
+  }
+  auxv = (long *)(envp + i + 1);
   sp = sp2;
 
   /* interpret command line arguments */
-  if ((M->ps.literally = argc >= 3 && !StrCmp(argv[1], "-"))) {
+  if ((M->ps.indirect = argc > 0 ? GetIndirectOffset(argv[0]) : 0)) {
+    M->ps.literally = 0;
+    /* if argv[0] is $prog.ape, then we strip off the .ape and run
+       $prog. This allows you to use symlinks to trick the OS when
+       a native executable is required. For example, let's say you
+       want to use the APE binary /opt/cosmos/bin/bash as a system
+       shell in /etc/shells, or perhaps in shebang lines like e.g.
+       `#!/opt/cosmos/bin/bash`. That won't work with APE normally,
+       but it will if you say:
+           ln -sf /usr/local/bin/ape /opt/cosmos/bin/bash.ape
+       and then use #!/opt/cosmos/bin/bash.ape instead. */
+    if (*argv[0] == '-' && (shell = GetEnv(envp, "SHELL")) &&
+        !StrCmp(argv[0] + 1, BaseName(shell))) {
+      execfn = prog = shell;
+    } else {
+      prog = (char *)sp[1];
+    }
+    argc = sp[0];
+    argv = (char **)(sp + 1);
+  } else if ((M->ps.literally = argc >= 3 && !StrCmp(argv[1], "-"))) {
     /* if the first argument is a hyphen then we give the user the
        power to change argv[0] or omit it entirely. most operating
        systems don't permit the omission of argv[0] but we do, b/c
@@ -975,6 +1032,7 @@ int main(int argc, char **argv, char **envp) {
   } else if (argc < 2) {
     Emit("usage: ape   PROG [ARGV1,ARGV2,...]\n"
          "       ape - PROG [ARGV0,ARGV1,...]\n"
+         "  ($0 = PROG.ape) [ARGV1,ARGV2,...]\n"
          "actually portable executable loader silicon 1.9\n"
          "copyright 2023 justine alexandra roberts tunney\n"
          "https://justine.lol/ape.html\n");
@@ -1004,11 +1062,11 @@ int main(int argc, char **argv, char **envp) {
   }
   pe = ebuf->buf + rc;
 
-  /* resolve argv[0] to reflect path search */
-  if (argc > 0 && ((*prog != '/' && *exe == '/' && !StrCmp(prog, argv[0])) ||
-                   !StrCmp(BaseName(prog), argv[0]))) {
-    argv[0] = exe;
-  }
+  /* inject program executable as first environment variable,
+     swapping the old first variable for it. */
+  memmove(M->ps.varname, VARNAME, VARSIZE);
+  *varpos = *envp;
+  *envp = M->ps.varname;
 
   /* generate some hard random data */
   if ((rc = sys_getentropy(M->rando, sizeof(M->rando))) < 0) {
