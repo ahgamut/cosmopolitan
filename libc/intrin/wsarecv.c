@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│ vi: set noet ft=c ts=2 sts=2 sw=2 fenc=utf-8                             :vi │
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -46,7 +46,7 @@ textwindows int WSARecv(
     // be NULL only if the lpOverlapped parameter is not NULL.
     unassert(!opt_out_lpNumberOfBytesRecvd);
   }
-#if defined(SYSDEBUG) && _NTTRACE
+#if SYSDEBUG && _NTTRACE
   uint32_t NumberOfBytesRecvd;
   if (opt_out_lpNumberOfBytesRecvd) {
     NumberOfBytesRecvd = *opt_out_lpNumberOfBytesRecvd;

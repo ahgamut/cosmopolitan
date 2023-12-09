@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│ vi: set noet ft=c ts=2 sts=2 sw=2 fenc=utf-8                             :vi │
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -87,10 +87,10 @@ ssize_t sendmsg(int fd, const struct msghdr *msg, int flags) {
   }
   END_CANCELATION_POINT;
 
-#if defined(SYSDEBUG) && _DATATRACE
+#if SYSDEBUG && _DATATRACE
   // TODO(jart): Write a DescribeMsg() function.
   if (strace_enabled(0) > 0) {
-    kprintf(STRACE_PROLOGUE "sendmsg(");
+    kprintf(STRACE_PROLOGUE "sendmsg(%d, ", fd);
     if ((!IsAsan() && kisdangerous(msg)) ||
         (IsAsan() && !__asan_is_valid(msg, sizeof(*msg)))) {
       kprintf("%p", msg);

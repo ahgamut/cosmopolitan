@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│ vi: set noet ft=c ts=2 sts=2 sw=2 fenc=utf-8                             :vi │
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -16,9 +16,11 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/dns/dns.h"
+#include "libc/dns/ent.h"
 
-/**
- * Error number global for gethostbyname*(), gethostbyaddr*(), etc.
- */
-int h_errno;
+// error number global for gethostbyname*(), gethostbyaddr*(), etc.
+static _Thread_local int __h_errno;
+
+errno_t *__h_errno_location(void) {
+  return &__h_errno;
+}

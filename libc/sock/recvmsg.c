@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│ vi: set noet ft=c ts=2 sts=2 sw=2 fenc=utf-8                             :vi │
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -23,6 +23,10 @@
 #include "libc/calls/struct/iovec.h"
 #include "libc/calls/struct/iovec.internal.h"
 #include "libc/dce.h"
+#include "libc/errno.h"
+#include "libc/intrin/kprintf.h"
+#include "libc/intrin/strace.internal.h"
+#include "libc/runtime/runtime.h"
 #include "libc/sock/sock.h"
 #include "libc/sock/struct/msghdr.h"
 #include "libc/sock/struct/msghdr.internal.h"
@@ -99,12 +103,12 @@ ssize_t recvmsg(int fd, struct msghdr *msg, int flags) {
   }
   END_CANCELATION_POINT;
 
-#if defined(SYSDEBUG) && _DATATRACE
+#if SYSDEBUG && _DATATRACE
   if (__strace > 0 && strace_enabled(0) > 0) {
     if (!msg || (rc == -1 && errno == EFAULT)) {
       DATATRACE("recvmsg(%d, %p, %#x) → %'ld% m", fd, msg, flags, rc);
     } else {
-      kprintf(STRACE_PROLOGUE "recvmsg(%d, [{");
+      kprintf(STRACE_PROLOGUE "recvmsg(%d, [{", fd);
       if (msg->msg_namelen)
         kprintf(".name=%#.*hhs, ", msg->msg_namelen, msg->msg_name);
       if (msg->msg_controllen)

@@ -1,5 +1,5 @@
 /*-*- mode:unix-assembly; indent-tabs-mode:t; tab-width:8; coding:utf-8     -*-│
-│ vi: set et ft=asm ts=8 tw=8 fenc=utf-8                                   :vi │
+│ vi: set noet ft=asm ts=8 tw=8 fenc=utf-8                                 :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -752,6 +752,8 @@ ape_loader_end:
 #if SupportsSystemv() || SupportsMetal()
 	.section .elf.phdrs,"a",@progbits
 
+	.globl	ape_phdrs
+ape_phdrs:
 	.long	PT_LOAD
 	.long	PF_R|PF_X
 	.stub	ape_cod_offset,quad

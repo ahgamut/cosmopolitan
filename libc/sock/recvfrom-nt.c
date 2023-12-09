@@ -1,5 +1,5 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│ vi: set noet ft=c ts=2 sts=2 sw=2 fenc=utf-8                             :vi │
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2023 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -23,6 +23,7 @@
 #include "libc/nt/struct/iovec.h"
 #include "libc/nt/winsock.h"
 #include "libc/sock/internal.h"
+#include "libc/sock/struct/sockaddr.h"
 #include "libc/sock/syscall_fd.internal.h"
 #include "libc/sysv/consts/msg.h"
 #include "libc/sysv/consts/o.h"
