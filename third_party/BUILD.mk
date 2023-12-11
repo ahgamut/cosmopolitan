@@ -13,8 +13,8 @@ o/$(MODE)/third_party:				\
 	o/$(MODE)/third_party/finger		\
 	o/$(MODE)/third_party/gdtoa		\
 	o/$(MODE)/third_party/getopt		\
-	o/$(MODE)/third_party/ggml		\
 	o/$(MODE)/third_party/hiredis		\
+	o/$(MODE)/third_party/less		\
 	o/$(MODE)/third_party/libcxx		\
 	o/$(MODE)/third_party/linenoise		\
 	o/$(MODE)/third_party/lua		\
@@ -23,11 +23,12 @@ o/$(MODE)/third_party:				\
 	o/$(MODE)/third_party/maxmind		\
 	o/$(MODE)/third_party/mbedtls		\
 	o/$(MODE)/third_party/musl		\
+	o/$(MODE)/third_party/ncurses		\
 	o/$(MODE)/third_party/nsync		\
+	o/$(MODE)/third_party/pcre		\
 	o/$(MODE)/third_party/puff		\
 	o/$(MODE)/third_party/python		\
 	o/$(MODE)/third_party/quickjs		\
-	o/$(MODE)/third_party/radpajama		\
 	o/$(MODE)/third_party/regex		\
 	o/$(MODE)/third_party/sed		\
 	o/$(MODE)/third_party/smallz4		\
