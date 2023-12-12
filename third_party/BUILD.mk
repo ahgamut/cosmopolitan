@@ -5,6 +5,7 @@
 o/$(MODE)/third_party:				\
 	o/$(MODE)/third_party/argon2		\
 	o/$(MODE)/third_party/awk		\
+	o/$(MODE)/third_party/bash		\
 	o/$(MODE)/third_party/bzip2		\
 	o/$(MODE)/third_party/chibicc		\
 	o/$(MODE)/third_party/compiler_rt	\
@@ -29,6 +30,7 @@ o/$(MODE)/third_party:				\
 	o/$(MODE)/third_party/puff		\
 	o/$(MODE)/third_party/python		\
 	o/$(MODE)/third_party/quickjs		\
+	o/$(MODE)/third_party/readline		\
 	o/$(MODE)/third_party/regex		\
 	o/$(MODE)/third_party/sed		\
 	o/$(MODE)/third_party/smallz4		\
