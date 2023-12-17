@@ -1,5 +1,5 @@
 /*-*- mode:unix-assembly; indent-tabs-mode:t; tab-width:8; coding:utf-8     -*-│
-│ vi: set noet ft=asm ts=8 tw=8 fenc=utf-8                                 :vi │
+│ vi: set noet ft=asm ts=8 sw=8 fenc=utf-8                                 :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2023 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -36,7 +36,7 @@ blink_linux_aarch64:
 	.endobj	blink_linux_aarch64,globl
 blink_linux_aarch64_size = . - blink_linux_aarch64
 
-        .section .emush,"a",@progbits
+	.section .emush,"a",@progbits
 	.ascii	"if [ \"$s\" = Linux ]; then\n"
 	.ascii	"if [ \"$m\" = aarch64 ] || [ \"$m\" = arm64 ]; then\n"
 	.ascii	"if ! [ -x \"$e\" ]; then\n"

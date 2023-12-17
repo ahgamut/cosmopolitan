@@ -1,5 +1,5 @@
 /*-*- mode:unix-assembly; indent-tabs-mode:t; tab-width:8; coding:utf-8     -*-│
-│ vi: set noet ft=asm ts=8 tw=8 fenc=utf-8                                 :vi │
+│ vi: set noet ft=asm ts=8 sw=8 fenc=utf-8                                 :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2023 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -36,7 +36,7 @@ blink_xnu_aarch64:
 	.endobj	blink_xnu_aarch64,globl
 blink_xnu_aarch64_size = . - blink_xnu_aarch64
 
-        .section .emush,"a",@progbits
+	.section .emush,"a",@progbits
 	.ascii	"if [ \"$s\" = Darwin ] && [ \"$m\" = arm64 ]; then\n"
 	.ascii	"if ! [ -x \"$e\" ]; then\n"
 	.ascii	"echo \"extracting blink-darwin-aarch64 to ${e}\" >&2\n"
