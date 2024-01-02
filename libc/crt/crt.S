@@ -125,6 +125,11 @@ _start:
 ////////////////////////////////////////////////////////////////////////////////
 #elif defined(__aarch64__)
 
+#if SupportsFreebsd()
+//	save first arg
+	mov	x4,x0
+#endif
+
 //	save original stack pointer
 //	this is the first argument to cosmo() below
 	mov	x0,sp
@@ -142,7 +147,8 @@ _start:
 //	should be set to zero on other platforms
 	mov	x1,x15
 
-//	third arg (x2) is the program path passed by ape-m1.c
+//	third arg is program path passed by loader
+//	fourth arg is detected os passed by loader
 
 //	switch to c code
 	bl	cosmo

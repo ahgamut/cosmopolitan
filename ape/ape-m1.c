@@ -35,7 +35,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#define pagesz         16384
+#define pagesz 16384
 /* maximum path size that cosmo can take */
 #define PATHSIZE       (PATH_MAX < 1024 ? PATH_MAX : 1024)
 #define SYSLIB_MAGIC   ('s' | 'l' << 8 | 'i' << 16 | 'b' << 24)
@@ -726,10 +726,10 @@ __attribute__((__noreturn__)) static void Spawn(const char *exe, int fd,
 
   register long *x0 __asm__("x0") = sp;
   register char *x2 __asm__("x2") = path;
+  register int x3 __asm__("x3") = 8; /* _HOSTXNU */
   register struct Syslib *x15 __asm__("x15") = lib;
   register long x16 __asm__("x16") = e->e_entry;
   __asm__ volatile("mov\tx1,#0\n\t"
-                   "mov\tx3,#0\n\t"
                    "mov\tx4,#0\n\t"
                    "mov\tx5,#0\n\t"
                    "mov\tx6,#0\n\t"
@@ -758,7 +758,7 @@ __attribute__((__noreturn__)) static void Spawn(const char *exe, int fd,
                    "mov\tx0,#0\n\t"
                    "br\tx16"
                    : /* no outputs */
-                   : "r"(x0), "r"(x2), "r"(x15), "r"(x16)
+                   : "r"(x0), "r"(x2), "r"(x3), "r"(x15), "r"(x16)
                    : "memory");
   __builtin_unreachable();
 }
@@ -1012,8 +1012,8 @@ int main(int argc, char **argv, char **envp) {
     Emit("usage: ape   PROG [ARGV1,ARGV2,...]\n"
          "       ape - PROG [ARGV0,ARGV1,...]\n"
          "  ($0 = PROG.ape) [ARGV1,ARGV2,...]\n"
-         "actually portable executable loader silicon 1.9\n"
-         "copyright 2023 justine alexandra roberts tunney\n"
+         "actually portable executable loader silicon 1.10\n"
+         "copyrights 2023 justine alexandra roberts tunney\n"
          "https://justine.lol/ape.html\n");
     _exit(1);
   } else {
