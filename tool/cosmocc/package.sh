@@ -2,7 +2,7 @@
 # cosmopolitan toolchain packager
 #
 #     tool/cosmocc/package.sh
-#     cd cosmocc
+#     cd cosmocc/latest
 #     zip -ry9 ../cosmocc.zip .
 #
 
@@ -15,7 +15,7 @@ mode() {
   esac
 }
 
-OUTDIR=${1:-cosmocc}
+OUTDIR=${1:-cosmocc/latest}
 APELINK=o/$(mode)/tool/build/apelink.com
 AMD64=${2:-x86_64}
 ARM64=${3:-aarch64}
@@ -90,10 +90,10 @@ fetch() {
 OLD=$PWD
 cd "$OUTDIR/"
 if [ ! -x bin/x86_64-linux-cosmo-gcc ]; then
-  fetch https://github.com/ahgamut/superconfigure/releases/download/z0.0.29/aarch64-gcc.zip
+  fetch https://github.com/ahgamut/superconfigure/releases/download/z0.0.30/aarch64-gcc.zip
   unzip aarch64-gcc.zip
   rm -f aarch64-gcc.zip
-  fetch https://github.com/ahgamut/superconfigure/releases/download/z0.0.29/x86_64-gcc.zip
+  fetch https://github.com/ahgamut/superconfigure/releases/download/z0.0.30/x86_64-gcc.zip
   unzip x86_64-gcc.zip
   rm -f x86_64-gcc.zip
 fi

@@ -28,6 +28,7 @@
 	.ftrace1
 longjmp:
 	.ftrace2
+_longjmp:
 #ifdef __x86_64__
 	mov	%esi,%eax
 	test	%eax,%eax
@@ -61,5 +62,5 @@ longjmp:
 #error "unsupported architecture"
 #endif
 	.endfn	longjmp,globl
-	.alias	longjmp,_longjmp
+	.endfn	_longjmp,globl
 	.alias	longjmp,siglongjmp

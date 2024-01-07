@@ -25,6 +25,7 @@
 #include "libc/errno.h"
 #include "libc/fmt/libgen.h"
 #include "libc/intrin/getenv.internal.h"
+#include "libc/intrin/strace.internal.h"
 #include "libc/limits.h"
 #include "libc/macros.internal.h"
 #include "libc/nt/runtime.h"
@@ -180,10 +181,10 @@ static inline void InitProgramExecutableNameImpl(void) {
          empty string to obviate the TOCTOU problem between loader and binary.
        */
       if (!(b = DevFd()) ||
-          0 != strncmp(b, __program_executable_name, StrlenDevFd()) ||
-          !__program_executable_name[StrlenDevFd()] ||
-          __program_executable_name[StrlenDevFd()] == '.' ||
-          strchr(__program_executable_name + StrlenDevFd(), '/')) {
+          0 != strncmp(b, __program_executable_name, (n = StrlenDevFd())) ||
+          !__program_executable_name[n] ||
+          __program_executable_name[n] == '.' ||
+          strchr(__program_executable_name + n, '/')) {
         goto UseEmpty;
       }
     }
@@ -224,8 +225,7 @@ static inline void InitProgramExecutableNameImpl(void) {
   }
 
   // try argv[0], then argv[0].com, then $_, then $_.com.
-  if (TryPath(__argv[0], 1) ||
-      TryPath(__getenv(__envp, "_").s, 1)) {
+  if (TryPath(__argv[0], 1) || TryPath(__getenv(__envp, "_").s, 1)) {
     goto UseBuf;
   }
 
@@ -261,5 +261,6 @@ static void InitProgramExecutableName(void) {
  */
 char *GetProgramExecutableName(void) {
   cosmo_once(&g_prog.once, InitProgramExecutableName);
+  STRACE("GetProgramExecutableName() → %#s", __program_executable_name);
   return __program_executable_name;
 }
