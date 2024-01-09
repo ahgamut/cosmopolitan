@@ -18,6 +18,7 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
 #include "libc/atomic.h"
+#include "libc/calls/blockcancel.internal.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/sigset.internal.h"
 #include "libc/calls/struct/stat.h"
@@ -618,7 +619,15 @@ static dontinline bool foreign_compile(char exe[hasatleast PATH_MAX]) {
   }
   int pid, ws;
   char *args[] = {
-      "cc", "-pie", "-fPIC", src, "-o", tmp, IsNetbsd() ? 0 : "-ldl", 0,
+      "cc",
+      "-pie",
+      "-fPIC",
+      src,
+      "-o",
+      tmp,
+      IsLinux() ? "-Wl,-z,execstack" : "-DIGNORE",
+      IsNetbsd() ? 0 : "-ldl",
+      0,
   };
   errno_t err = posix_spawnp(&pid, args[0], NULL, NULL, args, environ);
   if (err) {
@@ -722,14 +731,13 @@ static void *dlopen_nt(const char *path, int mode) {
 
 static void *dlsym_nt(void *handle, const char *name) {
   void *x64_abi_func;
-  void *sysv_abi_func = 0;
   if ((x64_abi_func = GetProcAddress((uintptr_t)handle, name))) {
-    sysv_abi_func = foreign_thunk_nt(x64_abi_func);
+    return x64_abi_func;
   } else {
     dlerror_set("symbol not found: ");
     strlcat(dlerror_buf, name, sizeof(dlerror_buf));
+    return 0;
   }
-  return sysv_abi_func;
 }
 
 static void *dlopen_silicon(const char *path, int mode) {
@@ -791,6 +799,7 @@ static void *dlopen_silicon(const char *path, int mode) {
 void *cosmo_dlopen(const char *path, int mode) {
   void *res;
   BLOCK_SIGNALS;
+  BLOCK_CANCELATION;
   if (IsWindows()) {
     res = dlopen_nt(path, mode);
   } else if (IsXnuSilicon()) {
@@ -807,6 +816,7 @@ void *cosmo_dlopen(const char *path, int mode) {
   } else {
     res = 0;
   }
+  ALLOW_CANCELATION;
   ALLOW_SIGNALS;
   STRACE("dlopen(%#s, %d) → %p% m", path, mode, res);
   return res;

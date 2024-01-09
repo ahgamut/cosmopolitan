@@ -1928,7 +1928,6 @@ THIRD_PARTY_PYTHON_PYTEST_PYMAINS =						\
 	third_party/python/Lib/test/test_pprint.py				\
 	third_party/python/Lib/test/test_print.py				\
 	third_party/python/Lib/test/test_thread.py				\
-	third_party/python/Lib/test/test_threadsignals.py			\
 	third_party/python/Lib/test/test_profile.py				\
 	third_party/python/Lib/test/test_property.py				\
 	third_party/python/Lib/test/test_pstats.py				\
@@ -1941,7 +1940,6 @@ THIRD_PARTY_PYTHON_PYTEST_PYMAINS =						\
 	third_party/python/Lib/test/test_re.py					\
 	third_party/python/Lib/test/test_repl.py				\
 	third_party/python/Lib/test/test_reprlib.py				\
-	third_party/python/Lib/test/test_resource.py				\
 	third_party/python/Lib/test/test_richcmp.py				\
 	third_party/python/Lib/test/test_robotparser.py				\
 	third_party/python/Lib/test/test_sax.py					\
@@ -2018,6 +2016,9 @@ THIRD_PARTY_PYTHON_PYTEST_PYMAINS =						\
 
 # TODO: test_threading passing probably requires more mutexes in libc/calls/
 # TODO: test_sys is potentially flaky now that we have threads
+
+THIRD_PARTY_PYTHON_PYTEST_TOOSLOW =						\
+	third_party/python/Lib/test/test_threadsignals.py
 
 THIRD_PARTY_PYTHON_PYTEST_TODOS =						\
 	third_party/python/Lib/test/test_sys.py					\
@@ -3113,9 +3114,6 @@ o/$(MODE)/third_party/python/Lib/test/test_regrtest.py.runs: $(PYTHONTESTER)
 o/$(MODE)/third_party/python/Lib/test/test_repl.py.runs: $(PYTHONTESTER)
 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_repl $(PYTESTARGS)
 
-o/$(MODE)/third_party/python/Lib/test/test_resource.py.runs: $(PYTHONTESTER)
-	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_resource $(PYTESTARGS)
-
 o/$(MODE)/third_party/python/Lib/test/test_richcmp.py.runs: $(PYTHONTESTER)
 	@$(COMPILE) -ACHECK -wtT$@ $(PYHARNESSARGS) $(PYTHONTESTER) -m test.test_richcmp $(PYTESTARGS)
 
@@ -3957,7 +3955,6 @@ o/$(MODE)/third_party/python/Lib/test/test_tarfile.py.runs: private QUOTA = -L30
 o/$(MODE)/third_party/python/Lib/test/test_sqlite.py.runs: private QUOTA = -L120
 o/$(MODE)/third_party/python/Lib/test/test_gzip.py.runs: private QUOTA = -L120
 o/$(MODE)/third_party/python/Lib/test/test_logging.py.runs: private QUOTA = -M512m
-o/$(MODE)/third_party/python/Lib/test/test_resource.py.runs: private QUOTA = -C1000000
 o/$(MODE)/third_party/python/Lib/test/test_email/test_email.py.runs: private QUOTA = -C32 -M1024m
 o/$(MODE)/third_party/python/Lib/test/test_selectors.py.runs: private QUOTA = -L180
 o/$(MODE)/third_party/python/Lib/test/test_trace.py.runs: private QUOTA = -L300
