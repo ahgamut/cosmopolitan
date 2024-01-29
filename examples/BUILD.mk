@@ -85,7 +85,6 @@ EXAMPLES_DIRECTDEPS =								\
 	THIRD_PARTY_MUSL							\
 	THIRD_PARTY_NSYNC							\
 	THIRD_PARTY_NSYNC_MEM							\
-	THIRD_PARTY_QUICKJS							\
 	THIRD_PARTY_SED								\
 	THIRD_PARTY_STB								\
 	THIRD_PARTY_TR								\
@@ -153,7 +152,6 @@ o/$(MODE)/examples/picol.com.dbg:				\
 		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
 
-o/$(MODE)/examples/nesemu1.o: private QUOTA += -M512m
 o/$(MODE)/usr/share/dict/words.zip.o: private ZIPOBJ_FLAGS += -C2
 
 $(EXAMPLES_OBJS): examples/BUILD.mk

@@ -21,10 +21,10 @@ AMD64=${2:-x86_64}
 ARM64=${3:-aarch64}
 MAXPROC=${MAXPROC:-2}
 
-make -j8 m= \
+make -j32 m= \
   $APELINK
 
-make -j8 m=$AMD64 \
+make -j32 m=$AMD64 \
   o/cosmocc.h.txt \
   o/$AMD64/ape/ape.lds \
   o/$AMD64/libc/crt/crt.o \
@@ -47,7 +47,7 @@ make -j8 m=$AMD64 \
   o/$AMD64/third_party/make/make.com.dbg \
   o/$AMD64/third_party/ctags/ctags.com.dbg
 
-make -j8 m=$ARM64 \
+make -j32 m=$ARM64 \
   o/$ARM64/ape/ape.elf \
   o/$ARM64/ape/aarch64.lds \
   o/$ARM64/libc/crt/crt.o \
