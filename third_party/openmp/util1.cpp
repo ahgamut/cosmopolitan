@@ -2054,6 +2054,7 @@ void __kmp_initialize_system_tick() {
 }
 #endif
 
+#ifndef __COSMOPOLITAN__
 /* Determine whether the given address is mapped into the current address
    space. */
 
@@ -2062,12 +2063,7 @@ int __kmp_is_address_mapped(void *addr) {
   int found = 0;
   int rc;
 
-#if defined(__COSMOPOLITAN__)
-
-  (void)rc;
-  found = kisdangerous(addr);
-
-#elif KMP_OS_LINUX || KMP_OS_HURD
+#if KMP_OS_LINUX || KMP_OS_HURD
 
   /* On GNUish OSes, read the /proc/<pid>/maps pseudo-file to get all the
      address ranges mapped into the address space. */
@@ -2236,18 +2232,16 @@ int __kmp_is_address_mapped(void *addr) {
   return found;
 
 } // __kmp_is_address_mapped
+#endif // __COSMOPOLITAN__
 
 #ifdef USE_LOAD_BALANCE
-
-#if KMP_OS_DARWIN || KMP_OS_DRAGONFLY || KMP_OS_FREEBSD || KMP_OS_NETBSD ||    \
-    KMP_OS_OPENBSD || KMP_OS_SOLARIS
 
 // The function returns the rounded value of the system load average
 // during given time interval which depends on the value of
 // __kmp_load_balance_interval variable (default is 60 sec, other values
 // may be 300 sec or 900 sec).
 // It returns -1 in case of error.
-int __kmp_get_load_balance(int max) {
+static int __kmp_get_load_balance_getloadavg(int max) {
   double averages[3];
   int ret_avg = 0;
 
@@ -2271,13 +2265,11 @@ int __kmp_get_load_balance(int max) {
   return ret_avg;
 }
 
-#else // Linux* OS
-
 // The function returns number of running (not sleeping) threads, or -1 in case
 // of error. Error could be reported if Linux* OS kernel too old (without
 // "/proc" support). Counting running threads stops if max running threads
 // encountered.
-int __kmp_get_load_balance(int max) {
+static int __kmp_get_load_balance_linux(int max) {
   static int permanent_error = 0;
   static int glb_running_threads = 0; // Saved count of the running threads for
   // the thread balance algorithm
@@ -2498,9 +2490,16 @@ finish: // Clean up and exit.
 
   return running_threads;
 
-} // __kmp_get_load_balance
+} // __kmp_get_load_balance_linux
 
+int __kmp_get_load_balance(int max) {
+#if KMP_OS_DARWIN || KMP_OS_DRAGONFLY || KMP_OS_FREEBSD || KMP_OS_NETBSD ||    \
+    KMP_OS_OPENBSD || KMP_OS_SOLARIS
+  return __kmp_get_load_balance_getloadavg(max);
+#else // Linux* OS
+  return __kmp_get_load_balance_linux(max);
 #endif // KMP_OS_DARWIN
+} // __kmp_get_load_balance
 
 #endif // USE_LOAD_BALANCE
 
