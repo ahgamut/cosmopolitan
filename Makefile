@@ -133,10 +133,10 @@ endif
 
 ifneq ($(findstring aarch64,$(MODE)),)
 ARCH = aarch64
-HOSTS ?= pi pi5 studio freebsdarm
+HOSTS ?= pi studio freebsdarm
 else
 ARCH = x86_64
-HOSTS ?= freebsd rhel7 xnu win10 openbsd netbsd meatball nightmare
+HOSTS ?= freebsd rhel7 xnu openbsd netbsd win10
 endif
 
 ZIPOBJ_FLAGS += -a$(ARCH)
@@ -149,9 +149,9 @@ export MODE
 export SOURCE_DATE_EPOCH
 export TMPDIR
 
-COSMOCC = .cosmocc/3.2
+COSMOCC = .cosmocc/3.3
 TOOLCHAIN = $(COSMOCC)/bin/$(ARCH)-linux-cosmo-
-DOWNLOAD := $(shell build/download-cosmocc.sh $(COSMOCC) 3.2 28b48682595f0f46b45ab381118cdffdabc8fcfa29aa54e301fe6ffe35269f5e)
+DOWNLOAD := $(shell build/download-cosmocc.sh $(COSMOCC) 3.3 d26ec8f4e48f6db004fc6a9677c7ff3b50c3b21e936e9393158aa2ed51b0b549)
 
 AS = $(TOOLCHAIN)as
 CC = $(TOOLCHAIN)gcc
@@ -206,8 +206,7 @@ endif
 .UNVEIL +=					\
 	libc/integral				\
 	libc/stdbool.h				\
-	libc/disclaimer.inc			\
-	rwc:/dev/shm				\
+		rwc:/dev/shm				\
 	rx:.cosmocc				\
 	rx:build/bootstrap			\
 	r:build/portcosmo.h			\
@@ -556,9 +555,9 @@ o/cosmopolitan.html: private .UNSANDBOXED = 1
 o/cosmopolitan.html:							\
 		o/$(MODE)/third_party/chibicc/chibicc.com.dbg		\
 		$(filter-out %.s,$(foreach x,$(COSMOPOLITAN_OBJECTS),$($(x)_SRCS)))	\
-		$(filter-out %.cc,$(SRCS))				\
+		$(filter-out %.cpp,$(filter-out %.cc,$(SRCS)))				\
 		$(HDRS)
-	$(file >$(TMPDIR)/$(subst /,_,$@),$(filter-out %.cc,$(filter-out %.s,$(foreach x,$(COSMOPOLITAN_OBJECTS),$($(x)_SRCS)))))
+	$(file >$(TMPDIR)/$(subst /,_,$@),$(filter-out %.cpp,$(filter-out %.cc,$(filter-out %.s,$(foreach x,$(COSMOPOLITAN_OBJECTS),$($(x)_SRCS))))))
 	o/$(MODE)/third_party/chibicc/chibicc.com.dbg -J		\
 		-fno-common -include libc/integral/normalize.inc -o $@	\
 		-DCOSMO @$(TMPDIR)/$(subst /,_,$@)
