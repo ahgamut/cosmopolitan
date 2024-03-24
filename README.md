@@ -92,8 +92,8 @@ guaranteed to be compatible and furthermore includes our extensions for
 doing build system sandboxing.
 
 ```sh
-build/bootstrap/make.com -j8
-o//examples/hello.com
+build/bootstrap/make -j8
+o//examples/hello
 ```
 
 Since the Cosmopolitan repository is very large, you might only want to
@@ -103,8 +103,8 @@ depends on core LIBC packages.
 
 ```sh
 rm -rf o//libc o//test
-build/bootstrap/make.com o//test/posix/signal_test.com
-o//test/posix/signal_test.com
+build/bootstrap/make o//test/posix/signal_test
+o//test/posix/signal_test
 ```
 
 Sometimes it's desirable to build a subset of targets, without having to
@@ -112,21 +112,21 @@ list out each individual one. For example if you wanted to build and run
 all the unit tests in the `TEST_POSIX` package, you could say:
 
 ```sh
-build/bootstrap/make.com o//test/posix
+build/bootstrap/make o//test/posix
 ```
 
 Cosmopolitan provides a variety of build modes. For example, if you want
 really tiny binaries (as small as 12kb in size) then you'd say:
 
 ```sh
-build/bootstrap/make.com m=tiny
+build/bootstrap/make m=tiny
 ```
 
 You can furthermore cut out the bloat of other operating systems, and
 have Cosmopolitan become much more similar to Musl Libc.
 
 ```sh
-build/bootstrap/make.com m=tinylinux
+build/bootstrap/make m=tinylinux
 ```
 
 For further details, see [//build/config.mk](build/config.mk).
@@ -179,11 +179,11 @@ end
 src
 ```
 
-You normally run the `.com.dbg` file under gdb. If you need to debug the
-`.com` file itself, then you can load the debug symbols independently as
+You normally run the `.dbg` file under gdb. If you need to debug the
+`` file itself, then you can load the debug symbols independently as
 
 ```sh
-gdb foo.com -ex 'add-symbol-file foo.com.dbg 0x401000'
+gdb foo -ex 'add-symbol-file foo.dbg 0x401000'
 ```
 
 ## Platform Notes
@@ -242,16 +242,16 @@ server. You're welcome to join us! <https://discord.gg/FwAVVu7eJ4>
 
 ## Support Vector
 
-| Platform        | Min Version | Circa |
-| :---            | ---:        | ---:  |
-| AMD             | K8 Venus    | 2005  |
-| Intel           | Core        | 2006  |
-| Linux           | 2.6.18      | 2007  |
-| Windows         | 8 [1]       | 2012  |
-| Mac OS X        | 15.6        | 2018  |
-| OpenBSD         | 7           | 2021  |
-| FreeBSD         | 13          | 2020  |
-| NetBSD          | 9.2         | 2021  |
+| Platform       | Min Version | Circa |
+| :---           | ---:        | ---:  |
+| AMD            | K8 Venus    | 2005  |
+| Intel          | Core        | 2006  |
+| Linux          | 2.6.18      | 2007  |
+| Windows        | 8 [1]       | 2012  |
+| Darwin (macOS) | 23.1.0+     | 2023  |
+| OpenBSD        | 7           | 2021  |
+| FreeBSD        | 13          | 2020  |
+| NetBSD         | 9.2         | 2021  |
 
 [1] See our [vista branch](https://github.com/jart/cosmopolitan/tree/vista)
     for a community supported version of Cosmopolitan that works on Windows

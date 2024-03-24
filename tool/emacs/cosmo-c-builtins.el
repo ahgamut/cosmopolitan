@@ -190,6 +190,16 @@
            "__integer_pack"
            "__is_same"))
 
+        (cuda-builtin-types
+         '("__syncthreads"
+           "__shfl"
+           "__shfl_xor"
+           "__shfl_sync"
+           "__shfl_down"
+           "__shfl_up_sync"
+           "__shfl_down_sync"
+           "__shfl_xor_sync"))
+
         (cosmopolitan-builtin-defines
          '("COSMOPOLITAN_CXX_START_"
            "COSMOPOLITAN_CXX_END_"
@@ -225,6 +235,7 @@
                                 gcc-builtin-functions-sync
                                 gcc-builtin-functions-ia32
                                 gxx-builtin-type-traits
+                                cuda-builtin-types
                                 cosmopolitan-builtin-defines
                                 cosmopolitan-builtin-functions))
             "\\_>")))
