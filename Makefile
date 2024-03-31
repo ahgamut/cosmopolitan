@@ -133,7 +133,7 @@ endif
 
 ifneq ($(findstring aarch64,$(MODE)),)
 ARCH = aarch64
-HOSTS ?= pi studio freebsdarm
+HOSTS ?= pi pi5 studio freebsdarm
 else
 ARCH = x86_64
 HOSTS ?= freebsd rhel7 xnu openbsd netbsd win10
@@ -149,9 +149,9 @@ export MODE
 export SOURCE_DATE_EPOCH
 export TMPDIR
 
-COSMOCC = .cosmocc/3.3.2
+COSMOCC = .cosmocc/3.3.3
 TOOLCHAIN = $(COSMOCC)/bin/$(ARCH)-linux-cosmo-
-DOWNLOAD := $(shell build/download-cosmocc.sh $(COSMOCC) 3.3.2 a695012ffbeac5e26e3c4a740debc15273f47e9a8bdc55e8b76a623154d5914b)
+DOWNLOAD := $(shell build/download-cosmocc.sh $(COSMOCC) 3.3.3 e4d0fa63cd79cc3bfff6c2d015f1776db081409907625aea8ad40cefc1996d08)
 
 AS = $(TOOLCHAIN)as
 CC = $(TOOLCHAIN)gcc
