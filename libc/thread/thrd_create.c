@@ -1,7 +1,7 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
 │ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
-│ Copyright 2022 Justine Alexandra Roberts Tunney                              │
+│ Copyright 2024 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
 │ Permission to use, copy, modify, and/or distribute this software for         │
 │ any purpose with or without fee is hereby granted, provided that the         │
@@ -16,43 +16,20 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/calls.h"
-#include "libc/intrin/safemacros.internal.h"
-#include "libc/limits.h"
-#include "libc/runtime/runtime.h"
-#include "libc/str/str.h"
-#include "libc/temp.h"
+#include "libc/errno.h"
+#include "libc/thread/thread.h"
+#include "libc/thread/threads.h"
 
-/**
- * Displays wall of text in terminal with pagination.
- */
-void __paginate(int fd, const char *s) {
-  int tfd, pid;
-  char *args[3] = {0};
-  char tmppath[] = "/tmp/paginate.XXXXXX";
-  char progpath[PATH_MAX];
-  if (strcmp(nulltoempty(getenv("TERM")), "dumb") && isatty(0) && isatty(1) &&
-      ((args[0] = commandv("less", progpath, sizeof(progpath))) ||
-       (args[0] = commandv("more", progpath, sizeof(progpath))) ||
-       (args[0] = commandv("more.exe", progpath, sizeof(progpath))))) {
-    if ((tfd = mkstemp(tmppath)) != -1) {
-      write(tfd, s, strlen(s));
-      close(tfd);
-      args[1] = tmppath;
-      if ((pid = fork()) != -1) {
-        putenv("LC_ALL=C.UTF-8");
-        putenv("LESSCHARSET=utf-8");
-        putenv("LESS=-RS");
-        if (!pid) {
-          execv(args[0], args);
-          _Exit(127);
-        }
-        waitpid(pid, 0, 0);
-        unlink(tmppath);
-        return;
-      }
-      unlink(tmppath);
-    }
-  }
-  write(fd, s, strlen(s));
+int thrd_create(thrd_t *th, thrd_start_t func, void *arg) {
+  errno_t err;
+  err = pthread_create(th, 0, (void *(*)(void *))func, arg);
+  if (!err)
+    return thrd_success;
+  if (err == ENOMEM)
+    return thrd_nomem;
+  if (err == EAGAIN)
+    return thrd_busy;
+  if (err == EAGAIN)
+    return thrd_busy;
+  return thrd_error;
 }
