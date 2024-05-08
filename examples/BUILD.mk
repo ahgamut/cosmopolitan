@@ -65,7 +65,6 @@ EXAMPLES_DIRECTDEPS =						\
 	LIBC_SYSV_CALLS						\
 	LIBC_TESTLIB						\
 	LIBC_THREAD						\
-	LIBC_TIME						\
 	LIBC_TINYMATH						\
 	LIBC_VGA						\
 	LIBC_X							\
@@ -89,6 +88,7 @@ EXAMPLES_DIRECTDEPS =						\
 	THIRD_PARTY_SED						\
 	THIRD_PARTY_STB						\
 	THIRD_PARTY_TR						\
+	THIRD_PARTY_TZ						\
 	THIRD_PARTY_VQSORT					\
 	THIRD_PARTY_XED						\
 	THIRD_PARTY_ZLIB					\
@@ -154,7 +154,8 @@ o/$(MODE)/examples/picol.dbg:					\
 	@$(APELINK)
 
 o/$(MODE)/usr/share/dict/words.zip.o: private ZIPOBJ_FLAGS += -C2
-o/$(MODE)/examples/wut.o: private COPTS += -fopenmp
+
+o/$(MODE)/examples/blas.o: private COPTS += -O3 -fopenmp
 
 $(EXAMPLES_OBJS): examples/BUILD.mk
 

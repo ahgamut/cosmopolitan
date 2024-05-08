@@ -61,7 +61,7 @@
 #include "libc/sysv/consts/sig.h"
 #include "libc/sysv/consts/termios.h"
 #include "libc/thread/thread.h"
-#include "libc/time/time.h"
+#include "libc/time.h"
 #include "libc/x/x.h"
 #include "third_party/getopt/getopt.internal.h"
 
@@ -225,6 +225,8 @@ const char *const kSafeEnv[] = {
     "TMPDIR",      // needed by compiler
     "SYSTEMROOT",  // needed by socket()
 };
+
+#include "libc/mem/tinymalloc.inc"
 
 void OnAlrm(int sig) {
   ++gotalrm;
