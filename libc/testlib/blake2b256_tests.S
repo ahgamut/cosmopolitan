@@ -1,7 +1,7 @@
-/*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
+/*-*- mode:unix-assembly; indent-tabs-mode:t; tab-width:8; coding:utf-8     -*-│
+│ vi: set noet ft=asm ts=8 sw=8 fenc=utf-8                                 :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
-│ Copyright 2021 Justine Alexandra Roberts Tunney                              │
+│ Copyright 2024 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
 │ Permission to use, copy, modify, and/or distribute this software for         │
 │ any purpose with or without fee is hereby granted, provided that the         │
@@ -16,30 +16,18 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/struct/iovec.h"
-#include "libc/calls/struct/iovec.internal.h"
-#include "libc/errno.h"
+#include "libc/macros.internal.h"
+.rodata
 
-ssize_t __robust_writev(int fd, struct iovec *iov, int iovlen) {
-  ssize_t rc;
-  size_t wrote;
-  do {
-    if ((rc = writev(fd, iov, iovlen)) != -1) {
-      wrote = rc;
-      do {
-        if (wrote >= iov->iov_len) {
-          wrote -= iov->iov_len;
-          ++iov;
-          --iovlen;
-        } else {
-          iov->iov_base = (char *)iov->iov_base + wrote;
-          iov->iov_len -= wrote;
-          wrote = 0;
-        }
-      } while (wrote);
-    } else if (errno != EINTR) {
-      return -1;
-    }
-  } while (iovlen);
-  return 0;
-}
+//	Blake2B256 test vectors.
+	.underrun
+kBlake2b256Tests:
+0:	.incbin	"libc/testlib/blake2b256_tests.txt"
+1:	.byte	0
+	.endobj	kBlake2b256Tests,globl
+	.overrun
+
+	.balign	8
+kBlake2b256TestsSize:
+	.quad	1b-0b
+	.endobj	kBlake2b256TestsSize,globl
