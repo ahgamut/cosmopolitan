@@ -23,45 +23,66 @@
 
 namespace ctl {
 
-string::~string() noexcept
+void
+string::destroy_big() noexcept
 {
-    if (isbig()) {
-        auto* b = big();
-        if (b->n) {
-            if (b->n >= b->c)
-                __builtin_trap();
-            if (b->p[b->n])
-                __builtin_trap();
-        }
-        if (b->c && !b->p)
+    auto* b = big();
+    if (b->n) {
+        if (b->n >= b->c)
             __builtin_trap();
-        free(b->p);
+        if (b->p[b->n])
+            __builtin_trap();
+    }
+    if (b->c && !b->p)
+        __builtin_trap();
+    free(b->p);
+}
+
+void
+string::init_big(const string& s) noexcept
+{
+    char* p2;
+#ifndef NDEBUG
+    if (!s.isbig())
+        __builtin_trap();
+#endif
+    if (s.size() >= s.capacity() >> 1) {
+        if (!(p2 = (char*)malloc(s.capacity())))
+            __builtin_trap();
+        set_big_string(p2, s.size(), s.capacity());
+    } else {
+        init_big(string_view(s));
     }
 }
 
-string::string(const char* s) noexcept : string()
+void
+string::init_big(const string_view s) noexcept
 {
-    append(s, strlen(s));
+    size_t need;
+    char* p2;
+    if (ckd_add(&need, s.n, 1 /* nul */ + 15))
+        __builtin_trap();
+    need &= -16;
+    if (!(p2 = (char*)malloc(need)))
+        __builtin_trap();
+    memcpy(p2, s.p, s.n);
+    p2[s.n] = 0;
+    set_big_string(p2, s.n, need);
 }
 
-string::string(const string& s) noexcept : string()
+void
+string::init_big(const size_t n, const char ch) noexcept
 {
-    append(s.data(), s.size());
-}
-
-string::string(const string_view s) noexcept : string()
-{
-    append(s.p, s.n);
-}
-
-string::string(size_t size, char ch) noexcept : string()
-{
-    resize(size, ch);
-}
-
-string::string(const char* s, size_t size) noexcept : string()
-{
-    append(s, size);
+    size_t need;
+    char* p2;
+    if (ckd_add(&need, n, 1 /* nul */ + 15))
+        __builtin_trap();
+    need &= -16;
+    if (!(p2 = (char*)malloc(need)))
+        __builtin_trap();
+    memset(p2, ch, n);
+    p2[n] = 0;
+    set_big_string(p2, n, need);
 }
 
 const char*
@@ -91,20 +112,17 @@ string::reserve(size_t c2) noexcept
     if (!isbig()) {
         if (!(p2 = (char*)malloc(c2)))
             __builtin_trap();
-        memcpy(p2, data(), size());
-        p2[size()] = 0;
+        memcpy(p2, data(), __::string_size);
     } else {
         if (!(p2 = (char*)realloc(big()->p, c2)))
             __builtin_trap();
     }
     std::atomic_signal_fence(std::memory_order_seq_cst);
-    set_big_capacity(c2);
-    big()->n = n;
-    big()->p = p2;
+    set_big_string(p2, n, c2);
 }
 
 void
-string::resize(size_t n2, char ch) noexcept
+string::resize(const size_t n2, const char ch) noexcept
 {
     size_t c2;
     if (ckd_add(&c2, n2, 1))
@@ -121,7 +139,7 @@ string::resize(size_t n2, char ch) noexcept
 }
 
 void
-string::append(char ch) noexcept
+string::append(const char ch) noexcept
 {
     size_t n2;
     if (ckd_add(&n2, size(), 2))
@@ -142,7 +160,7 @@ string::append(char ch) noexcept
 }
 
 void
-string::grow(size_t size) noexcept
+string::grow(const size_t size) noexcept
 {
     size_t need;
     if (ckd_add(&need, this->size(), size))
@@ -161,7 +179,7 @@ string::grow(size_t size) noexcept
 }
 
 void
-string::append(char ch, size_t size) noexcept
+string::append(const char ch, const size_t size) noexcept
 {
     grow(size);
     if (size)
@@ -175,7 +193,7 @@ string::append(char ch, size_t size) noexcept
 }
 
 void
-string::append(const void* data, size_t size) noexcept
+string::append(const void* data, const size_t size) noexcept
 {
     grow(size);
     if (size)
@@ -257,7 +275,7 @@ string::starts_with(const string_view s) const noexcept
 }
 
 size_t
-string::find(char ch, size_t pos) const noexcept
+string::find(const char ch, const size_t pos) const noexcept
 {
     char* q;
     if ((q = (char*)memchr(data(), ch, size())))
@@ -266,7 +284,7 @@ string::find(char ch, size_t pos) const noexcept
 }
 
 size_t
-string::find(const string_view s, size_t pos) const noexcept
+string::find(const string_view s, const size_t pos) const noexcept
 {
     char* q;
     if (pos > size())
@@ -277,7 +295,7 @@ string::find(const string_view s, size_t pos) const noexcept
 }
 
 string
-string::substr(size_t pos, size_t count) const noexcept
+string::substr(const size_t pos, size_t count) const noexcept
 {
     size_t last;
     if (pos > size())
@@ -292,7 +310,9 @@ string::substr(size_t pos, size_t count) const noexcept
 }
 
 string&
-string::replace(size_t pos, size_t count, const string_view& s) noexcept
+string::replace(const size_t pos,
+                const size_t count,
+                const string_view s) noexcept
 {
     size_t last;
     if (ckd_add(&last, pos, count))
@@ -322,7 +342,7 @@ string::replace(size_t pos, size_t count, const string_view& s) noexcept
 }
 
 string&
-string::insert(size_t i, const string_view s) noexcept
+string::insert(const size_t i, const string_view s) noexcept
 {
     if (i > size())
         __builtin_trap();
@@ -346,7 +366,7 @@ string::insert(size_t i, const string_view s) noexcept
 }
 
 string&
-string::erase(size_t pos, size_t count) noexcept
+string::erase(const size_t pos, size_t count) noexcept
 {
     if (pos > size())
         __builtin_trap();

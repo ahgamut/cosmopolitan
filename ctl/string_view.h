@@ -2,6 +2,7 @@
 // vi: set et ft=cpp ts=4 sts=4 sw=4 fenc=utf-8 :vi
 #ifndef COSMOPOLITAN_CTL_STRINGVIEW_H_
 #define COSMOPOLITAN_CTL_STRINGVIEW_H_
+#include "utility.h"
 
 namespace ctl {
 
@@ -28,7 +29,7 @@ struct string_view
     {
     }
 
-    constexpr string_view(const char* s, size_t n) noexcept : p(s), n(n)
+    constexpr string_view(const char* s, const size_t n) noexcept : p(s), n(n)
     {
     }
 
@@ -36,16 +37,16 @@ struct string_view
     {
     }
 
-    bool operator==(const string_view) const noexcept;
-    bool operator!=(const string_view) const noexcept;
-    bool contains(const string_view) const noexcept;
-    bool ends_with(const string_view) const noexcept;
-    bool starts_with(const string_view) const noexcept;
+    bool operator==(string_view) const noexcept;
+    bool operator!=(string_view) const noexcept;
+    bool contains(string_view) const noexcept;
+    bool ends_with(string_view) const noexcept;
+    bool starts_with(string_view) const noexcept;
     string_view substr(size_t = 0, size_t = npos) const noexcept;
     size_t find(char, size_t = 0) const noexcept;
-    size_t find(const string_view, size_t = 0) const noexcept;
+    size_t find(string_view, size_t = 0) const noexcept;
 
-    constexpr string_view& operator=(const string_view& s) noexcept
+    constexpr string_view& operator=(const string_view s) noexcept
     {
         p = s.p;
         n = s.n;
@@ -72,14 +73,14 @@ struct string_view
         return n;
     }
 
-    constexpr const char& operator[](size_t i) const noexcept
+    constexpr const char& operator[](const size_t i) const noexcept
     {
         if (i >= n)
             __builtin_trap();
         return p[i];
     }
 
-    constexpr void remove_prefix(size_t count)
+    constexpr void remove_prefix(const size_t count)
     {
         if (count > n)
             __builtin_trap();
@@ -87,7 +88,7 @@ struct string_view
         n -= count;
     }
 
-    constexpr void remove_suffix(size_t count)
+    constexpr void remove_suffix(const size_t count)
     {
         if (count > n)
             __builtin_trap();
@@ -133,22 +134,22 @@ struct string_view
         return strcmp(*this, s);
     }
 
-    bool operator<(const string_view& s) const noexcept
+    bool operator<(const string_view s) const noexcept
     {
         return compare(s) < 0;
     }
 
-    bool operator<=(const string_view& s) const noexcept
+    bool operator<=(const string_view s) const noexcept
     {
         return compare(s) <= 0;
     }
 
-    bool operator>(const string_view& s) const noexcept
+    bool operator>(const string_view s) const noexcept
     {
         return compare(s) > 0;
     }
 
-    bool operator>=(const string_view& s) const noexcept
+    bool operator>=(const string_view s) const noexcept
     {
         return compare(s) >= 0;
     }

@@ -62,13 +62,6 @@ o/$(MODE)/libc/intrin/kprintf.o: private		\
 			-Wframe-larger-than=128		\
 			-Walloca-larger-than=128
 
-o/$(MODE)/libc/intrin/asan.o: private			\
-		CFLAGS +=				\
-			-O2				\
-			-finline			\
-			-finline-functions		\
-			-fpatchable-function-entry=0,0
-
 o//libc/intrin/memmove.o: private			\
 		CFLAGS +=				\
 			-fno-toplevel-reorder

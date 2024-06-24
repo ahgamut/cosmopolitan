@@ -16,57 +16,33 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/intrin/describeflags.internal.h"
-#include "libc/intrin/kprintf.h"
-#include "libc/intrin/weaken.h"
-#include "libc/macros.internal.h"
-#include "libc/runtime/memtrack.internal.h"
+#include "libc/intrin/directmap.internal.h"
+#include "libc/intrin/strace.internal.h"
 #include "libc/runtime/runtime.h"
-#include "libc/runtime/winargs.internal.h"
+#include "libc/runtime/syslib.internal.h"
 
-#define UNSHADOW(x) ((int64_t)(MAX(0, (x)-0x7fff8000)) << 3)
-#define FRAME(x)    ((int)((x) >> 16))
-
-static const char *GetFrameName(int x) {
-  if (!x) {
-    return "null";
-  } else if (IsShadowFrame(x)) {
-    return "shadow";
-  } else if (IsAutoFrame(x)) {
-    return "automap";
-  } else if (IsFixedFrame(x)) {
-    return "fixed";
-  } else if (IsStaticStackFrame(x)) {
-    return "stack";
-  } else if (IsGfdsFrame(x)) {
-    return "g_fds";
-  } else if (IsNsyncFrame(x)) {
-    return "nsync";
-  } else if (IsZiposFrame(x)) {
-    return "zipos";
-  } else if (IsMemtrackFrame(x)) {
-    return "memtrack";
-  } else if (IsOldStackFrame(x)) {
-    return "system stack";
-  } else if (((GetStaticStackAddr(0) + GetStackSize()) >> 16) <= x &&
-             x <= ((GetStaticStackAddr(0) + GetStackSize() - 1) >> 16)) {
-    return "static stack";
-  } else if ((int)((intptr_t)__executable_start >> 16) <= x &&
-             x <= (int)(((intptr_t)_end - 1) >> 16)) {
-    return "image";
+/**
+ * Unmaps memory directly with system.
+ *
+ * This function bypasses memtrack. Therefore it won't work on Windows,
+ * but it works on everything else including bare metal.
+ *
+ * @asyncsignalsafe
+ */
+int sys_munmap(void *p, size_t n) {
+  int rc;
+  if (IsXnuSilicon()) {
+    rc = _sysret(__syslib->__munmap(p, n));
+  } else if (IsMetal()) {
+    rc = sys_munmap_metal(p, n);
   } else {
-    return "unknown";
+    rc = __sys_munmap(p, n);
   }
-}
-
-const char *(DescribeFrame)(char buf[32], int x) {
-  if (IsShadowFrame(x)) {
-    ksnprintf(buf, 32, "%s %s %.8x", GetFrameName(x),
-              GetFrameName(FRAME(UNSHADOW(ADDR_32_TO_48(x)))),
-              FRAME(UNSHADOW(ADDR_32_TO_48(x))));
-    return buf;
-  } else {
-    return GetFrameName(x);
-  }
+  if (!rc)
+    __virtualsize -= n;
+  KERNTRACE("sys_munmap(%p, %'zu) → %d", p, n, rc);
+  return rc;
 }

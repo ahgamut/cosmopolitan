@@ -60,7 +60,6 @@ TEST(zipos, test) {
   for (i = 0; i < n; ++i) {
     EXPECT_SYS(0, 0, pthread_join(t[i], 0));
   }
-  __print_maps();
 }
 
 TEST(zipos, erofs) {

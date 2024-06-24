@@ -1,7 +1,7 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
 │ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
-│ Copyright 2020 Justine Alexandra Roberts Tunney                              │
+│ Copyright 2024 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
 │ Permission to use, copy, modify, and/or distribute this software for         │
 │ any purpose with or without fee is hereby granted, provided that the         │
@@ -16,22 +16,15 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/macros.internal.h"
-#include "libc/runtime/memtrack.internal.h"
+#include "libc/dce.h"
 #include "libc/runtime/runtime.h"
+#include "libc/sysv/consts/auxv.h"
 
-// TODO(jart): DELETE
-
-/**
- * Returns true if address isn't stack and was malloc'd or mmap'd.
- *
- * @assume stack addresses are always greater than heap addresses
- * @assume stack memory isn't stored beneath %rsp (-mno-red-zone)
- * @deprecated
- */
-optimizesize bool32 _isheap(const void *p) {
-  intptr_t x, y;
-  x = kAutomapStart;
-  y = x + kAutomapSize;
-  return x <= (intptr_t)p && (intptr_t)p < y;
+int __granularity(void) {
+  if (IsWindows())
+    return 65536;
+  static int res;
+  if (!res)
+    res = getauxval(AT_PAGESZ);
+  return res;
 }

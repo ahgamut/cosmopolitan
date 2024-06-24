@@ -1,7 +1,7 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
 │ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
-│ Copyright 2022 Justine Alexandra Roberts Tunney                              │
+│ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
 │ Permission to use, copy, modify, and/or distribute this software for         │
 │ any purpose with or without fee is hereby granted, provided that the         │
@@ -16,17 +16,32 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/runtime/memtrack.internal.h"
-#include "libc/thread/thread.h"
+#include "libc/calls/syscall-nt.internal.h"
+#include "libc/intrin/maps.h"
+#include "libc/nt/memory.h"
+#include "libc/nt/runtime.h"
+#include "libc/runtime/runtime.h"
+#include "libc/stdio/sysparam.h"
+#include "libc/sysv/consts/auxv.h"
+#include "libc/sysv/errfuns.h"
 
-// nsync depends on this non-nsync lock
+textwindows int sys_msync_nt(char *addr, size_t size, int flags) {
 
-extern pthread_mutex_t __mmi_lock_obj;
+  int pagesz = getauxval(AT_PAGESZ);
+  size = (size + pagesz - 1) & -pagesz;
 
-void __mmi_lock(void) {
-  pthread_mutex_lock(&__mmi_lock_obj);
-}
+  if ((uintptr_t)addr & (pagesz - 1))
+    return einval();
 
-void __mmi_unlock(void) {
-  pthread_mutex_unlock(&__mmi_lock_obj);
+  int rc = 0;
+  for (struct Map *map = __maps.maps; map; map = map->next) {
+    char *beg = MAX(addr, map->addr);
+    char *end = MIN(addr + size, map->addr + map->size);
+    if (beg < end)
+      if (!FlushViewOfFile(beg, end - beg))
+        rc = -1;
+    // TODO(jart): FlushFileBuffers too on g_fds handle if MS_SYNC?
+  }
+
+  return rc;
 }
