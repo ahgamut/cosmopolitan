@@ -91,10 +91,10 @@ fetch() {
 OLD=$PWD
 cd "$OUTDIR/"
 if [ ! -x bin/x86_64-linux-cosmo-gcc ]; then
-  fetch https://github.com/ahgamut/superconfigure/releases/download/z0.0.43/aarch64-gcc.zip
+  fetch https://github.com/ahgamut/superconfigure/releases/download/z0.0.44/aarch64-gcc.zip
   unzip aarch64-gcc.zip
   rm -f aarch64-gcc.zip
-  fetch https://github.com/ahgamut/superconfigure/releases/download/z0.0.43/x86_64-gcc.zip
+  fetch https://github.com/ahgamut/superconfigure/releases/download/z0.0.44/x86_64-gcc.zip
   unzip x86_64-gcc.zip
   rm -f x86_64-gcc.zip
 fi
@@ -115,10 +115,10 @@ for arch in aarch64 x86_64; do
   ln -sf $arch-linux-cosmo-objdump bin/$arch-unknown-cosmo-objdump
   ln -sf $arch-linux-cosmo-readelf bin/$arch-unknown-cosmo-readelf
   ln -sf $arch-linux-cosmo-strip bin/$arch-unknown-cosmo-strip
-  cmp -s libexec/gcc/$arch-linux-cosmo/$GCCVER/ld.bfd libexec/gcc/$arch-linux-cosmo/$GCCVER/ld
-  ln -sf ld.bfd libexec/gcc/$arch-linux-cosmo/$GCCVER/ld
-  cmp -s libexec/gcc/$arch-linux-cosmo/$GCCVER/ld.bfd bin/$arch-linux-cosmo-ld
-  ln -sf ../libexec/gcc/$arch-linux-cosmo/$GCCVER/ld.bfd bin/$arch-linux-cosmo-ld
+  # cmp -s libexec/gcc/$arch-linux-cosmo/$GCCVER/ld.bfd libexec/gcc/$arch-linux-cosmo/$GCCVER/ld
+  # ln -sf ld.bfd libexec/gcc/$arch-linux-cosmo/$GCCVER/ld
+  # cmp -s libexec/gcc/$arch-linux-cosmo/$GCCVER/ld.bfd bin/$arch-linux-cosmo-ld
+  # ln -sf ../libexec/gcc/$arch-linux-cosmo/$GCCVER/ld.bfd bin/$arch-linux-cosmo-ld
   cmp -s libexec/gcc/$arch-linux-cosmo/$GCCVER/as bin/$arch-linux-cosmo-as
   ln -sf ../libexec/gcc/$arch-linux-cosmo/$GCCVER/as bin/$arch-linux-cosmo-as
   cmp -s libexec/gcc/$arch-linux-cosmo/$GCCVER/ld.bfd bin/$arch-linux-cosmo-ld.bfd
