@@ -16,10 +16,22 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/thread/posixthread.internal.h"
+#include "libc/thread/thread.h"
 
-void *randaddr(void) {
-  static unsigned long lcg = 1;
-  lcg *= 6364136223846793005;
-  lcg += 1442695040888963407;
-  return (void *)(lcg >> 48 << 28);
+/**
+ * Garbage collects POSIX threads runtime.
+ *
+ * Let's say you want to run a memory leak detector. You can say:
+ *
+ *     while (!pthread_orphan_np())
+ *       pthread_decimate_np();
+ *
+ * To wait until all threads have exited.
+ *
+ * @return 0 on success, or errno on error
+ */
+int pthread_decimate_np(void) {
+  _pthread_decimate();
+  return 0;
 }

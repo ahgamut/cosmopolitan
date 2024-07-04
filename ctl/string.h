@@ -9,7 +9,7 @@ namespace ctl {
 
 class string;
 
-string strcat(string_view, string_view) noexcept __wur;
+ctl::string strcat(ctl::string_view, ctl::string_view) noexcept __wur;
 
 namespace __ {
 
@@ -66,7 +66,7 @@ class string
         *(((size_t*)blob) + 2) = __::sso_max << (sizeof(size_t) - 1) * 8;
     }
 
-    string(const string_view s) noexcept
+    string(const ctl::string_view s) noexcept
     {
         if (s.n <= __::sso_max) {
             __builtin_memcpy(blob, s.p, s.n);
@@ -89,7 +89,7 @@ class string
     }
 
     string(const char* const p) noexcept
-      : string(string_view(p, __builtin_strlen(p)))
+      : string(ctl::string_view(p, __builtin_strlen(p)))
     {
     }
 
@@ -104,7 +104,7 @@ class string
     }
 
     string(const char* const p, const size_t n) noexcept
-      : string(string_view(p, n))
+      : string(ctl::string_view(p, n))
     {
     }
 
@@ -125,17 +125,17 @@ class string
     void append(char, size_t) noexcept;
     void append(unsigned long) noexcept;
     void append(const void*, size_t) noexcept;
-    string& insert(size_t, string_view) noexcept;
+    string& insert(size_t, ctl::string_view) noexcept;
     string& erase(size_t = 0, size_t = npos) noexcept;
     string substr(size_t = 0, size_t = npos) const noexcept;
-    string& replace(size_t, size_t, string_view) noexcept;
-    bool operator==(string_view) const noexcept;
-    bool operator!=(string_view) const noexcept;
-    bool contains(string_view) const noexcept;
-    bool ends_with(string_view) const noexcept;
-    bool starts_with(string_view) const noexcept;
+    string& replace(size_t, size_t, ctl::string_view) noexcept;
+    bool operator==(ctl::string_view) const noexcept;
+    bool operator!=(ctl::string_view) const noexcept;
+    bool contains(ctl::string_view) const noexcept;
+    bool ends_with(ctl::string_view) const noexcept;
+    bool starts_with(ctl::string_view) const noexcept;
     size_t find(char, size_t = 0) const noexcept;
-    size_t find(string_view, size_t = 0) const noexcept;
+    size_t find(ctl::string_view, size_t = 0) const noexcept;
 
     void swap(string& s) noexcept
     {
@@ -302,14 +302,14 @@ class string
         append(ch);
     }
 
-    void append(const string_view s) noexcept
+    void append(const ctl::string_view s) noexcept
     {
         append(s.p, s.n);
     }
 
-    operator string_view() const noexcept
+    operator ctl::string_view() const noexcept
     {
-        return string_view(data(), size());
+        return ctl::string_view(data(), size());
     }
 
     string& operator=(const char* s) noexcept
@@ -319,7 +319,7 @@ class string
         return *this;
     }
 
-    string& operator=(const string_view s) noexcept
+    string& operator=(const ctl::string_view s) noexcept
     {
         clear();
         append(s);
@@ -332,38 +332,66 @@ class string
         return *this;
     }
 
-    string& operator+=(const string_view s) noexcept
+    string& operator+=(const char* s) noexcept
     {
         append(s);
         return *this;
     }
 
-    string operator+(const string_view s) const noexcept
+    string& operator+=(const ctl::string s) noexcept
+    {
+        append(s);
+        return *this;
+    }
+
+    string& operator+=(const ctl::string_view s) noexcept
+    {
+        append(s);
+        return *this;
+    }
+
+    string operator+(const char c) const noexcept
+    {
+        char s[2] = { c };
+        return strcat(*this, s);
+    }
+
+    string operator+(const char* s) const noexcept
     {
         return strcat(*this, s);
     }
 
-    int compare(const string_view s) const noexcept
+    string operator+(const string& s) const noexcept
+    {
+        return strcat(*this, s);
+    }
+
+    string operator+(const ctl::string_view s) const noexcept
+    {
+        return strcat(*this, s);
+    }
+
+    int compare(const ctl::string_view s) const noexcept
     {
         return strcmp(*this, s);
     }
 
-    bool operator<(const string_view s) const noexcept
+    bool operator<(const ctl::string_view s) const noexcept
     {
         return compare(s) < 0;
     }
 
-    bool operator<=(const string_view s) const noexcept
+    bool operator<=(const ctl::string_view s) const noexcept
     {
         return compare(s) <= 0;
     }
 
-    bool operator>(const string_view s) const noexcept
+    bool operator>(const ctl::string_view s) const noexcept
     {
         return compare(s) > 0;
     }
 
-    bool operator>=(const string_view s) const noexcept
+    bool operator>=(const ctl::string_view s) const noexcept
     {
         return compare(s) >= 0;
     }
@@ -371,7 +399,7 @@ class string
   private:
     void destroy_big() noexcept;
     void init_big(const string&) noexcept;
-    void init_big(string_view) noexcept;
+    void init_big(ctl::string_view) noexcept;
     void init_big(size_t, char) noexcept;
 
     __attribute__((__always_inline__)) bool isbig() const noexcept
@@ -395,7 +423,7 @@ class string
         __b.c = c2 | ~__::big_mask;
     }
 
-    friend string strcat(string_view, string_view) noexcept;
+    friend string strcat(ctl::string_view, ctl::string_view) noexcept;
 
     union
     {
@@ -408,6 +436,33 @@ class string
 static_assert(sizeof(string) == __::string_size);
 static_assert(sizeof(__::small_string) == __::string_size);
 static_assert(sizeof(__::big_string) == __::string_size);
+
+ctl::string
+to_string(int) noexcept;
+
+ctl::string
+to_string(long) noexcept;
+
+ctl::string
+to_string(long long) noexcept;
+
+ctl::string
+to_string(unsigned) noexcept;
+
+ctl::string
+to_string(unsigned long) noexcept;
+
+ctl::string
+to_string(unsigned long long) noexcept;
+
+ctl::string
+to_string(float) noexcept;
+
+ctl::string
+to_string(double) noexcept;
+
+ctl::string
+to_string(long double) noexcept;
 
 } // namespace ctl
 

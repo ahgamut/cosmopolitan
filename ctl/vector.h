@@ -15,6 +15,7 @@
 #include "move_backward.h"
 #include "move_iterator.h"
 #include "out_of_range.h"
+#include "require_input_iterator.h"
 #include "reverse_iterator.h"
 #include "uninitialized_fill.h"
 #include "uninitialized_fill_n.h"
@@ -65,7 +66,7 @@ class vector
         resize(count);
     }
 
-    template<class InputIt>
+    template<class InputIt, typename = ctl::require_input_iterator<InputIt>>
     vector(InputIt first, InputIt last, const Allocator& alloc = Allocator())
       : alloc_(alloc), data_(nullptr), size_(0), capacity_(0)
     {
@@ -173,7 +174,7 @@ class vector
         size_ = count;
     }
 
-    template<class InputIt>
+    template<class InputIt, typename = ctl::require_input_iterator<InputIt>>
     void assign(InputIt first, InputIt last)
     {
         clear();
@@ -189,24 +190,28 @@ class vector
     reference at(size_type pos)
     {
         if (pos >= size_)
-            throw ctl::out_of_range("out of range");
+            throw ctl::out_of_range();
         return data_[pos];
     }
 
     const_reference at(size_type pos) const
     {
         if (pos >= size_)
-            throw ctl::out_of_range("out of range");
+            throw ctl::out_of_range();
         return data_[pos];
     }
 
     reference operator[](size_type pos)
     {
+        if (pos >= size_)
+            __builtin_trap();
         return data_[pos];
     }
 
     const_reference operator[](size_type pos) const
     {
+        if (pos >= size_)
+            __builtin_trap();
         return data_[pos];
     }
 
@@ -368,7 +373,7 @@ class vector
         return it;
     }
 
-    template<class InputIt>
+    template<class InputIt, typename = ctl::require_input_iterator<InputIt>>
     iterator insert(const_iterator pos, InputIt first, InputIt last)
     {
         difference_type count = ctl::distance(first, last);
@@ -406,16 +411,17 @@ class vector
         return erase(pos, pos + 1);
     }
 
-    iterator erase(const_iterator first, const_iterator last)
+    constexpr iterator erase(const_iterator first, const_iterator last)
     {
         difference_type index = first - begin();
         difference_type count = last - first;
         iterator it = begin() + index;
-        ctl::move(it + count, end(), it);
+        for (iterator move_it = it + count; move_it != end(); ++move_it, ++it)
+            *it = ctl::move(*move_it);
         for (difference_type i = 0; i < count; ++i)
             ctl::allocator_traits<Allocator>::destroy(alloc_, end() - i - 1);
         size_ -= count;
-        return it;
+        return begin() + index;
     }
 
     void push_back(const T& value)
