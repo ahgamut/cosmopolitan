@@ -29,22 +29,17 @@
 /**
  * Prints memory mappings.
  */
-void __print_maps(void) {
-  int limit = 13;
-  long maptally = 0;
+void __print_maps(size_t limit) {
   char mappingbuf[8], sb[16];
   __maps_lock();
-  struct Dll *e, *e2;
-  for (e = dll_first(__maps.used); e; e = e2) {
-    e2 = dll_next(__maps.used, e);
-    struct Map *map = MAP_CONTAINER(e);
-    maptally += map->size;
+  for (struct Tree *e = tree_first(__maps.maps); e; e = tree_next(e)) {
+    struct Map *map = MAP_TREE_CONTAINER(e);
     kprintf("%012lx-%012lx %!s", map->addr, map->addr + map->size,
             (DescribeMapping)(mappingbuf, map->prot, map->flags));
     sizefmt(sb, map->size, 1024);
     kprintf(" %!sb", sb);
-    if (map->h && map->h != -1)
-      kprintf(" h=%ld", map->h);
+    if (map->hand && map->hand != -1)
+      kprintf(" hand=%ld", map->hand);
     if (map->iscow)
       kprintf(" cow");
     if (map->readonlyfile)
@@ -53,7 +48,7 @@ void __print_maps(void) {
     if (!--limit)
       break;
   }
-  kprintf("# %'zu bytes in %'zu mappings\n",
-          __maps.pages * getauxval(AT_PAGESZ), __maps.count);
+  kprintf("# %'zu bytes in %'zu mappings\n", __maps.pages * getpagesize(),
+          __maps.count);
   __maps_unlock();
 }

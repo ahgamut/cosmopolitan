@@ -1,7 +1,7 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
 │ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
-│ Copyright 2023 Justine Alexandra Roberts Tunney                              │
+│ Copyright 2024 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
 │ Permission to use, copy, modify, and/or distribute this software for         │
 │ any purpose with or without fee is hereby granted, provided that the         │
@@ -16,12 +16,11 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/runtime/runtime.h"
+#include "libc/intrin/maps.h"
 
-/**
- * Returns granularity of memory manager.
- * @see sysconf(_SC_PAGE_SIZE) which is portable
- */
-int getpagesize(void) {
-  return __granularity();
+void *randaddr(void) {
+  static unsigned long lcg = 1;
+  lcg *= 6364136223846793005;
+  lcg += 1442695040888963407;
+  return (void *)(lcg >> 48 << 28);
 }

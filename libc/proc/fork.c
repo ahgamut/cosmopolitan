@@ -22,6 +22,7 @@
 #include "libc/calls/state.internal.h"
 #include "libc/calls/struct/sigset.h"
 #include "libc/calls/struct/sigset.internal.h"
+#include "libc/calls/struct/timespec.h"
 #include "libc/calls/syscall-nt.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
@@ -45,7 +46,9 @@
 #include "libc/thread/posixthread.internal.h"
 #include "libc/thread/tls.h"
 
-extern atomic_uint free_waiters_mu;
+__static_yoink("_pthread_atfork");
+
+extern pthread_mutex_t _pthread_lock_obj;
 
 static void _onfork_prepare(void) {
   if (_weaken(_pthread_onfork_prepare))
@@ -53,12 +56,10 @@ static void _onfork_prepare(void) {
   _pthread_lock();
   __maps_lock();
   __fds_lock();
-  while (atomic_exchange_explicit(&free_waiters_mu, 1, memory_order_acquire)) {
-  }
+  LOCKTRACE("READY TO ROCK AND ROLL");
 }
 
 static void _onfork_parent(void) {
-  atomic_store_explicit(&free_waiters_mu, 0, memory_order_release);
   __fds_unlock();
   __maps_unlock();
   _pthread_unlock();
@@ -67,13 +68,8 @@ static void _onfork_parent(void) {
 }
 
 static void _onfork_child(void) {
-  pthread_mutexattr_t attr;
-  pthread_mutexattr_init(&attr);
-  pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
-  pthread_mutex_init(&__fds_lock_obj, &attr);
-  atomic_store_explicit(&free_waiters_mu, 0, memory_order_relaxed);
-  pthread_mutexattr_destroy(&attr);
-  _pthread_init();
+  __fds_lock_obj = (pthread_mutex_t)PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;
+  _pthread_lock_obj = (pthread_mutex_t)PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;
   atomic_store_explicit(&__maps.lock, 0, memory_order_relaxed);
   atomic_store_explicit(&__get_tls()->tib_relock_maps, 0, memory_order_relaxed);
   if (_weaken(_pthread_onfork_child))
@@ -81,7 +77,9 @@ static void _onfork_child(void) {
 }
 
 int _fork(uint32_t dwCreationFlags) {
+  long micros;
   struct Dll *e;
+  struct timespec started;
   int ax, dx, tid, parent;
   parent = __pid;
   BLOCK_SIGNALS;
@@ -89,11 +87,13 @@ int _fork(uint32_t dwCreationFlags) {
     __proc_lock();
   if (__threaded)
     _onfork_prepare();
+  started = timespec_real();
   if (!IsWindows()) {
     ax = sys_fork();
   } else {
     ax = sys_fork_nt(dwCreationFlags);
   }
+  micros = timespec_tomicros(timespec_sub(timespec_real(), started));
   if (!ax) {
 
     // get new process id
@@ -138,18 +138,16 @@ int _fork(uint32_t dwCreationFlags) {
     atomic_store_explicit(&pt->pt_canceled, false, memory_order_relaxed);
 
     // run user fork callbacks
-    if (__threaded) {
+    if (__threaded)
       _onfork_child();
-    }
-    STRACE("fork() → 0 (child of %d)", parent);
+    STRACE("fork() → 0 (child of %d; took %ld us)", parent, micros);
   } else {
     // this is the parent process
-    if (__threaded) {
+    if (__threaded)
       _onfork_parent();
-    }
     if (IsWindows())
       __proc_unlock();
-    STRACE("fork() → %d% m", ax);
+    STRACE("fork() → %d% m (took %ld us)", ax, micros);
   }
   ALLOW_SIGNALS;
   return ax;

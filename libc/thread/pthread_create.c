@@ -118,7 +118,7 @@ static int PosixThread(void *arg, int tid) {
   // set long jump handler so pthread_exit can bring control back here
   if (!setjmp(pt->pt_exiter)) {
     sigdelset(&pt->pt_attr.__sigmask, SIGTHR);
-    if (IsWindows()) {
+    if (IsWindows() || IsMetal()) {
       atomic_store_explicit(&__get_tls()->tib_sigmask, pt->pt_attr.__sigmask,
                             memory_order_release);
     } else {
@@ -144,7 +144,7 @@ static int FixupCustomStackOnOpenbsd(pthread_attr_t *attr) {
   size_t n;
   uintptr_t x, y;
   int e, rc, pagesz;
-  pagesz = getauxval(AT_PAGESZ);
+  pagesz = getpagesize();
   n = attr->__stacksize;
   x = (uintptr_t)attr->__stackaddr;
   y = ROUNDUP(x, pagesz);
@@ -210,7 +210,7 @@ static errno_t pthread_create_impl(pthread_t *thread,
     }
   } else {
     // cosmo is managing the stack
-    int pagesize = getauxval(AT_PAGESZ);
+    int pagesize = getpagesize();
     pt->pt_attr.__guardsize = ROUNDUP(pt->pt_attr.__guardsize, pagesize);
     pt->pt_attr.__stacksize = pt->pt_attr.__stacksize;
     if (pt->pt_attr.__guardsize + pagesize > pt->pt_attr.__stacksize) {
@@ -229,20 +229,10 @@ static errno_t pthread_create_impl(pthread_t *thread,
               -1, 0, 0) != pt->pt_attr.__stackaddr) {
         notpossible;
       }
-      if (pt->pt_attr.__guardsize) {
-        if (!IsWindows()) {
-          if (mprotect(pt->pt_attr.__stackaddr, pt->pt_attr.__guardsize,
-                       PROT_NONE)) {
-            notpossible;
-          }
-        } else {
-          uint32_t oldattr;
-          if (!VirtualProtect(pt->pt_attr.__stackaddr, pt->pt_attr.__guardsize,
-                              kNtPageReadwrite | kNtPageGuard, &oldattr)) {
-            notpossible;
-          }
-        }
-      }
+      if (pt->pt_attr.__guardsize)
+        if (mprotect(pt->pt_attr.__stackaddr, pt->pt_attr.__guardsize,
+                     PROT_NONE | PROT_GUARD))
+          notpossible;
     }
     if (!pt->pt_attr.__stackaddr || pt->pt_attr.__stackaddr == MAP_FAILED) {
       rc = errno;

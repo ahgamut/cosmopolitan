@@ -16,15 +16,16 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/dce.h"
-#include "libc/runtime/runtime.h"
-#include "libc/sysv/consts/auxv.h"
+#include "libc/intrin/describeflags.internal.h"
+#include "libc/macros.internal.h"
+#include "libc/sysv/consts/mremap.h"
 
-int __granularity(void) {
-  if (IsWindows())
-    return 65536;
-  static int res;
-  if (!res)
-    res = getauxval(AT_PAGESZ);
-  return res;
+static const struct DescribeFlags kMremapFlags[] = {
+    {MREMAP_MAYMOVE, "MAYMOVE"},  //
+    {MREMAP_FIXED, "FIXED"},      //
+};
+
+const char *(DescribeMremapFlags)(char buf[30], int x) {
+  return DescribeFlags(buf, 30, kMremapFlags, ARRAYLEN(kMremapFlags), "MREMAP_",
+                       x);
 }

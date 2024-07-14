@@ -1,7 +1,7 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
 │ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
-│ Copyright 2022 Justine Alexandra Roberts Tunney                              │
+│ Copyright 2024 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
 │ Permission to use, copy, modify, and/or distribute this software for         │
 │ any purpose with or without fee is hereby granted, provided that the         │
@@ -16,16 +16,25 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/intrin/describeflags.internal.h"
-#include "libc/macros.internal.h"
-#include "libc/sysv/consts/mremap.h"
+#include "libc/intrin/strace.internal.h"
+#include "libc/thread/thread.h"
 
-static const struct DescribeFlags kRemapFlags[] = {
-    {MREMAP_MAYMOVE, "MAYMOVE"},  //
-    {MREMAP_FIXED, "FIXED"},      //
-};
-
-const char *(DescribeRemapFlags)(char buf[48], int x) {
-  return DescribeFlags(buf, 48, kRemapFlags, ARRAYLEN(kRemapFlags), "MREMAP_",
-                       x);
+/**
+ * Delays execution for brief moment.
+ *
+ * @param symbol may be used to strace names of static locks
+ * @param backoff should start at zero and be feed back in
+ * @return new value for backoff
+ */
+int pthread_delay_np(const void *symbol, int backoff) {
+  if (backoff < 7) {
+    volatile int i;
+    for (i = 0; i != 1 << backoff; i++) {
+    }
+    backoff++;
+  } else {
+    STRACE("pthread_delay_np(%t)", symbol);
+    pthread_yield_np();
+  }
+  return backoff;
 }

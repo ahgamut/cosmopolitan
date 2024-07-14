@@ -27,21 +27,26 @@
 
 textwindows int sys_msync_nt(char *addr, size_t size, int flags) {
 
-  int pagesz = getauxval(AT_PAGESZ);
+  int pagesz = getpagesize();
   size = (size + pagesz - 1) & -pagesz;
 
   if ((uintptr_t)addr & (pagesz - 1))
     return einval();
 
   int rc = 0;
-  __maps_lock();
-  for (struct Map *map = __maps.maps; map; map = map->next) {
-    char *beg = MAX(addr, map->addr);
-    char *end = MIN(addr + size, map->addr + map->size);
-    if (beg < end)
-      if (!FlushViewOfFile(beg, end - beg))
-        rc = -1;
-    // TODO(jart): FlushFileBuffers too on g_fds handle if MS_SYNC?
+  if (__maps_lock()) {
+    rc = edeadlk();
+  } else {
+    struct Map *map, *floor;
+    floor = __maps_floor(addr);
+    for (map = floor; map && map->addr <= addr + size; map = __maps_next(map)) {
+      char *beg = MAX(addr, map->addr);
+      char *end = MIN(addr + size, map->addr + map->size);
+      if (beg < end)
+        if (!FlushViewOfFile(beg, end - beg))
+          rc = -1;
+      // TODO(jart): FlushFileBuffers too on g_fds handle if MS_SYNC?
+    }
   }
   __maps_unlock();
 

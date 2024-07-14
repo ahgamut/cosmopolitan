@@ -149,6 +149,16 @@ main()
     }
 
     {
+        // Test lower_bound and upper_bound
+        ctl::set<int> s{ 1, 3, 4, 5, 7, 9 };
+        auto lower = s.lower_bound(4);
+        auto upper = s.upper_bound(4);
+        if (*lower != 4 || *upper != 5)
+            return 18;
+        s.check();
+    }
+
+    {
         // Test emplace
         ctl::set<ctl::pair<int, int>> s;
         auto result = s.emplace(1, 2);

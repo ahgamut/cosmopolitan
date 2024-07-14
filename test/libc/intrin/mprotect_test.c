@@ -120,9 +120,9 @@ void TearDown(void) {
 }
 
 TEST(mprotect, testOkMemory) {
-  char *p = gc(memalign(getauxval(AT_PAGESZ), getauxval(AT_PAGESZ)));
+  char *p = gc(memalign(getpagesize(), getpagesize()));
   p[0] = 0;
-  ASSERT_NE(-1, mprotect(p, getauxval(AT_PAGESZ), PROT_READ | PROT_WRITE));
+  ASSERT_NE(-1, mprotect(p, getpagesize(), PROT_READ | PROT_WRITE));
   p[0] = 1;
   EXPECT_EQ(1, p[0]);
   EXPECT_FALSE(gotsegv);
@@ -131,55 +131,53 @@ TEST(mprotect, testOkMemory) {
 
 TEST(mprotect, testSegfault_writeToReadOnlyAnonymous) {
   volatile char *p;
-  p = gc(memalign(getauxval(AT_PAGESZ), getauxval(AT_PAGESZ)));
+  p = gc(memalign(getpagesize(), getpagesize()));
   EXPECT_FALSE(gotsegv);
   p[0] = 1;
   EXPECT_FALSE(gotsegv);
   EXPECT_FALSE(gotbusted);
-  EXPECT_NE(-1, mprotect((void *)p, getauxval(AT_PAGESZ), PROT_READ));
+  EXPECT_NE(-1, mprotect((void *)p, getpagesize(), PROT_READ));
   __expropriate(p[0]);
   EXPECT_FALSE(gotsegv);
   EXPECT_FALSE(gotbusted);
   p[0] = 2;
   EXPECT_TRUE(gotsegv | gotbusted);
   EXPECT_EQ(1, p[0]);
-  EXPECT_NE(-1,
-            mprotect((void *)p, getauxval(AT_PAGESZ), PROT_READ | PROT_WRITE));
+  EXPECT_NE(-1, mprotect((void *)p, getpagesize(), PROT_READ | PROT_WRITE));
 }
 
 TEST(mprotect, testExecOnly_canExecute) {
-  char *p = _mapanon(__granularity());
+  char *p = _mapanon(getpagesize());
   void (*f)(void) = (void *)p;
   memcpy(p, kRet31337, sizeof(kRet31337));
-  ASSERT_SYS(0, 0, mprotect(p, __granularity(), PROT_EXEC | PROT_READ));
+  ASSERT_SYS(0, 0, mprotect(p, getpagesize(), PROT_EXEC | PROT_READ));
   f();
   // On all supported platforms, PROT_EXEC implies PROT_READ. There is
   // one exception to this rule: Chromebook's fork of the Linux kernel
   // which has been reported, to have the ability to prevent a program
   // from reading its own code.
-  ASSERT_SYS(0, 0, mprotect(p, __granularity(), PROT_EXEC));
+  ASSERT_SYS(0, 0, mprotect(p, getpagesize(), PROT_EXEC));
   f();
-  munmap(p, __granularity());
+  munmap(p, getpagesize());
 }
 
 TEST(mprotect, testProtNone_cantEvenRead) {
   volatile char *p;
-  p = gc(memalign(getauxval(AT_PAGESZ), getauxval(AT_PAGESZ)));
-  EXPECT_NE(-1, mprotect((void *)p, getauxval(AT_PAGESZ), PROT_NONE));
+  p = gc(memalign(getpagesize(), getpagesize()));
+  EXPECT_NE(-1, mprotect((void *)p, getpagesize(), PROT_NONE));
   __expropriate(p[0]);
   EXPECT_TRUE(gotsegv | gotbusted);
-  EXPECT_NE(-1,
-            mprotect((void *)p, getauxval(AT_PAGESZ), PROT_READ | PROT_WRITE));
+  EXPECT_NE(-1, mprotect((void *)p, getpagesize(), PROT_READ | PROT_WRITE));
 }
 
 TEST(mprotect, testExecJit_actuallyWorks) {
-  int (*p)(void) = gc(memalign(getauxval(AT_PAGESZ), getauxval(AT_PAGESZ)));
+  int (*p)(void) = gc(memalign(getpagesize(), getpagesize()));
   memcpy(p, kRet31337, sizeof(kRet31337));
-  EXPECT_NE(-1, mprotect(p, getauxval(AT_PAGESZ), PROT_EXEC));
+  EXPECT_NE(-1, mprotect(p, getpagesize(), PROT_EXEC));
   EXPECT_EQ(31337, p());
   EXPECT_FALSE(gotsegv);
   EXPECT_FALSE(gotbusted);
-  EXPECT_NE(-1, mprotect(p, getauxval(AT_PAGESZ), PROT_READ | PROT_WRITE));
+  EXPECT_NE(-1, mprotect(p, getpagesize(), PROT_READ | PROT_WRITE));
 }
 
 TEST(mprotect, testRwxMap_vonNeumannRules) {
@@ -187,14 +185,13 @@ TEST(mprotect, testRwxMap_vonNeumannRules) {
     return;  // boo
   if (IsXnuSilicon())
     return;  // boo
-  int (*p)(void) = gc(memalign(getauxval(AT_PAGESZ), getauxval(AT_PAGESZ)));
+  int (*p)(void) = gc(memalign(getpagesize(), getpagesize()));
   memcpy(p, kRet31337, sizeof(kRet31337));
-  EXPECT_NE(-1, mprotect(p, getauxval(AT_PAGESZ),
-                         PROT_READ | PROT_WRITE | PROT_EXEC));
+  EXPECT_NE(-1, mprotect(p, getpagesize(), PROT_READ | PROT_WRITE | PROT_EXEC));
   EXPECT_EQ(31337, p());
   EXPECT_FALSE(gotsegv);
   EXPECT_FALSE(gotbusted);
-  EXPECT_NE(-1, mprotect(p, getauxval(AT_PAGESZ), PROT_READ | PROT_WRITE));
+  EXPECT_NE(-1, mprotect(p, getpagesize(), PROT_READ | PROT_WRITE));
 }
 
 TEST(mprotect, testExecuteFlatFileMapOpenedAsReadonly) {
@@ -231,13 +228,13 @@ TEST(mprotect, testFileMap_canChangeToExecWhileOpenInRdwrMode) {
 }
 
 TEST(mprotect, testBadProt_failsEinval) {
-  volatile char *p = gc(memalign(getauxval(AT_PAGESZ), getauxval(AT_PAGESZ)));
+  volatile char *p = gc(memalign(getpagesize(), getpagesize()));
   EXPECT_EQ(-1, mprotect((void *)p, 9999, -1));
   EXPECT_EQ(EINVAL, errno);
 }
 
 TEST(mprotect, testZeroSize_doesNothing) {
-  volatile char *p = gc(memalign(getauxval(AT_PAGESZ), getauxval(AT_PAGESZ)));
+  volatile char *p = gc(memalign(getpagesize(), getpagesize()));
   EXPECT_NE(-1, mprotect((void *)p, 0, PROT_READ));
   p[0] = 1;
   EXPECT_FALSE(gotsegv);
@@ -251,4 +248,42 @@ TEST(mprotect, image) {
   char *p = (char *)i;
   EXPECT_SYS(0, 0, mprotect(p, 16384, PROT_READ | PROT_WRITE));
   EXPECT_EQ(2, ++p[0]);
+}
+
+TEST(mprotect, weirdSize) {
+  char *p;
+  EXPECT_NE(MAP_FAILED, (p = mmap(0, 1, PROT_READ | PROT_EXEC,
+                                  MAP_PRIVATE | MAP_ANONYMOUS, -1, 0)));
+  EXPECT_SYS(0, 0, mprotect(p, 2, PROT_NONE));
+  EXPECT_SYS(0, 0, munmap(p, 1));
+}
+
+TEST(mprotect, outerOverlap) {
+  char *p;
+  int gransz = getgransize();
+  EXPECT_NE(MAP_FAILED, (p = mmap(0, gransz * 3, PROT_READ | PROT_EXEC,
+                                  MAP_PRIVATE | MAP_ANONYMOUS, -1, 0)));
+  EXPECT_TRUE(testlib_memoryexists(p + gransz * 0));
+  EXPECT_TRUE(testlib_memoryexists(p + gransz * 1));
+  EXPECT_TRUE(testlib_memoryexists(p + gransz * 2));
+  EXPECT_SYS(0, 0, munmap(p, gransz));
+  EXPECT_FALSE(testlib_memoryexists(p + gransz * 0));
+  EXPECT_TRUE(testlib_memoryexists(p + gransz * 1));
+  EXPECT_TRUE(testlib_memoryexists(p + gransz * 2));
+  EXPECT_SYS(0, 0, munmap(p + gransz * 2, gransz));
+  EXPECT_FALSE(testlib_memoryexists(p + gransz * 0));
+  EXPECT_TRUE(testlib_memoryexists(p + gransz * 1));
+  EXPECT_FALSE(testlib_memoryexists(p + gransz * 2));
+  EXPECT_SYS(0, 0, mprotect(p, gransz * 3, PROT_NONE));
+  EXPECT_FALSE(testlib_memoryexists(p + gransz * 0));
+  EXPECT_FALSE(testlib_memoryexists(p + gransz * 1));
+  EXPECT_FALSE(testlib_memoryexists(p + gransz * 2));
+  EXPECT_SYS(0, 0, mprotect(p + gransz, gransz, PROT_READ));
+  EXPECT_FALSE(testlib_memoryexists(p + gransz * 0));
+  EXPECT_TRUE(testlib_memoryexists(p + gransz * 1));
+  EXPECT_FALSE(testlib_memoryexists(p + gransz * 2));
+  EXPECT_SYS(0, 0, munmap(p, gransz * 3));
+  EXPECT_FALSE(testlib_memoryexists(p + gransz * 0));
+  EXPECT_FALSE(testlib_memoryexists(p + gransz * 1));
+  EXPECT_FALSE(testlib_memoryexists(p + gransz * 2));
 }

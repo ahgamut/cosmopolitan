@@ -25,6 +25,7 @@
 #include "libc/intrin/kprintf.h"
 #include "libc/intrin/maps.h"
 #include "libc/intrin/strace.internal.h"
+#include "libc/intrin/tree.h"
 #include "libc/nt/memory.h"
 #include "libc/runtime/internal.h"
 #include "libc/runtime/runtime.h"
@@ -51,7 +52,7 @@ static int __mprotect_chunk(char *addr, size_t size, int prot, bool iscow) {
 int __mprotect(char *addr, size_t size, int prot) {
 
   // unix checks prot before checking size
-  if (prot & ~(PROT_READ | PROT_WRITE | PROT_EXEC))
+  if (prot & ~(PROT_READ | PROT_WRITE | PROT_EXEC | PROT_GUARD))
     return einval();
 
   // make new technology consistent with unix
@@ -59,141 +60,144 @@ int __mprotect(char *addr, size_t size, int prot) {
     return 0;
 
   // unix checks prot before checking size
-  int pagesz = getauxval(AT_PAGESZ);
-  if ((intptr_t)addr & (pagesz - 1))
+  int pagesz = getpagesize();
+  if (((intptr_t)addr & (pagesz - 1)) || (uintptr_t)addr + size < size)
     return einval();
+
+  // normalize size
+  size = (size + pagesz - 1) & -pagesz;
 
   // change mappings
   int rc = 0;
-  __maps_lock();
   bool found = false;
-  struct Map *map = __maps.maps;
-  struct Map **prev = &__maps.maps;
-  while (map) {
+  if (__maps_lock()) {
+    __maps_unlock();
+    return edeadlk();
+  }
+  struct Map *map, *floor;
+  floor = __maps_floor(addr);
+  for (map = floor; map && map->addr <= addr + size; map = __maps_next(map)) {
     char *map_addr = map->addr;
     size_t map_size = map->size;
-    struct Map *next = map->next;
     char *beg = MAX(addr, map_addr);
-    char *end = MIN(addr + PGUP(size), map_addr + PGUP(map_size));
-    if (beg < end) {
-      found = true;
-      if (addr <= map_addr && addr + PGUP(size) >= map_addr + PGUP(map_size)) {
-        // change protection of entire mapping
-        if (!__mprotect_chunk(map_addr, map_size, prot, map->iscow)) {
+    char *end = MIN(addr + size, map_addr + PGUP(map_size));
+    if (beg >= end)
+      continue;
+    found = true;
+    if (addr <= map_addr && addr + size >= map_addr + PGUP(map_size)) {
+      // change protection of entire mapping
+      if (!__mprotect_chunk(map_addr, map_size, prot, map->iscow)) {
+        map->prot = prot;
+      } else {
+        rc = -1;
+      }
+    } else if (addr <= map_addr) {
+      // change lefthand side of mapping
+      size_t left = PGUP(addr + size - map_addr);
+      size_t right = map_size - left;
+      struct Map *leftmap;
+      if ((leftmap = __maps_alloc())) {
+        if (!__mprotect_chunk(map_addr, left, prot, false)) {
+          leftmap->addr = map_addr;
+          leftmap->size = left;
+          leftmap->prot = prot;
+          leftmap->off = map->off;
+          leftmap->flags = map->flags;
+          leftmap->iscow = map->iscow;
+          leftmap->readonlyfile = map->readonlyfile;
+          leftmap->hand = map->hand;
+          map->addr += left;
+          map->size = right;
+          map->hand = -1;
+          if (!(map->flags & MAP_ANONYMOUS))
+            map->off += left;
+          tree_insert(&__maps.maps, &leftmap->tree, __maps_compare);
+          __maps.count += 1;
+          __maps_check();
+        } else {
+          __maps_free(leftmap);
+          rc = -1;
+        }
+      } else {
+        rc = -1;
+      }
+    } else if (addr + size >= map_addr + PGUP(map_size)) {
+      // change righthand side of mapping
+      size_t left = addr - map_addr;
+      size_t right = map_addr + map_size - addr;
+      struct Map *leftmap;
+      if ((leftmap = __maps_alloc())) {
+        if (!__mprotect_chunk(map_addr + left, right, prot, false)) {
+          leftmap->addr = map_addr;
+          leftmap->size = left;
+          leftmap->off = map->off;
+          leftmap->prot = map->prot;
+          leftmap->flags = map->flags;
+          leftmap->iscow = map->iscow;
+          leftmap->readonlyfile = map->readonlyfile;
+          leftmap->hand = map->hand;
+          map->addr += left;
+          map->size = right;
           map->prot = prot;
+          map->hand = -1;
+          if (!(map->flags & MAP_ANONYMOUS))
+            map->off += left;
+          tree_insert(&__maps.maps, &leftmap->tree, __maps_compare);
+          __maps.count += 1;
+          __maps_check();
         } else {
+          __maps_free(leftmap);
           rc = -1;
         }
-      } else if (IsWindows()) {
-        // windows does allow changing protection at 4096 byte chunks
-        // however we currently don't have data structures that track
-        // this within the 64 kb map granules that can't be broken up
-        if (__mprotect_chunk(beg, end - beg, prot, map->iscow) == -1)
-          rc = -1;
-      } else if (addr <= map_addr) {
-        // cleave lefthand side of mapping
-        size_t left = PGUP(addr + size - map_addr);
-        size_t right = map_size - left;
-        struct Map *leftmap;
-        if ((leftmap = __maps_alloc())) {
-          if (!__mprotect_chunk(map_addr, left, prot, false)) {
-            leftmap->next = map;
-            leftmap->addr = map_addr;
-            leftmap->size = left;
-            leftmap->prot = prot;
-            leftmap->off = map->off;
-            leftmap->flags = map->flags;
-            map->addr += left;
-            map->size = right;
-            if (!(map->flags & MAP_ANONYMOUS))
-              map->off += left;
-            dll_make_first(&__maps.used, &leftmap->elem);
-            *prev = leftmap;
-            __maps.count += 1;
-            __maps_check();
-          } else {
-            __maps_free(leftmap);
-            rc = -1;
-          }
-        } else {
-          rc = -1;
-        }
-      } else if (addr + PGUP(size) >= map_addr + PGUP(map_size)) {
-        // cleave righthand side of mapping
-        size_t left = addr - map_addr;
-        size_t right = map_addr + map_size - addr;
-        struct Map *leftmap;
-        if ((leftmap = __maps_alloc())) {
-          if (!__mprotect_chunk(map_addr + left, right, prot, false)) {
-            leftmap->next = map;
+      } else {
+        rc = -1;
+      }
+    } else {
+      // change middle of mapping
+      size_t left = addr - map_addr;
+      size_t middle = size;
+      size_t right = map_size - middle - left;
+      struct Map *leftmap;
+      if ((leftmap = __maps_alloc())) {
+        struct Map *midlmap;
+        if ((midlmap = __maps_alloc())) {
+          if (!__mprotect_chunk(map_addr + left, middle, prot, false)) {
             leftmap->addr = map_addr;
             leftmap->size = left;
             leftmap->off = map->off;
             leftmap->prot = map->prot;
             leftmap->flags = map->flags;
-            map->addr += left;
+            leftmap->iscow = map->iscow;
+            leftmap->readonlyfile = map->readonlyfile;
+            leftmap->hand = map->hand;
+            midlmap->addr = map_addr + left;
+            midlmap->size = middle;
+            midlmap->off = (map->flags & MAP_ANONYMOUS) ? 0 : map->off + left;
+            midlmap->prot = prot;
+            midlmap->flags = map->flags;
+            midlmap->hand = -1;
+            map->addr += left + middle;
             map->size = right;
-            map->prot = prot;
+            map->hand = -1;
             if (!(map->flags & MAP_ANONYMOUS))
-              map->off += left;
-            dll_make_first(&__maps.used, &leftmap->elem);
-            *prev = leftmap;
-            __maps.count += 1;
+              map->off += left + middle;
+            tree_insert(&__maps.maps, &leftmap->tree, __maps_compare);
+            tree_insert(&__maps.maps, &midlmap->tree, __maps_compare);
+            __maps.count += 2;
             __maps_check();
           } else {
+            __maps_free(midlmap);
             __maps_free(leftmap);
             rc = -1;
           }
         } else {
+          __maps_free(leftmap);
           rc = -1;
         }
       } else {
-        // punch hole in mapping
-        size_t left = addr - map_addr;
-        size_t middle = PGUP(size);
-        size_t right = map_size - middle - left;
-        struct Map *leftmap;
-        if ((leftmap = __maps_alloc())) {
-          struct Map *midlmap;
-          if ((midlmap = __maps_alloc())) {
-            if (!__mprotect_chunk(map_addr + left, middle, prot, false)) {
-              leftmap->next = midlmap;
-              leftmap->addr = map_addr;
-              leftmap->size = left;
-              leftmap->off = map->off;
-              leftmap->prot = map->prot;
-              leftmap->flags = map->flags;
-              midlmap->next = map;
-              midlmap->addr = map_addr + left;
-              midlmap->size = middle;
-              midlmap->off = (map->flags & MAP_ANONYMOUS) ? 0 : map->off + left;
-              midlmap->prot = prot;
-              midlmap->flags = map->flags;
-              map->addr += left + middle;
-              map->size = right;
-              if (!(map->flags & MAP_ANONYMOUS))
-                map->off += left + middle;
-              dll_make_first(&__maps.used, &leftmap->elem);
-              dll_make_first(&__maps.used, &midlmap->elem);
-              *prev = leftmap;
-              __maps.count += 2;
-              __maps_check();
-            } else {
-              __maps_free(midlmap);
-              __maps_free(leftmap);
-              rc = -1;
-            }
-          } else {
-            __maps_free(leftmap);
-            rc = -1;
-          }
-        } else {
-          rc = -1;
-        }
+        rc = -1;
       }
     }
-    prev = &map->next;
-    map = next;
   }
 
   // allow user to change mappings unknown to cosmo runtime
