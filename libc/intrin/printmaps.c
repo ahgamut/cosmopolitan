@@ -18,7 +18,7 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/fmt/conv.h"
 #include "libc/fmt/itoa.h"
-#include "libc/intrin/describeflags.internal.h"
+#include "libc/intrin/describeflags.h"
 #include "libc/intrin/kprintf.h"
 #include "libc/intrin/maps.h"
 #include "libc/macros.internal.h"
@@ -48,7 +48,7 @@ void __print_maps(size_t limit) {
     if (!--limit)
       break;
   }
-  kprintf("# %'zu bytes in %'zu mappings\n", __maps.pages * getpagesize(),
+  kprintf("# %'zu bytes in %'zu mappings\n", __maps.pages * __pagesize,
           __maps.count);
   __maps_unlock();
 }

@@ -1,5 +1,5 @@
-/*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
+/*-*- mode:unix-assembly; indent-tabs-mode:t; tab-width:8; coding:utf-8     -*-│
+│ vi: set et ft=asm ts=8 tw=8 fenc=utf-8                                   :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
 │ Copyright 2024 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
@@ -16,11 +16,13 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/intrin/maps.h"
+#include "libc/macros.internal.h"
 
-void *randaddr(void) {
-  static unsigned long lcg = 1;
-  lcg *= 6364136223846793005;
-  lcg += 1442695040888963407;
-  return (void *)(lcg >> 48 << 28);
-}
+	.init.start 251,_init_pagesize
+	push	%rdi
+	push	%rsi
+	mov	%r15,%rdi
+	call	__pagesize_init
+	pop	%rsi
+	pop	%rdi
+	.init.end 251,_init_pagesize

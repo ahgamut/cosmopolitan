@@ -17,7 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/cxxabi.h"
-#include "libc/intrin/cxaatexit.internal.h"
+#include "libc/intrin/cxaatexit.h"
 #include "libc/intrin/dll.h"
 #include "libc/intrin/kprintf.h"
 #include "libc/intrin/weaken.h"
@@ -44,7 +44,7 @@ void __may_leak(void *alloc) {
     return;
   pthread_mutex_lock(&lock);
   if (dll_is_empty(freaks)) {
-    int g = getgransize();
+    int g = __gransize;
     struct Leak *p = _mapanon(g);
     int n = g / sizeof(struct Leak);
     for (int i = 0; i < n; ++i) {

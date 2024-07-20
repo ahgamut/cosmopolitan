@@ -22,7 +22,7 @@
 #include "libc/dce.h"
 #include "libc/elf/tinyelf.internal.h"
 #include "libc/errno.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/strace.h"
 #include "libc/limits.h"
 #include "libc/log/libfatal.internal.h"
 #include "libc/macros.internal.h"
@@ -49,7 +49,7 @@ static struct SymbolTable *OpenSymbolTableImpl(const char *filename) {
   size_t n, m, tsz, size;
   const Elf64_Sym *symtab, *sym;
   ptrdiff_t names_offset, name_base_offset, stp_offset;
-  long pagesz = getpagesize();
+  long pagesz = __pagesize;
   map = MAP_FAILED;
   if ((fd = open(filename, O_RDONLY | O_CLOEXEC)) == -1)
     return 0;

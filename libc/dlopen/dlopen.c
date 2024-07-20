@@ -38,7 +38,7 @@
 #include "libc/fmt/itoa.h"
 #include "libc/intrin/atomic.h"
 #include "libc/intrin/kprintf.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/strace.h"
 #include "libc/limits.h"
 #include "libc/nt/dll.h"
 #include "libc/nt/enum/filemapflags.h"
@@ -303,7 +303,7 @@ static wontreturn dontinstrument void foreign_helper(void **p) {
 static dontinline void elf_exec(const char *file, char **envp) {
 
   // get microprocessor page size
-  long pagesz = getpagesize();
+  long pagesz = __pagesize;
 
   // load helper executable into address space
   struct Loaded prog;

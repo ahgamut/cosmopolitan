@@ -28,19 +28,19 @@
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/intrin/atomic.h"
-#include "libc/intrin/describebacktrace.internal.h"
-#include "libc/intrin/describeflags.internal.h"
-#include "libc/intrin/directmap.internal.h"
-#include "libc/intrin/dll.h"
+#include "libc/intrin/describebacktrace.h"
+#include "libc/intrin/describeflags.h"
+#include "libc/intrin/directmap.h"
 #include "libc/intrin/kprintf.h"
 #include "libc/intrin/maps.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/strace.h"
 #include "libc/intrin/weaken.h"
 #include "libc/nt/memory.h"
 #include "libc/nt/runtime.h"
 #include "libc/runtime/runtime.h"
 #include "libc/runtime/stack.h"
 #include "libc/runtime/zipos.internal.h"
+#include "libc/stdio/rand.h"
 #include "libc/stdio/sysparam.h"
 #include "libc/sysv/consts/auxv.h"
 #include "libc/sysv/consts/map.h"
@@ -51,9 +51,9 @@
 #include "libc/thread/thread.h"
 #include "libc/thread/tls.h"
 
-#define MMDEBUG IsModeDbg()
-#define WINBASE (1ul << 35)              // 34 gb
-#define WINMAXX ((1ul << 44) - WINBASE)  // 17 tb
+#define MMDEBUG   IsModeDbg()
+#define MAX_SIZE  0x0ff800000000ul
+#define MAX_TRIES 10
 
 #define MAP_FIXED_NOREPLACE_linux 0x100000
 
@@ -101,7 +101,7 @@ void __maps_check(void) {
 #if MMDEBUG
   size_t maps = 0;
   size_t pages = 0;
-  int pagesz = getpagesize();
+  int pagesz = __pagesize;
   static unsigned mono;
   unsigned id = ++mono;
   for (struct Map *map = __maps_first(); map; map = __maps_next(map)) {
@@ -124,7 +124,7 @@ void __maps_check(void) {
 }
 
 static int __muntrack(char *addr, size_t size, int pagesz,
-                      struct Dll **deleted) {
+                      struct Map **deleted) {
   int rc = 0;
   struct Map *map;
   struct Map *next;
@@ -140,15 +140,13 @@ static int __muntrack(char *addr, size_t size, int pagesz,
     if (addr <= map_addr && addr + PGUP(size) >= map_addr + PGUP(map_size)) {
       // remove mapping completely
       tree_remove(&__maps.maps, &map->tree);
-      dll_init(&map->free);
-      dll_make_first(deleted, &map->free);
+      map->free = *deleted;
+      *deleted = map;
       __maps.pages -= (map_size + pagesz - 1) / pagesz;
       __maps.count -= 1;
       __maps_check();
     } else if (IsWindows()) {
-      // you can't carve up memory maps on windows. our mmap() makes
-      // this not a problem (for non-enormous memory maps) by making
-      // independent mappings for each 64 kb granule, under the hood
+      // you can't carve up memory maps on windows ;_;
       rc = einval();
     } else if (addr <= map_addr) {
       // shave off lefthand side of mapping
@@ -166,8 +164,8 @@ static int __muntrack(char *addr, size_t size, int pagesz,
         __maps.pages -= (left + pagesz - 1) / pagesz;
         leftmap->addr = map_addr;
         leftmap->size = left;
-        dll_init(&leftmap->free);
-        dll_make_first(deleted, &leftmap->free);
+        leftmap->free = *deleted;
+        *deleted = leftmap;
         __maps_check();
       } else {
         rc = -1;
@@ -182,8 +180,8 @@ static int __muntrack(char *addr, size_t size, int pagesz,
         __maps.pages -= (right + pagesz - 1) / pagesz;
         rightmap->addr = addr;
         rightmap->size = right;
-        dll_init(&rightmap->free);
-        dll_make_first(deleted, &rightmap->free);
+        rightmap->free = *deleted;
+        *deleted = rightmap;
         __maps_check();
       } else {
         rc = -1;
@@ -211,8 +209,8 @@ static int __muntrack(char *addr, size_t size, int pagesz,
           __maps.count += 1;
           middlemap->addr = addr;
           middlemap->size = size;
-          dll_init(&middlemap->free);
-          dll_make_first(deleted, &middlemap->free);
+          middlemap->free = *deleted;
+          *deleted = middlemap;
           __maps_check();
         } else {
           rc = -1;
@@ -228,8 +226,21 @@ static int __muntrack(char *addr, size_t size, int pagesz,
 void __maps_free(struct Map *map) {
   map->size = 0;
   map->addr = MAP_FAILED;
-  dll_init(&map->free);
-  dll_make_first(&__maps.free, &map->free);
+  map->free = atomic_load_explicit(&__maps.free, memory_order_relaxed);
+  for (;;) {
+    if (atomic_compare_exchange_weak_explicit(&__maps.free, &map->free, map,
+                                              memory_order_release,
+                                              memory_order_relaxed))
+      break;
+  }
+}
+
+static void __maps_free_all(struct Map *list) {
+  struct Map *next;
+  for (struct Map *map = list; map; map = next) {
+    next = map->free;
+    __maps_free(map);
+  }
 }
 
 static void __maps_insert(struct Map *map) {
@@ -247,13 +258,13 @@ static void __maps_insert(struct Map *map) {
       if (prot == other->prot && flags == other->flags) {
         if (!coalesced) {
           if (map->addr == other->addr + other->size) {
-            __maps.pages += (map->size + getpagesize() - 1) / getpagesize();
+            __maps.pages += (map->size + __pagesize - 1) / __pagesize;
             other->size += map->size;
             __maps_free(map);
             __maps_check();
             coalesced = true;
           } else if (map->addr + map->size == other->addr) {
-            __maps.pages += (map->size + getpagesize() - 1) / getpagesize();
+            __maps.pages += (map->size + __pagesize - 1) / __pagesize;
             other->addr -= map->size;
             other->size += map->size;
             __maps_free(map);
@@ -276,20 +287,21 @@ static void __maps_insert(struct Map *map) {
   }
 
   // otherwise insert new mapping
-  __maps.pages += (map->size + getpagesize() - 1) / getpagesize();
+  __maps.pages += (map->size + __pagesize - 1) / __pagesize;
   __maps_add(map);
   __maps_check();
 }
 
 struct Map *__maps_alloc(void) {
-  struct Dll *e;
   struct Map *map;
-  if ((e = dll_first(__maps.free))) {
-    dll_remove(&__maps.free, e);
-    map = MAP_FREE_CONTAINER(e);
-    return map;
+  map = atomic_load_explicit(&__maps.free, memory_order_relaxed);
+  while (map) {
+    if (atomic_compare_exchange_weak_explicit(&__maps.free, &map, map->free,
+                                              memory_order_acquire,
+                                              memory_order_relaxed))
+      return map;
   }
-  int gransz = getgransize();
+  int gransz = __gransize;
   struct DirectMap sys = sys_mmap(0, gransz, PROT_READ | PROT_WRITE,
                                   MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
   if (sys.addr == MAP_FAILED)
@@ -300,7 +312,9 @@ struct Map *__maps_alloc(void) {
   map->prot = PROT_READ | PROT_WRITE;
   map->flags = MAP_PRIVATE | MAP_ANONYMOUS | MAP_NOFORK;
   map->hand = sys.maphandle;
+  __maps_lock();
   __maps_insert(map++);
+  __maps_unlock();
   map->addr = MAP_FAILED;
   for (int i = 1; i < gransz / sizeof(struct Map) - 1; ++i)
     __maps_free(map + i);
@@ -310,8 +324,8 @@ struct Map *__maps_alloc(void) {
 static int __munmap(char *addr, size_t size) {
 
   // validate arguments
-  int pagesz = getpagesize();
-  int gransz = getgransize();
+  int pagesz = __pagesize;
+  int gransz = __gransize;
   if (((uintptr_t)addr & (gransz - 1)) ||  //
       !size || (uintptr_t)addr + size < size)
     return einval();
@@ -335,14 +349,13 @@ static int __munmap(char *addr, size_t size) {
     }
 
   // untrack mappings
-  struct Dll *deleted = 0;
+  struct Map *deleted = 0;
   __muntrack(addr, pgup_size, pagesz, &deleted);
   __maps_unlock();
 
   // delete mappings
   int rc = 0;
-  for (struct Dll *e = dll_first(deleted); e; e = dll_next(deleted, e)) {
-    struct Map *map = MAP_FREE_CONTAINER(e);
+  for (struct Map *map = deleted; map; map = map->free) {
     if (!IsWindows()) {
       if (sys_munmap(map->addr, map->size))
         rc = -1;
@@ -356,13 +369,37 @@ static int __munmap(char *addr, size_t size) {
   }
 
   // free mappings
-  if (!dll_is_empty(deleted)) {
-    __maps_lock();
-    dll_make_first(&__maps.free, deleted);
-    __maps_unlock();
-  }
+  __maps_free_all(deleted);
 
   return rc;
+}
+
+void *__maps_randaddr(void) {
+  uintptr_t addr;
+  addr = _rand64();
+  addr &= 0x007fffffffff;
+  addr |= 0x004000000000;
+  addr &= -__gransize;
+  return (void *)addr;
+}
+
+void *__maps_pickaddr(size_t size) {
+  char *addr;
+  for (int try = 0; try < MAX_TRIES; ++try) {
+    addr = atomic_exchange_explicit(&__maps.pick, 0, memory_order_acq_rel);
+    if (!addr)
+      addr = __maps_randaddr();
+    __maps_lock();
+    bool overlaps = __maps_overlaps(addr, size, __pagesize);
+    __maps_unlock();
+    if (!overlaps) {
+      atomic_store_explicit(&__maps.pick,
+                            addr + ((size + __gransize - 1) & __gransize),
+                            memory_order_release);
+      return addr;
+    }
+  }
+  return 0;
 }
 
 static void *__mmap_chunk(void *addr, size_t size, int prot, int flags, int fd,
@@ -392,23 +429,16 @@ static void *__mmap_chunk(void *addr, size_t size, int prot, int flags, int fd,
 
   // allocate Map object
   struct Map *map;
-  if (__maps_lock()) {
-    __maps_unlock();
-    return (void *)edeadlk();
-  }
-  __maps_check();
-  map = __maps_alloc();
-  __maps_unlock();
-  if (!map)
+  if (!(map = __maps_alloc()))
     return MAP_FAILED;
 
   // remove mapping we blew away
   if (IsWindows() && should_untrack)
-    if (__munmap(addr, size))
-      return MAP_FAILED;
+    __munmap(addr, size);
 
   // obtain mapping from operating system
   int olderr = errno;
+  int tries = MAX_TRIES;
   struct DirectMap res;
 TryAgain:
   res = sys_mmap(addr, size, prot, sysflags, fd, off);
@@ -418,15 +448,14 @@ TryAgain:
         errno = EEXIST;
       } else if (should_untrack) {
         errno = ENOMEM;
-      } else {
-        addr += gransz;
+      } else if (--tries && (addr = __maps_pickaddr(size))) {
         errno = olderr;
         goto TryAgain;
+      } else {
+        errno = ENOMEM;
       }
     }
-    __maps_lock();
     __maps_free(map);
-    __maps_unlock();
     return MAP_FAILED;
   }
 
@@ -440,21 +469,15 @@ TryAgain:
       UnmapViewOfFile(res.addr);
       CloseHandle(res.maphandle);
     }
-    __maps_lock();
     __maps_free(map);
-    __maps_unlock();
     return (void *)eexist();
   }
 
   // untrack mapping we blew away
   if (!IsWindows() && should_untrack) {
-    struct Dll *deleted = 0;
+    struct Map *deleted = 0;
     __muntrack(res.addr, size, pagesz, &deleted);
-    if (!dll_is_empty(deleted)) {
-      __maps_lock();
-      dll_make_first(&__maps.free, deleted);
-      __maps_unlock();
-    }
+    __maps_free_all(deleted);
   }
 
   // track map object
@@ -491,71 +514,33 @@ static void *__mmap_impl(char *addr, size_t size, int prot, int flags, int fd,
     }
   }
 
-  // mmap works fine on unix
-  if (!IsWindows())
-    return __mmap_chunk(addr, size, prot, flags, fd, off, pagesz, gransz);
+  // try to pick our own addresses on windows which are higher up in the
+  // vaspace. this is important so that conflicts are less likely, after
+  // forking when resurrecting mappings, because win32 has a strong pref
+  // with lower memory addresses which may get assigned to who knows wut
+  if (IsWindows() && !addr)
+    if (!(addr = __maps_pickaddr(size)))
+      return (void *)enomem();
 
-  // if the concept of pagesz wasn't exciting enough
-  if (!addr && !(flags & (MAP_FIXED | MAP_FIXED_NOREPLACE))) {
-    size_t rollo, rollo2, slab = (size + gransz - 1) & -gransz;
-    rollo = atomic_load_explicit(&__maps.rollo, memory_order_relaxed);
-    for (;;) {
-      if ((rollo2 = rollo + slab) > WINMAXX) {
-        rollo = 0;
-        rollo2 = slab;
-      }
-      if (atomic_compare_exchange_weak_explicit(&__maps.rollo, &rollo, rollo2,
-                                                memory_order_acq_rel,
-                                                memory_order_relaxed)) {
-        addr = (char *)WINBASE + rollo;
-        break;
-      }
-    }
-  }
-
-  // windows forbids unmapping a subset of a map once it's made
-  if (size <= gransz || size > 100 * 1024 * 1024)
-    return __mmap_chunk(addr, size, prot, flags, fd, off, pagesz, gransz);
-
-  // so we create a separate map for each granule in the mapping
-  if (!(flags & MAP_FIXED)) {
-    while (__maps_overlaps(addr, size, pagesz)) {
-      if (flags & MAP_FIXED_NOREPLACE)
-        return (void *)eexist();
-      addr += gransz;
-    }
-  }
-  char *res = addr;
-  while (size) {
-    char *got;
-    size_t amt = MIN(size, gransz);
-    got = __mmap_chunk(addr, amt, prot, flags, fd, off, pagesz, gransz);
-    if (got != addr) {
-      if (got != MAP_FAILED)
-        __munmap(got, amt);
-      if (addr > res)
-        __munmap(res, addr - res);
-      errno = EAGAIN;
-      return MAP_FAILED;
-    }
-    size -= amt;
-    addr += amt;
-    off += amt;
-  }
-  return res;
+  return __mmap_chunk(addr, size, prot, flags, fd, off, pagesz, gransz);
 }
 
 static void *__mmap(char *addr, size_t size, int prot, int flags, int fd,
                     int64_t off) {
   char *res;
-  int pagesz = getpagesize();
-  int gransz = getgransize();
+  int pagesz = __pagesize;
+  int gransz = __gransize;
 
   // validate arguments
-  if (((uintptr_t)addr & (gransz - 1)) ||  //
-      !size || (uintptr_t)addr + size < size)
+  if ((uintptr_t)addr & (gransz - 1))
+    addr = NULL;
+  if (!addr && (flags & (MAP_FIXED | MAP_FIXED_NOREPLACE)))
+    return (void *)eperm();
+  if ((intptr_t)addr < 0)
+    return (void *)enomem();
+  if (!size || (uintptr_t)addr + size < size)
     return (void *)einval();
-  if (size > WINMAXX)
+  if (size > MAX_SIZE)
     return (void *)enomem();
   if (__maps.count * pagesz + size > __virtualmax)
     return (void *)enomem();
@@ -632,25 +617,23 @@ static void *__mremap_impl(char *old_addr, size_t old_size, size_t new_size,
   } else {
     res = sys_mremap(old_addr, old_size, new_size, flags, (uintptr_t)new_addr);
   }
+  if (res == MAP_FAILED)
+    __maps_free(map);
 
   // re-acquire lock if needed
   if (!flags)
     __maps_lock();
 
-  // check result
-  if (res == MAP_FAILED) {
-    __maps_free(map);
+  if (res == MAP_FAILED)
     return MAP_FAILED;
-  }
 
   if (!(flags & MREMAP_MAYMOVE))
     ASSERT(res == old_addr);
 
   // untrack old mapping
-  struct Dll *deleted = 0;
+  struct Map *deleted = 0;
   __muntrack(old_addr, old_size, pagesz, &deleted);
-  dll_make_first(&__maps.free, deleted);
-  deleted = 0;
+  __maps_free_all(deleted);
 
   // track map object
   map->addr = res;
@@ -666,8 +649,8 @@ static void *__mremap_impl(char *old_addr, size_t old_size, size_t new_size,
 static void *__mremap(char *old_addr, size_t old_size, size_t new_size,
                       int flags, char *new_addr) {
 
-  int pagesz = getpagesize();
-  int gransz = getgransize();
+  int pagesz = __pagesize;
+  int gransz = __gransize;
 
   // kernel support
   if (!IsLinux() && !IsNetbsd())
@@ -702,9 +685,9 @@ static void *__mremap(char *old_addr, size_t old_size, size_t new_size,
     return (void *)einval();
 
   // check for big size
-  if (old_size > WINMAXX)
+  if (old_size > MAX_SIZE)
     return (void *)enomem();
-  if (new_size > WINMAXX)
+  if (new_size > MAX_SIZE)
     return (void *)enomem();
 
   // check for overflow
@@ -742,13 +725,100 @@ static void *__mremap(char *old_addr, size_t old_size, size_t new_size,
   return res;
 }
 
+/**
+ * Creates memory mapping.
+ *
+ * The mmap() function is used by Cosmopolitan's malloc() implementation
+ * to obtain new memory from the operating system. This function is also
+ * useful for establishing a mapping between a file on disk and a memory
+ * address, which avoids most need to call read() and write(). It is how
+ * executables are loaded into memory, for instance, in which case pages
+ * are loaded lazily from disk by the operating system.
+ *
+ * The `addr` parameter may be zero. This lets the implementation choose
+ * an available address in memory. OSes normally pick something randomly
+ * assigned, for security. Most OSes try to make sure subsequent mapping
+ * requests will be adjacent to one another. More paranoid OSes may have
+ * different mappings be sparse, with unmapped content between them. You
+ * may not use the `MAP_FIXED` parameter to create a memory map at NULL.
+ *
+ * The `addr` parameter may be non-zero, in which case Cosmopolitan will
+ * give you a mapping at that specific address if it's available. When a
+ * mapping already exists at the requested address then another one will
+ * be chosen automatically. On most OSes the newly selected address will
+ * be as close-by as possible, but that's not guaranteed. If `MAP_FIXED`
+ * is also supplied in `flags` then this hint is taken as mandatory, and
+ * existing mappings at the requested interval shall be auto-unmapped.
+ *
+ * The `size` parameter is implicitly rounded up to the system page size
+ * reported by getpagesize() and sysconf(_SC_PAGESIZE). Your extra bytes
+ * will be zero-initialized.
+ *
+ * The returned address will always be aligned, on the system allocation
+ * granularity. This value may be obtained from getgransize() or calling
+ * sysconf(_SC_GRANSIZE). Granularity is always greater than or equal to
+ * the page size. On some platforms, i.e. Windows, it may be larger than
+ * the page size.
+ *
+ * The `prot` value specifies the memory protection of the mapping. This
+ * may be `PROT_NONE` to disallow all access otherwise it's a bitwise or
+ * of the following constants:
+ *
+ * - `PROT_READ` allows read access
+ * - `PROT_WRITE` allows write access
+ * - `PROT_EXEC` allows execute access
+ *
+ * Some OSes (i.e. OpenBSD) will raise an error if both `PROT_WRITE` and
+ * `PROT_EXEC` are requested. You may still modify executable memory but
+ * you must use mprotect() to transition between the two states. On some
+ * OSes like MacOS ARM64, you need to pass the `MAP_JIT` flag to get RWX
+ * memory, which is considered zero on other OSes.
+ *
+ * The lower bits of the `flags` parameter specify the `MAP_TYPE`, which
+ * may be:
+ *
+ * - `MAP_PRIVATE` for non-shared and copy-on-write mappings
+ * - `MAP_SHARED` for memory that may be shared between processes
+ *
+ * Your `fd` argument specifies the file descriptor of the open file you
+ * want to map. This parameter is ignored when `MAP_ANONYMOUS` is passed
+ * via `flags`.
+ *
+ * Your `off` argument specifies the offset into a, file at which mapped
+ * memory shall begin. It must be aligned to the allocation granularity,
+ * which may be obtained from getgransize() or sysconf(_SC_GRANSIZE).
+ *
+ * The `MAP_FIXED_NOREPLACE` flag may be passed in `flags` which has the
+ * same behavior as `MAP_FIXED` except it raises `EEXIST` when a mapping
+ * already exists on the requested interval.
+ *
+ * The `MAP_CONCEAL` flag may be passed to prevent a memory mapping from
+ * appearing in core dumps. This is currently supported on BSD OSes, and
+ * is ignored on everything else.
+ */
 void *mmap(void *addr, size_t size, int prot, int flags, int fd, int64_t off) {
   void *res = __mmap(addr, size, prot, flags, fd, off);
-  STRACE("mmap(%p, %'zu, %s, %s, %d, %'ld) → %p% m", addr, size,
-         DescribeProtFlags(prot), DescribeMapFlags(flags), fd, off, res);
+  STRACE("mmap(%p, %'zu, %s, %s, %d, %'ld) → %p% m (%'zu bytes total)", addr,
+         size, DescribeProtFlags(prot), DescribeMapFlags(flags), fd, off, res,
+         __maps.pages * __pagesize);
   return res;
 }
 
+/**
+ * Changes memory mapping.
+ *
+ * This system call lets you move memory without copying it. It can also
+ * be used to shrink memory mappings.
+ *
+ * This system call is supported on Linux and NetBSD. It's used by Cosmo
+ * Libc's realloc() implementation under the hood.
+ *
+ * The `flags` parameter may have:
+ *
+ * - `MREMAP_MAYMOVE` to allow relocation
+ * - `MREMAP_FIXED` in which case an additional parameter is taken
+ *
+ */
 void *mremap(void *old_addr, size_t old_size, size_t new_size, int flags, ...) {
   va_list ap;
   void *new_addr = 0;
@@ -758,11 +828,19 @@ void *mremap(void *old_addr, size_t old_size, size_t new_size, int flags, ...) {
     va_end(ap);
   }
   void *res = __mremap(old_addr, old_size, new_size, flags, new_addr);
-  STRACE("mremap(%p, %'zu, %'zu, %s, %p) → %p% m", old_addr, old_size, new_size,
-         DescribeMremapFlags(flags), new_addr, res);
+  STRACE("mremap(%p, %'zu, %'zu, %s, %p) → %p% m (%'zu bytes total)", old_addr,
+         old_size, new_size, DescribeMremapFlags(flags), new_addr, res,
+         __maps.pages * __pagesize);
   return res;
 }
 
+/**
+ * Removes memory mapping.
+ *
+ * The `size` parameter is implicitly rounded up to the page size.
+ *
+ * @return 0 on success, or -1 w/ errno.
+ */
 int munmap(void *addr, size_t size) {
   int rc = __munmap(addr, size);
   STRACE("munmap(%p, %'zu) → %d% m", addr, size, rc);

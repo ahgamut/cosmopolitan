@@ -21,7 +21,7 @@
 #include "libc/calls/ucontext.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
-#include "libc/intrin/describeflags.internal.h"
+#include "libc/intrin/describeflags.h"
 #include "libc/log/log.h"
 #include "libc/mem/gc.h"
 #include "libc/mem/mem.h"
@@ -259,6 +259,8 @@ TEST(mprotect, weirdSize) {
 }
 
 TEST(mprotect, outerOverlap) {
+  if (IsWindows())
+    return;  // needs carving
   char *p;
   int gransz = getgransize();
   EXPECT_NE(MAP_FAILED, (p = mmap(0, gransz * 3, PROT_READ | PROT_EXEC,

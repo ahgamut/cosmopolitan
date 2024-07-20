@@ -25,10 +25,10 @@
 #include "libc/errno.h"
 #include "libc/fmt/itoa.h"
 #include "libc/intrin/bsr.h"
-#include "libc/intrin/describeflags.internal.h"
+#include "libc/intrin/describeflags.h"
 #include "libc/intrin/dll.h"
 #include "libc/intrin/kprintf.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/strace.h"
 #include "libc/intrin/weaken.h"
 #include "libc/log/internal.h"
 #include "libc/macros.internal.h"
@@ -144,7 +144,7 @@ static int FixupCustomStackOnOpenbsd(pthread_attr_t *attr) {
   size_t n;
   uintptr_t x, y;
   int e, rc, pagesz;
-  pagesz = getpagesize();
+  pagesz = __pagesize;
   n = attr->__stacksize;
   x = (uintptr_t)attr->__stackaddr;
   y = ROUNDUP(x, pagesz);
@@ -210,7 +210,7 @@ static errno_t pthread_create_impl(pthread_t *thread,
     }
   } else {
     // cosmo is managing the stack
-    int pagesize = getpagesize();
+    int pagesize = __pagesize;
     pt->pt_attr.__guardsize = ROUNDUP(pt->pt_attr.__guardsize, pagesize);
     pt->pt_attr.__stacksize = pt->pt_attr.__stacksize;
     if (pt->pt_attr.__guardsize + pagesize > pt->pt_attr.__stacksize) {

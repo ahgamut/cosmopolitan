@@ -20,14 +20,14 @@
 #include "libc/calls/syscall-nt.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/strace.h"
 #include "libc/runtime/runtime.h"
 #include "libc/sysv/errfuns.h"
 
 static int __madvise(void *addr, size_t length, int advice) {
 
   // simulate linux behavior of validating alignment
-  if ((uintptr_t)addr & (getpagesize() - 1))
+  if ((uintptr_t)addr & (__pagesize - 1))
     return einval();
 
   // simulate linux behavior of checking for negative length

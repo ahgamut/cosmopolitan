@@ -19,12 +19,12 @@
 #include "libc/calls/struct/sigset.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
-#include "libc/intrin/describeflags.internal.h"
-#include "libc/intrin/directmap.internal.h"
+#include "libc/intrin/describeflags.h"
+#include "libc/intrin/directmap.h"
 #include "libc/intrin/dll.h"
 #include "libc/intrin/kprintf.h"
 #include "libc/intrin/maps.h"
-#include "libc/intrin/strace.internal.h"
+#include "libc/intrin/strace.h"
 #include "libc/intrin/tree.h"
 #include "libc/nt/memory.h"
 #include "libc/runtime/internal.h"
@@ -60,7 +60,7 @@ int __mprotect(char *addr, size_t size, int prot) {
     return 0;
 
   // unix checks prot before checking size
-  int pagesz = getpagesize();
+  int pagesz = __pagesize;
   if (((intptr_t)addr & (pagesz - 1)) || (uintptr_t)addr + size < size)
     return einval();
 

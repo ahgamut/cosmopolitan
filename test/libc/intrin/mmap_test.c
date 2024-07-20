@@ -22,6 +22,7 @@
 #include "libc/errno.h"
 #include "libc/intrin/maps.h"
 #include "libc/limits.h"
+#include "libc/literal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/runtime/sysconf.h"
 #include "libc/stdio/rand.h"
@@ -111,20 +112,23 @@ TEST(mmap, fixedTaken) {
 TEST(mmap, hint) {
   char *p;
 
+  if (IsWindows())
+    return;  // needs carving
+
   // obtain four pages
-  ASSERT_NE(MAP_FAILED, (p = mmap(randaddr(), gransz * 4, PROT_READ,
+  ASSERT_NE(MAP_FAILED, (p = mmap(__maps_randaddr(), pagesz * 4, PROT_READ,
                                   MAP_PRIVATE | MAP_ANONYMOUS, -1, 0)));
 
   // unmap two of those pages
-  EXPECT_SYS(0, 0, munmap(p + gransz, gransz));
-  EXPECT_SYS(0, 0, munmap(p + gransz * 3, gransz));
+  EXPECT_SYS(0, 0, munmap(p + pagesz, pagesz));
+  EXPECT_SYS(0, 0, munmap(p + pagesz * 3, pagesz));
 
   // test AVAILABLE nonfixed nonzero addr is granted
   // - posix doesn't mandate this behavior (but should)
   // - freebsd always chooses for you (which has no acceptable workaround)
   // - netbsd manual claims it'll be like freebsd, but is actually like openbsd
   if (!IsFreebsd())
-    ASSERT_EQ(p + gransz, mmap(p + gransz, gransz, PROT_READ,
+    ASSERT_EQ(p + pagesz, mmap(p + pagesz, pagesz, PROT_READ,
                                MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
 
   // test UNAVAILABLE nonfixed nonzero addr picks something nearby
@@ -133,24 +137,26 @@ TEST(mmap, hint) {
   // - freebsd goes about 16mb to the right
   // - qemu-user is off the wall
   /*if (!IsQemuUser()) {
-    q = mmap(p + gransz * 2, gransz, PROT_READ, MAP_PRIVATE | MAP_ANONYMOUS, -1,
+    q = mmap(p + pagesz * 2, pagesz, PROT_READ, MAP_PRIVATE | MAP_ANONYMOUS, -1,
              0);
-    EXPECT_LE(ABS(q - (p + gransz * 2)), 128 * 1024 * 1024);
-    EXPECT_SYS(0, 0, munmap(q, gransz));
+    EXPECT_LE(ABS(q - (p + pagesz * 2)), 128 * 1024 * 1024);
+    EXPECT_SYS(0, 0, munmap(q, pagesz));
   }*/
 
   // clean up
-  EXPECT_SYS(0, 0, munmap(p, gransz * 4));
+  EXPECT_SYS(0, 0, munmap(p, pagesz * 4));
 }
 
 TEST(mprotect, punchHoleAndFillHole) {
   char *p;
   int count = __maps.count;
-  int gransz = getgransize();
+
+  if (IsWindows())
+    return;  // needs carving
 
   // obtain memory
   ASSERT_NE(MAP_FAILED,
-            (p = mmap(randaddr(), gransz * 3, PROT_READ | PROT_WRITE,
+            (p = mmap(__maps_randaddr(), gransz * 3, PROT_READ | PROT_WRITE,
                       MAP_PRIVATE | MAP_ANONYMOUS, -1, 0)));
   ASSERT_EQ((count += IsWindows() ? 3 : 1), __maps.count);
 
@@ -223,16 +229,17 @@ TEST(mmap, testMapFile_fdGetsClosed_makesNoDifference) {
 TEST(mmap, fileOffset) {
   int fd;
   char *map;
-  int offset_align = IsWindows() ? gransz : getpagesize();
   ASSERT_NE(-1, (fd = open("foo", O_CREAT | O_RDWR, 0644)));
-  EXPECT_NE(-1, ftruncate(fd, offset_align * 2));
-  EXPECT_NE(-1, pwrite(fd, "hello", 5, offset_align * 0));
-  EXPECT_NE(-1, pwrite(fd, "there", 5, offset_align * 1));
+  EXPECT_NE(-1, ftruncate(fd, gransz * 2));
+  EXPECT_NE(-1, pwrite(fd, "hello", 5, gransz * 0));
+  EXPECT_NE(-1, pwrite(fd, "there", 5, gransz * 1));
   EXPECT_NE(-1, fdatasync(fd));
-  ASSERT_NE(MAP_FAILED, (map = mmap(NULL, offset_align, PROT_READ, MAP_PRIVATE,
-                                    fd, offset_align)));
+  ASSERT_SYS(EINVAL, MAP_FAILED,
+             mmap(NULL, gransz, PROT_READ, MAP_PRIVATE, fd, gransz - 1));
+  ASSERT_NE(MAP_FAILED,
+            (map = mmap(NULL, gransz, PROT_READ, MAP_PRIVATE, fd, gransz)));
   EXPECT_EQ(0, memcmp(map, "there", 5), "%#.*s", 5, map);
-  EXPECT_NE(-1, munmap(map, offset_align));
+  EXPECT_NE(-1, munmap(map, gransz));
   EXPECT_NE(-1, close(fd));
 }
 
@@ -261,6 +268,67 @@ TEST(mmap, ziposCannotBeShared) {
   EXPECT_SYS(EINVAL, MAP_FAILED,
              (p = mmap(NULL, gransz, PROT_READ, MAP_SHARED, fd, 0)));
   close(fd);
+}
+
+TEST(mmap, misalignedAddr_justIgnoresIt) {
+  char *p;
+  ASSERT_NE(MAP_FAILED, (p = mmap((void *)1, 1, PROT_READ,
+                                  MAP_ANONYMOUS | MAP_PRIVATE, -1, 0)));
+  munmap(p, 1);
+}
+
+TEST(mmap, nullFixed_isNotAllowed) {
+  ASSERT_SYS(
+      EPERM, MAP_FAILED,
+      mmap(0, 1, PROT_NONE, MAP_ANONYMOUS | MAP_PRIVATE | MAP_FIXED, -1, 0));
+  ASSERT_SYS(EPERM, MAP_FAILED,
+             mmap(0, 1, PROT_NONE,
+                  MAP_ANONYMOUS | MAP_PRIVATE | MAP_FIXED_NOREPLACE, -1, 0));
+}
+
+static int GetBitsInAddressSpace(void) {
+  int i;
+  void *ptr;
+  uint64_t want;
+  for (i = 0; i < 40; ++i) {
+    want = UINT64_C(0x8123000000000000) >> i;
+    if (want > UINTPTR_MAX)
+      continue;
+    if (msync((void *)(uintptr_t)want, 1, MS_ASYNC) == 0 || errno == EBUSY)
+      return 64 - i;
+    ptr = mmap((void *)(uintptr_t)want, 1, PROT_READ,
+               MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS, -1, 0);
+    if (ptr != MAP_FAILED) {
+      munmap(ptr, 1);
+      return 64 - i;
+    }
+  }
+  abort();
+}
+
+TEST(mmap, negative_isNotAllowed) {
+  ASSERT_SYS(ENOMEM, MAP_FAILED,
+             mmap((void *)-(70 * 1024 * 1024), 1, PROT_NONE,
+                  MAP_ANONYMOUS | MAP_PRIVATE | MAP_FIXED, -1, 0));
+}
+
+TEST(mmap, pml5t) {
+  switch (GetBitsInAddressSpace()) {
+    case 56:
+      ASSERT_EQ((void *)0x00fff2749119c000,
+                mmap((void *)0x00fff2749119c000, 1, PROT_NONE,
+                     MAP_ANONYMOUS | MAP_PRIVATE | MAP_FIXED, -1, 0));
+      munmap((void *)0x00fff2749119c000, 1);
+      break;
+    case 48:
+      ASSERT_EQ((void *)0x0000f2749119c000,
+                mmap((void *)0x0000f2749119c000, 1, PROT_NONE,
+                     MAP_ANONYMOUS | MAP_PRIVATE | MAP_FIXED, -1, 0));
+      munmap((void *)0x0000f2749119c000, 1);
+      break;
+    default:
+      break;
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

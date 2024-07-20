@@ -1,7 +1,7 @@
-/*-*- mode:unix-assembly; indent-tabs-mode:t; tab-width:8; coding:utf-8     -*-│
-│ vi: set noet ft=asm ts=8 sw=8 fenc=utf-8                                 :vi │
+/*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
-│ Copyright 2020 Justine Alexandra Roberts Tunney                              │
+│ Copyright 2023 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
 │ Permission to use, copy, modify, and/or distribute this software for         │
 │ any purpose with or without fee is hereby granted, provided that the         │
@@ -16,15 +16,32 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/macros.internal.h"
+#include "libc/dce.h"
+#include "libc/intrin/kprintf.h"
+#include "libc/nt/struct/systeminfo.h"
+#include "libc/nt/systeminfo.h"
+#include "libc/runtime/runtime.h"
+#include "libc/sysv/consts/auxv.h"
 
-	.init.start 305,_init_g_fds
-	push	%rdi
-	push	%rsi
-	mov	%r12d,%edi			// argc
-	mov	%r13,%rsi			// argv
-	mov	%r14,%rdx			// environ
-	call	__init_fds
-	pop	%rsi
-	pop	%rdi
-	.init.end 305,_init_g_fds
+#ifdef __x86_64__
+__static_yoink("_init_pagesize");
+#endif
+
+int __pagesize;
+int __gransize;
+
+textstartup static int __pagesize_get(unsigned long *auxv) {
+  for (; auxv && auxv[0]; auxv += 2)
+    if (auxv[0] == AT_PAGESZ)
+      return auxv[1];
+#ifdef __aarch64__
+  return 16384;
+#else
+  return 4096;
+#endif
+}
+
+textstartup dontinstrument void __pagesize_init(unsigned long *auxv) {
+  if (!__pagesize)
+    __gransize = __pagesize = __pagesize_get(auxv);
+}
