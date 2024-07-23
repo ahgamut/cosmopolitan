@@ -40,10 +40,8 @@ static errno_t pthread_detach_impl(struct PosixThread *pt) {
     if (atomic_compare_exchange_weak_explicit(&pt->pt_status, &status,
                                               transition, memory_order_release,
                                               memory_order_relaxed)) {
-      if (transition == kPosixThreadZombie) {
+      if (transition == kPosixThreadZombie)
         _pthread_zombify(pt);
-      }
-      _pthread_decimate();
       return 0;
     }
   }

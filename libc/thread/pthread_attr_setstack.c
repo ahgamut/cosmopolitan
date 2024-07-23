@@ -18,6 +18,7 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/dce.h"
 #include "libc/errno.h"
+#include "libc/limits.h"
 #include "libc/thread/thread.h"
 
 /**
@@ -71,6 +72,8 @@ errno_t pthread_attr_setstack(pthread_attr_t *attr, void *stackaddr,
     attr->__stacksize = 0;
     return 0;
   }
+  if (stacksize > INT_MAX)
+    return EINVAL;
   if (stacksize < PTHREAD_STACK_MIN)
     return EINVAL;
   attr->__stackaddr = stackaddr;
