@@ -34,18 +34,17 @@ void CrashHandler(int sig) {
   pthread_exit(0);
 }
 
-int StackOverflow(int f(), int n) {
-  if (n < INT_MAX) {
-    return f(f, n + 1) - 1;
-  } else {
-    return INT_MAX;
-  }
+int StackOverflow(int d) {
+  char A[8];
+  for (int i = 0; i < sizeof(A); i++)
+    A[i] = d + i;
+  if (__veil("r", d))
+    return StackOverflow(d + 1) + A[d % sizeof(A)];
+  return 0;
 }
 
-int (*pStackOverflow)(int (*)(), int) = StackOverflow;
-
 void *MyPosixThread(void *arg) {
-  exit(pStackOverflow(pStackOverflow, 0));
+  exit(StackOverflow(0));
   return 0;
 }
 

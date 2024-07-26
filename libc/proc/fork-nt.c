@@ -271,8 +271,8 @@ textwindows void WinMainForked(void) {
   __threaded = false;
 
   // fixup memory manager
-  __maps.free = 0;
   __maps.maps = 0;
+  __maps.freed = 0;
   __maps.count = 0;
   __maps.pages = 0;
   for (struct Tree *e = tree_first(maps); e; e = tree_next(e)) {
@@ -473,9 +473,8 @@ textwindows int sys_fork_nt(uint32_t dwCreationFlags) {
     // reset core runtime services
     __proc_wipe();
     WipeKeystrokes();
-    if (_weaken(__itimer_wipe)) {
+    if (_weaken(__itimer_wipe))
       _weaken(__itimer_wipe)();
-    }
     // notify pthread join
     atomic_store_explicit(&_pthread_static.ptid, GetCurrentThreadId(),
                           memory_order_release);

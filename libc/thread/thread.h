@@ -46,7 +46,13 @@ COSMOPOLITAN_C_START_
 #define PTHREAD_RWLOCK_INITIALIZER {0}
 #define PTHREAD_MUTEX_INITIALIZER  {0}
 
-#define PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP {0, 0, PTHREAD_MUTEX_RECURSIVE}
+#define PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP {0, {}, PTHREAD_MUTEX_RECURSIVE}
+
+#ifndef __cplusplus
+#define _PTHREAD_ATOMIC(x) _Atomic(x)
+#else
+#define _PTHREAD_ATOMIC(x) x
+#endif
 
 typedef uintptr_t pthread_t;
 typedef int pthread_id_np_t;
@@ -57,17 +63,20 @@ typedef unsigned pthread_key_t;
 typedef void (*pthread_key_dtor)(void *);
 
 typedef struct pthread_once_s {
-  _Atomic(uint32_t) _lock;
+  _PTHREAD_ATOMIC(uint32_t) _lock;
 } pthread_once_t;
 
 typedef struct pthread_spinlock_s {
-  _Atomic(int) _lock;
+  _PTHREAD_ATOMIC(int) _lock;
 } pthread_spinlock_t;
 
 typedef struct pthread_mutex_s {
   uint32_t _nsync;
-  int32_t _pid;
-  _Atomic(uint64_t) _word;
+  union {
+    int32_t _pid;
+    _PTHREAD_ATOMIC(int32_t) _futex;
+  };
+  _PTHREAD_ATOMIC(uint64_t) _word;
 } pthread_mutex_t;
 
 typedef struct pthread_mutexattr_s {
@@ -82,8 +91,8 @@ typedef struct pthread_cond_s {
       char _pshared;
     };
   };
-  _Atomic(uint32_t) _sequence;
-  _Atomic(uint32_t) _waiters;
+  _PTHREAD_ATOMIC(uint32_t) _sequence;
+  _PTHREAD_ATOMIC(uint32_t) _waiters;
 } pthread_cond_t;
 
 typedef struct pthread_rwlock_s {
@@ -92,7 +101,10 @@ typedef struct pthread_rwlock_s {
 } pthread_rwlock_t;
 
 typedef struct pthread_barrier_s {
-  void *_nsync;
+  int _count;
+  char _pshared;
+  _PTHREAD_ATOMIC(int) _counter;
+  _PTHREAD_ATOMIC(int) _waiters;
 } pthread_barrier_t;
 
 typedef struct pthread_attr_s {

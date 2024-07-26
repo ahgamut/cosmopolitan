@@ -6,7 +6,7 @@
 BIN=${0%/*}
 PROG=${0##*/}
 ORIGINAL="$0 $*"
-GCC_VERSION=12.3.0
+GCC_VERSION=14.1.0
 TMPDIR=${TMPDIR:-/tmp}
 
 if [ "$1" = "--version" ]; then
@@ -238,7 +238,7 @@ fi
 PLATFORM="-D__COSMOPOLITAN__ -D__COSMOCC__ -D__FATCOSMOCC__"
 PREDEF="-include libc/integral/normalize.inc"
 CPPFLAGS="-fno-pie -nostdinc -isystem $BIN/../include"
-CFLAGS="-fportcosmo -fno-dwarf2-cfi-asm -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-semantic-interposition"
+CFLAGS="-fportcosmo -fno-dwarf2-cfi-asm -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-semantic-interposition -Wno-implicit-int"
 LDFLAGS="-static -nostdlib -no-pie -fuse-ld=bfd -Wl,-z,noexecstack -Wl,-z,norelro -Wl,--gc-sections"
 PRECIOUS="-fno-omit-frame-pointer"
 

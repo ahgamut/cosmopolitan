@@ -26,10 +26,10 @@ COSMOPOLITAN_C_START_
 
 void *memset(void *, int, size_t) memcpyesque;
 void *memmove(void *, const void *, size_t) memcpyesque;
-void *memcpy(void *restrict, const void *restrict, size_t) memcpyesque;
-void *mempcpy(void *restrict, const void *restrict, size_t) memcpyesque;
-char *hexpcpy(char *restrict, const void *restrict, size_t) memcpyesque;
-void *memccpy(void *restrict, const void *restrict, int, size_t) memcpyesque;
+void *memcpy(void *, const void *, size_t) memcpyesque;
+void *mempcpy(void *, const void *, size_t) memcpyesque;
+char *hexpcpy(char *, const void *, size_t) memcpyesque;
+void *memccpy(void *, const void *, int, size_t) memcpyesque;
 void explicit_bzero(void *, size_t);
 
 int memcmp(const void *, const void *, size_t) strlenesque;
@@ -173,16 +173,11 @@ char *__join_paths(char *, size_t, const char *, const char *) libcesque __wur;
 int __mkntpathat(int, const char *, int, char16_t[hasatleast 1024]);
 #endif /* _COSMO_SOURCE */
 
-#if defined(_COSMO_SOURCE) || defined(_GNU_SOURCE) || defined(_BSD_SOURCE) || \
-    defined(_POSIX_SOURCE) ||                                                 \
-    (defined(_POSIX_C_SOURCE) && _POSIX_C_SOURCE + 0 < 200809L) ||            \
-    (defined(_XOPEN_SOURCE) && _XOPEN_SOURCE + 0 < 700)
 int bcmp(const void *, const void *, size_t) strlenesque;
 void bcopy(const void *, void *, size_t) memcpyesque;
 void bzero(void *, size_t) memcpyesque;
 char *index(const char *, int) strlenesque;
 char *rindex(const char *, int) strlenesque;
-#endif
 
 COSMOPOLITAN_C_END_
 #endif /* !(__ASSEMBLER__ + __LINKER__ + 0) */
