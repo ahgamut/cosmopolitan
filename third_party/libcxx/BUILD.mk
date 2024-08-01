@@ -1064,6 +1064,9 @@ third_party/libcxx/ios.instantiations.cpp \
 third_party/libcxx/iostream.cpp \
 third_party/libcxx/legacy_pointer_safety.cpp \
 third_party/libcxx/locale.cpp \
+third_party/libcxx/locale2.cpp \
+third_party/libcxx/locale3.cpp \
+third_party/libcxx/locale4.cpp \
 third_party/libcxx/memory.cpp \
 third_party/libcxx/memory_resource.cpp \
 third_party/libcxx/mutex.cpp \
@@ -2147,6 +2150,9 @@ $(THIRD_PARTY_LIBCXX_A_OBJS): private				\
 			-Wno-alloc-size-larger-than		\
 			-DLIBCXX_BUILDING_LIBCXXABI		\
 			-D_LIBCPP_BUILDING_LIBRARY
+
+o/$(MODE)/third_party/libcxx/locale.o: private			\
+		OVERRIDE_COPTS += -O -g0
 
 THIRD_PARTY_LIBCXX_LIBS = $(foreach x,$(THIRD_PARTY_LIBCXX_ARTIFACTS),$($(x)))
 THIRD_PARTY_LIBCXX_SRCS = $(foreach x,$(THIRD_PARTY_LIBCXX_ARTIFACTS),$($(x)_SRCS))
