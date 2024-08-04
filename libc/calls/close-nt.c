@@ -65,7 +65,7 @@ textwindows int sys_close_nt(int fd, int fildes) {
     default:
       break;
   }
-  if (f->shared && !f->isdup)
-    munmap(f->shared, sizeof(struct Cursor));
+  if (f->cursor)
+    __cursor_unref(f->cursor);
   return CloseHandle(f->handle) ? 0 : __winerr();
 }
