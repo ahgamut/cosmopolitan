@@ -50,6 +50,13 @@
 
 #define PGUP(x) (((x) + pagesz - 1) & -pagesz)
 
+#define MASQUE    0x00fffffffffffff8
+#define PTR(x)    ((uintptr_t)(x) & MASQUE)
+#define TAG(x)    ROL((uintptr_t)(x) & ~MASQUE, 8)
+#define ABA(p, t) ((uintptr_t)(p) | (ROR((uintptr_t)(t), 8) & ~MASQUE))
+#define ROL(x, n) (((x) << (n)) | ((x) >> (64 - (n))))
+#define ROR(x, n) (((x) >> (n)) | ((x) << (64 - (n))))
+
 #if !MMDEBUG
 #define ASSERT(x) (void)0
 #else
@@ -59,7 +66,7 @@
       char bt[160];                                                       \
       struct StackFrame *bp = __builtin_frame_address(0);                 \
       kprintf("%!s:%d: assertion failed: %!s\n", __FILE__, __LINE__, #x); \
-      kprintf("bt %!s\n", (DescribeBacktrace)(bt, bp));                   \
+      kprintf("bt %!s\n", _DescribeBacktrace(bt, bp));                    \
       __print_maps(0);                                                    \
       __builtin_trap();                                                   \
     }                                                                     \
@@ -227,14 +234,17 @@ StartOver:
 }
 
 void __maps_free(struct Map *map) {
+  uintptr_t tip;
+  ASSERT(!TAG(map));
   map->size = 0;
   map->addr = MAP_FAILED;
-  map->freed = atomic_load_explicit(&__maps.freed, memory_order_relaxed);
-  for (;;) {
-    if (atomic_compare_exchange_weak_explicit(&__maps.freed, &map->freed, map,
-                                              memory_order_release,
-                                              memory_order_relaxed))
+  for (tip = atomic_load_explicit(&__maps.freed, memory_order_relaxed);;) {
+    map->freed = (struct Map *)PTR(tip);
+    if (atomic_compare_exchange_weak_explicit(
+            &__maps.freed, &tip, ABA(map, TAG(tip) + 1), memory_order_release,
+            memory_order_relaxed))
       break;
+    pthread_pause_np();
   }
 }
 
@@ -297,12 +307,13 @@ void __maps_insert(struct Map *map) {
 
 struct Map *__maps_alloc(void) {
   struct Map *map;
-  map = atomic_load_explicit(&__maps.freed, memory_order_relaxed);
-  while (map) {
-    if (atomic_compare_exchange_weak_explicit(&__maps.freed, &map, map->freed,
-                                              memory_order_acquire,
-                                              memory_order_relaxed))
+  uintptr_t tip = atomic_load_explicit(&__maps.freed, memory_order_relaxed);
+  while ((map = (struct Map *)PTR(tip))) {
+    if (atomic_compare_exchange_weak_explicit(
+            &__maps.freed, &tip, ABA(map->freed, TAG(tip) + 1),
+            memory_order_acquire, memory_order_relaxed))
       return map;
+    pthread_pause_np();
   }
   int gransz = __gransize;
   struct DirectMap sys = sys_mmap(0, gransz, PROT_READ | PROT_WRITE,
