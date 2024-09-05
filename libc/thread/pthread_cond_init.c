@@ -16,10 +16,11 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/sysv/consts/clock.h"
 #include "libc/thread/thread.h"
 
 /**
- * Initializes condition.
+ * Initializes condition variable.
  *
  * @param attr may be null
  * @return 0 on success, or error number on failure
@@ -27,7 +28,9 @@
 errno_t pthread_cond_init(pthread_cond_t *cond,
                           const pthread_condattr_t *attr) {
   *cond = (pthread_cond_t){0};
-  if (attr)
-    cond->_pshared = *attr;
+  if (attr) {
+    cond->_pshared = attr->_pshared;
+    cond->_clock = attr->_clock;
+  }
   return 0;
 }

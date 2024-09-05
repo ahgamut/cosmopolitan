@@ -1,44 +1,61 @@
-/*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
-│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
-╞══════════════════════════════════════════════════════════════════════════════╡
-│ Copyright 2020 Justine Alexandra Roberts Tunney                              │
+/*-*- mode:c;indent-tabs-mode:t;c-basic-offset:8;tab-width:8;coding:utf-8   -*-│
+│ vi: set noet ft=c ts=8 sw=8 fenc=utf-8                                   :vi │
+╚──────────────────────────────────────────────────────────────────────────────╝
 │                                                                              │
-│ Permission to use, copy, modify, and/or distribute this software for         │
-│ any purpose with or without fee is hereby granted, provided that the         │
-│ above copyright notice and this permission notice appear in all copies.      │
+│  Musl Libc                                                                   │
+│  Copyright © 2005-2014 Rich Felker, et al.                                   │
 │                                                                              │
-│ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL                │
-│ WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED                │
-│ WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE             │
-│ AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL         │
-│ DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR        │
-│ PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER               │
-│ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
-│ PERFORMANCE OF THIS SOFTWARE.                                                │
+│  Permission is hereby granted, free of charge, to any person obtaining       │
+│  a copy of this software and associated documentation files (the             │
+│  "Software"), to deal in the Software without restriction, including         │
+│  without limitation the rights to use, copy, modify, merge, publish,         │
+│  distribute, sublicense, and/or sell copies of the Software, and to          │
+│  permit persons to whom the Software is furnished to do so, subject to       │
+│  the following conditions:                                                   │
+│                                                                              │
+│  The above copyright notice and this permission notice shall be              │
+│  included in all copies or substantial portions of the Software.             │
+│                                                                              │
+│  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,             │
+│  EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF          │
+│  MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.      │
+│  IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY        │
+│  CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,        │
+│  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE           │
+│  SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.                      │
+│                                                                              │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/intrin/likely.h"
 #include "libc/str/unicode.h"
-#include "libc/str/wcwidth_osx.internal.h"
-#include "libc/wctype.h"
+__static_yoink("musl_libc_notice");
+// clang-format off
 
-/**
- * Returns cell width of monospace character.
- */
-int wcwidth(wchar_t c) {
-  int res;
-  if (LIKELY(32 <= c && c < 127))
-    return 1;
-  if (VERY_UNLIKELY((uint32_t)c >= 0x100000)) {
-    if ((uint32_t)c <= 0x10FFFD)
-      return 1;
-    return -1;
-  }
-  res = _wcwidth_osx(c);
-  if (VERY_UNLIKELY(!res)) {
-    if (!c)
-      return 0;
-    if (iswcntrl(c))
-      return -1;
-  }
-  return res;
+static const unsigned char table[] = {
+#include "nonspacing.inc"
+};
+
+static const unsigned char wtable[] = {
+#include "wide.inc"
+};
+
+int wcwidth(wchar_t wc)
+{
+	if ((int)wc < 0xff) {
+		if ((int)wc >= 0)
+			return ((wc+1) & 0x7f) >= 0x21 ? 1 : wc ? -1 : 0;
+		return -1;
+	}
+	if ((wc & 0xfffeffffU) < 0xfffe) {
+		if ((table[table[wc>>8]*32+((wc&255)>>3)]>>(wc&7))&1)
+			return 0;
+		if ((wtable[wtable[wc>>8]*32+((wc&255)>>3)]>>(wc&7))&1)
+			return 2;
+		return 1;
+	}
+	if ((wc & 0xfffe) == 0xfffe)
+		return -1;
+	if (wc-0x20000U < 0x20000)
+		return 2;
+	if (wc == 0xe0001 || wc-0xe0020U < 0x5f || wc-0xe0100U < 0xef)
+		return 0;
+	return 1;
 }

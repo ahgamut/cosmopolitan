@@ -111,9 +111,9 @@ FLAGS\n\
   -T TARGET    specifies target name for V=0 logging\n\
   -A ACTION    specifies short command name for V=0 logging\n\
   -V NUMBER    specifies compiler version\n\
-  -C SECS      set cpu limit [default 16]\n\
+  -C SECS      set cpu limit [default 32]\n\
   -L SECS      set lat limit [default 90]\n\
-  -P PROCS     set pro limit [default 4096]\n\
+  -P PROCS     set pro limit [default 8192]\n\
   -S BYTES     set stk limit [default 8m]\n\
   -M BYTES     set mem limit [default 2048m]\n\
   -F BYTES     set fsz limit [default 256m]\n\
@@ -529,7 +529,7 @@ void PlanResource(int resource, struct rlimit rlim) {
     return;
   rlim.rlim_cur = MIN(rlim.rlim_cur, prior.rlim_max);
   rlim.rlim_max = MIN(rlim.rlim_max, prior.rlim_max);
-  posix_spawnattr_setrlimit(&spawnattr, resource, &rlim);
+  posix_spawnattr_setrlimit_np(&spawnattr, resource, &rlim);
 }
 
 void SetCpuLimit(int secs) {
@@ -651,7 +651,7 @@ int Launch(void) {
   posix_spawnattr_init(&spawnattr);
   posix_spawnattr_setsigmask(&spawnattr, &savemask);
   posix_spawnattr_setflags(&spawnattr,
-                           POSIX_SPAWN_SETSIGMASK | POSIX_SPAWN_SETRLIMIT);
+                           POSIX_SPAWN_SETSIGMASK | POSIX_SPAWN_SETRLIMIT_NP);
   SetCpuLimit(cpuquota);
   SetFszLimit(fszquota);
   SetMemLimit(memquota);
@@ -862,7 +862,7 @@ int main(int argc, char *argv[]) {
   verbose = 4;
   timeout = 90;                    // secs
   cpuquota = 32;                   // secs
-  proquota = 4096;                 // procs
+  proquota = 8192;                 // procs
   stkquota = 8 * 1024 * 1024;      // bytes
   fszquota = 256 * 1000 * 1000;    // bytes
   memquota = 2048L * 1024 * 1024;  // bytes

@@ -86,7 +86,7 @@ static void _onfork_child(void) {
     __proc_wipe();
   __fds_lock_obj = (pthread_mutex_t)PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;
   _rand64_lock_obj = (pthread_mutex_t)PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;
-  _pthread_lock_obj = (pthread_mutex_t)PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;
+  _pthread_lock_obj = (pthread_mutex_t)PTHREAD_MUTEX_INITIALIZER;
   atomic_store_explicit(&__maps.lock, 0, memory_order_relaxed);
   if (_weaken(_pthread_onfork_child))
     _weaken(_pthread_onfork_child)();
@@ -98,14 +98,14 @@ static int _forker(uint32_t dwCreationFlags) {
   struct timespec started;
   int ax, dx, tid, parent;
   parent = __pid;
-  started = timespec_real();
+  started = timespec_mono();
   _onfork_prepare();
   if (!IsWindows()) {
     ax = sys_fork();
   } else {
     ax = sys_fork_nt(dwCreationFlags);
   }
-  micros = timespec_tomicros(timespec_sub(timespec_real(), started));
+  micros = timespec_tomicros(timespec_sub(timespec_mono(), started));
   if (!ax) {
 
     // get new process id

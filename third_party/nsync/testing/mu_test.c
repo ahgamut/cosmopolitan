@@ -19,6 +19,7 @@
 #include "libc/calls/calls.h"
 #include "libc/str/str.h"
 #include "libc/thread/thread.h"
+#include "third_party/nsync/time.h"
 #include "third_party/nsync/cv.h"
 #include "third_party/nsync/mu_wait.h"
 #include "third_party/nsync/testing/closure.h"
@@ -67,6 +68,7 @@ static void test_data_wait_for_all_threads (test_data *td) {
 	while (td->finished_threads != td->n_threads) {
 		nsync_cv_wait_with_deadline_generic (&td->done, td->mu_in_use,
 						     td->lock, td->unlock,
+						     NSYNC_CLOCK,
 						     nsync_time_no_deadline, NULL);
 	}
 	(*td->unlock) (td->mu_in_use);
@@ -111,7 +113,7 @@ static void void_mu_unlock (void *mu) {
 static void test_mu_nthread (testing t) {
 	int loop_count = 100000;
 	nsync_time deadline;
-	deadline = nsync_time_add (nsync_time_now (), nsync_time_ms (1500));
+	deadline = nsync_time_add (nsync_time_now (NSYNC_CLOCK), nsync_time_ms (1500));
 	do {
 		int i;
 		test_data td;
@@ -131,7 +133,7 @@ static void test_mu_nthread (testing t) {
 				   td.n_threads*td.loop_count, td.i));
 		}
 		loop_count *= 2;
-	} while (nsync_time_cmp (nsync_time_now (), deadline) < 0);
+	} while (nsync_time_cmp (nsync_time_now (NSYNC_CLOCK), deadline) < 0);
 }
 
 /* void pthread_mutex_lock */
@@ -150,7 +152,7 @@ static void void_pthread_mutex_unlock (void *mu) {
 static void test_mutex_nthread (testing t) {
 	int loop_count = 100000;
 	nsync_time deadline;
-	deadline = nsync_time_add (nsync_time_now (), nsync_time_ms (1500));
+	deadline = nsync_time_add (nsync_time_now (NSYNC_CLOCK), nsync_time_ms (1500));
 	do {
 		int i;
 		test_data td;
@@ -172,7 +174,7 @@ static void test_mutex_nthread (testing t) {
 		}
 		pthread_mutex_destroy (&td.mutex);
 		loop_count *= 2;
-	} while (nsync_time_cmp (nsync_time_now (), deadline) < 0);
+	} while (nsync_time_cmp (nsync_time_now (NSYNC_CLOCK), deadline) < 0);
 }
 
 /* void pthread_rwlock_wrlock */
@@ -191,7 +193,7 @@ static void void_pthread_rwlock_unlock (void *mu) {
 static void test_rwmutex_nthread (testing t) {
 	int loop_count = 100000;
 	nsync_time deadline;
-	deadline = nsync_time_add (nsync_time_now (), nsync_time_ms (1500));
+	deadline = nsync_time_add (nsync_time_now (NSYNC_CLOCK), nsync_time_ms (1500));
 	do {
 		int i;
 		test_data td;
@@ -213,7 +215,7 @@ static void test_rwmutex_nthread (testing t) {
 		}
 		pthread_rwlock_destroy (&td.rwmutex);
 		loop_count *= 2;
-	} while (nsync_time_cmp (nsync_time_now (), deadline) < 0);
+	} while (nsync_time_cmp (nsync_time_now (NSYNC_CLOCK), deadline) < 0);
 }
 
 /* --------------------------------------- */
@@ -244,7 +246,7 @@ static void counting_loop_try_mu (test_data *td, int id) {
 static void test_try_mu_nthread (testing t) {
 	int loop_count = 100000;
 	nsync_time deadline;
-	deadline = nsync_time_add (nsync_time_now (), nsync_time_ms (1500));
+	deadline = nsync_time_add (nsync_time_now (NSYNC_CLOCK), nsync_time_ms (1500));
 	do {
 		int i;
 		test_data td;
@@ -264,7 +266,7 @@ static void test_try_mu_nthread (testing t) {
 				   td.n_threads*td.loop_count, td.i));
 		}
 		loop_count *= 2;
-	} while (nsync_time_cmp (nsync_time_now (), deadline) < 0);
+	} while (nsync_time_cmp (nsync_time_now (NSYNC_CLOCK), deadline) < 0);
 }
 
 /* --------------------------------------- */
@@ -303,7 +305,7 @@ static int counter_wait_for_zero_with_deadline (counter *c, nsync_time abs_deadl
 	int value;
 	nsync_mu_rlock (&c->mu);
 	while (c->value != 0 &&
-	       nsync_cv_wait_with_deadline (&c->cv, &c->mu, abs_deadline, NULL) == 0) {
+	       nsync_cv_wait_with_deadline (&c->cv, &c->mu, NSYNC_CLOCK, abs_deadline, NULL) == 0) {
 	}
 	value = c->value;
 	nsync_mu_runlock (&c->mu);
@@ -427,7 +429,7 @@ static void lock_unlock (testing t, const char *id, int verbose, nsync_mu *mu, i
 	if (verbose) {
 		TEST_LOG (t, ("lock_unlock %s incremented value to %d\n", id, *value));
 	}
-	nsync_time_sleep (sleep);
+	nsync_time_sleep (NSYNC_CLOCK, sleep);
 	nsync_mu_unlock (mu);
 	counter_inc (done, -1);
 }
@@ -451,7 +453,7 @@ static void rlock_runlock (testing t, const char *id, int verbose, nsync_mu *mu,
 		testing_panic (smprintf ("rlock_runlock %s expected "
 					 "value %d, *value=%d", id, expected_value, *value));
 	}
-	nsync_time_sleep (sleep);
+	nsync_time_sleep (NSYNC_CLOCK, sleep);
 	nsync_mu_runlock (mu);
 	counter_inc (done, -1);
 }
@@ -463,7 +465,7 @@ static int check_times (testing t, const char *id, nsync_time start_time,
 	int exceeds_count = 0;
 	nsync_time now;
 	nsync_time measured_duration;
-	now = nsync_time_now ();
+	now = nsync_time_now (NSYNC_CLOCK);
 	measured_duration = nsync_time_sub (now, start_time);
 	if (nsync_time_cmp (measured_duration,
 			    nsync_time_sub (expected_duration, nsync_time_ms (5))) < 0) {
@@ -518,7 +520,7 @@ static void test_rlock (testing t) {
 
 		nsync_time start_time;
 		nsync_mu_init (&mu);
-		start_time = nsync_time_now ();
+		start_time = nsync_time_now (NSYNC_CLOCK);
 
 		/* ------------------------------------ */
 		/* Acquire lock with nsync_mu_rtrylock().  This thread will
@@ -562,7 +564,7 @@ static void test_rlock (testing t) {
 						   lock_unlock_sleeping, lock_unlock_done));
 
 		counter_wait_for_zero (lock_unlock_sleeping);
-		nsync_time_sleep (delay_duration); /* give time for lock_unlock() thread to wait. */
+		nsync_time_sleep (NSYNC_CLOCK, delay_duration); /* give time for lock_unlock() thread to wait. */
 
 		nsync_mu_rassert_held (&mu);
 
@@ -579,7 +581,7 @@ static void test_rlock (testing t) {
 		nsync_mu_rassert_held (&mu);
 
 		counter_wait_for_zero (rlock_runlock_sleeping);
-		nsync_time_sleep (delay_duration); /* time for rlock_runlock() threads to wait. */
+		nsync_time_sleep (NSYNC_CLOCK, delay_duration); /* time for rlock_runlock() threads to wait. */
 
 		nsync_mu_rassert_held (&mu);
 
@@ -608,7 +610,7 @@ static void test_rlock (testing t) {
 		nsync_mu_runlock (&mu);
 		/* ==================================== */
 
-		read_start_time = nsync_time_now ();
+		read_start_time = nsync_time_now (NSYNC_CLOCK);
 		counter_wait_for_zero (lock_unlock_done); /* Now can get write lock. */
 		max_write_wait_exceeded += check_times (t, "i", start_time,
 			nsync_time_add (nsync_time_add (delay_duration, delay_duration), writer_duration),
@@ -654,7 +656,7 @@ static void test_rlock (testing t) {
 		nsync_time start_time;
 
 		nsync_mu_init (&mu);
-		start_time = nsync_time_now ();
+		start_time = nsync_time_now (NSYNC_CLOCK);
 
 		/* ------------------------------------ */
 		/* Acquire lock with nsync_mu_trylock().  This thread will hold
@@ -694,7 +696,7 @@ static void test_rlock (testing t) {
 						   lock_unlock_sleeping, lock_unlock_done));
 
 		counter_wait_for_zero (lock_unlock_sleeping);
-		nsync_time_sleep (delay_duration); /* give time for lock_unlock() thread to wait. */
+		nsync_time_sleep (NSYNC_CLOCK, delay_duration); /* give time for lock_unlock() thread to wait. */
 
 		nsync_mu_assert_held (&mu);
 		nsync_mu_rassert_held (&mu);
@@ -713,7 +715,7 @@ static void test_rlock (testing t) {
 		nsync_mu_rassert_held (&mu);
 
 		counter_wait_for_zero (rlock_runlock_sleeping);
-		nsync_time_sleep (delay_duration); /* time for rlock_runlock() threads to wait. */
+		nsync_time_sleep (NSYNC_CLOCK, delay_duration); /* time for rlock_runlock() threads to wait. */
 
 		nsync_mu_assert_held (&mu);
 		nsync_mu_rassert_held (&mu);
@@ -751,7 +753,7 @@ static void test_rlock (testing t) {
 		nsync_mu_unlock (&mu);
 		/* ==================================== */
 
-		read_start_time = nsync_time_now ();
+		read_start_time = nsync_time_now (NSYNC_CLOCK);
 		counter_wait_for_zero (lock_unlock_done); /* Now can get write lock. */
 		max_write_wait_exceeded += check_times (t, "H", start_time,
 			nsync_time_add (nsync_time_add (delay_duration, delay_duration), writer_duration),

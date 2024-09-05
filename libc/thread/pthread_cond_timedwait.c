@@ -18,7 +18,9 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
 #include "libc/calls/cp.internal.h"
+#include "libc/dce.h"
 #include "libc/errno.h"
+#include "libc/sysv/consts/clock.h"
 #include "libc/thread/lock.h"
 #include "libc/thread/posixthread.internal.h"
 #include "libc/thread/thread.h"
@@ -62,7 +64,7 @@ static errno_t pthread_cond_timedwait_impl(pthread_cond_t *cond,
   struct PthreadWait waiter = {cond, mutex};
   pthread_cleanup_push(pthread_cond_leave, &waiter);
   rc = nsync_futex_wait_((atomic_int *)&cond->_sequence, seq1, cond->_pshared,
-                         abstime);
+                         cond->_clock, abstime);
   pthread_cleanup_pop(true);
   if (rc == -EAGAIN)
     rc = 0;
@@ -81,8 +83,10 @@ static errno_t pthread_cond_timedwait_impl(pthread_cond_t *cond,
  *     }
  *
  * @param mutex needs to be held by thread when calling this function
- * @param abstime may be null to wait indefinitely and should contain
- *     some arbitrary interval added to a `CLOCK_REALTIME` timestamp
+ * @param abstime is an absolute timestamp, which may be null to wait
+ *     forever; it's relative to `clock_gettime(CLOCK_REALTIME)` by
+ *     default; pthread_condattr_setclock() may be used to customize
+ *     which system clock is used
  * @return 0 on success, or errno on error
  * @raise ETIMEDOUT if `abstime` was specified and the current time
  *     exceeded its value
@@ -122,9 +126,9 @@ errno_t pthread_cond_timedwait(pthread_cond_t *cond, pthread_mutex_t *mutex,
 #if PTHREAD_USE_NSYNC
   // favor *NSYNC if this is a process private condition variable
   // if using Mike Burrows' code isn't possible, use a naive impl
-  if (!cond->_pshared) {
+  if (!cond->_pshared && !IsXnuSilicon()) {
     err = nsync_cv_wait_with_deadline(
-        (nsync_cv *)cond, (nsync_mu *)mutex,
+        (nsync_cv *)cond, (nsync_mu *)mutex, cond->_clock,
         abstime ? *abstime : nsync_time_no_deadline, 0);
   } else {
     err = pthread_cond_timedwait_impl(cond, mutex, abstime);

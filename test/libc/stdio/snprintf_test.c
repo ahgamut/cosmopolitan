@@ -35,3 +35,69 @@ TEST(snprintf, testPlusFlagOnChar) {
   ASSERT_EQ(i, 1);
   ASSERT_STREQ(buf, "=");
 }
+
+TEST(snprintf, testInf) {
+  char buf[10] = {};
+  int i = snprintf(buf, sizeof(buf), "%f", 1.0 / 0.0);
+
+  ASSERT_EQ(i, 3);
+  ASSERT_STREQ(buf, "inf");
+
+  memset(buf, 0, 4);
+  i = snprintf(buf, sizeof(buf), "%Lf", 1.0L / 0.0L);
+  ASSERT_EQ(i, 3);
+  ASSERT_STREQ(buf, "inf");
+
+  memset(buf, 0, 4);
+  i = snprintf(buf, sizeof(buf), "%e", 1.0 / 0.0);
+  ASSERT_EQ(i, 3);
+  ASSERT_STREQ(buf, "inf");
+
+  memset(buf, 0, 4);
+  i = snprintf(buf, sizeof(buf), "%Le", 1.0L / 0.0L);
+  ASSERT_EQ(i, 3);
+  ASSERT_STREQ(buf, "inf");
+
+  memset(buf, 0, 4);
+  i = snprintf(buf, sizeof(buf), "%g", 1.0 / 0.0);
+  ASSERT_EQ(i, 3);
+  ASSERT_STREQ(buf, "inf");
+
+  memset(buf, 0, 4);
+  i = snprintf(buf, sizeof(buf), "%Lg", 1.0L / 0.0L);
+  ASSERT_EQ(i, 3);
+  ASSERT_STREQ(buf, "inf");
+
+  for (i = 4; i < 10; ++i)
+    ASSERT_EQ(buf[i], '\0');
+}
+
+TEST(snprintf, testUppercaseCConversionSpecifier) {
+  char buf[10] = {};
+  int i = snprintf(buf, sizeof(buf), "%C", L'a');
+
+  ASSERT_EQ(i, 1);
+  ASSERT_STREQ(buf, "a");
+
+  i = snprintf(buf, sizeof(buf), "%C", L'☺');
+  ASSERT_EQ(i, 3);
+  ASSERT_STREQ(buf, "☺");
+}
+
+// Make sure we don't va_arg the wrong argument size on wide character
+// conversion specifiers
+TEST(snprintf,
+     testWideCConversionSpecifierWithLotsOfArgumentsBeforeAndOneAfter) {
+  char buf[20] = {};
+  int i = snprintf(buf, sizeof(buf), "%d%d%d%d%d%d%d%d%lc%d", 0, 0, 0, 0, 0, 0,
+                   0, 0, L'x', 1);
+
+  ASSERT_EQ(i, 10);
+  ASSERT_STREQ(buf, "00000000x1");
+
+  memset(buf, 0, sizeof(buf));
+  i = snprintf(buf, sizeof(buf), "%d%d%d%d%d%d%d%d%C%d", 0, 0, 0, 0, 0, 0, 0, 0,
+               L'x', 1);
+  ASSERT_EQ(i, 10);
+  ASSERT_STREQ(buf, "00000000x1");
+}

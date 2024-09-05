@@ -16,6 +16,9 @@
 │ limitations under the License.                                               │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/mem/mem.h"
+#include "libc/stdio/stdio.h"
+#include "libc/str/str.h"
+#include "libc/runtime/runtime.h"
 #include "libc/thread/thread.h"
 
 struct thd_args {
@@ -35,6 +38,10 @@ void nsync_start_thread_ (void (*f) (void *), void *arg) {
 	pthread_t t;
 	args->f = f;
 	args->arg = arg;
-	pthread_create (&t, NULL, body, args);
+	errno_t err = pthread_create (&t, NULL, body, args);
+	if (err) {
+		fprintf(stderr, "pthread_create: %s\n", strerror(err));
+		exit(1);
+	}
 	pthread_detach (t);
 }
