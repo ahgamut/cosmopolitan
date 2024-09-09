@@ -1,7 +1,7 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
 │ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
-│ Copyright 2020 Justine Alexandra Roberts Tunney                              │
+│ Copyright 2024 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
 │ Permission to use, copy, modify, and/or distribute this software for         │
 │ any purpose with or without fee is hereby granted, provided that the         │
@@ -16,20 +16,26 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/intrin/psraw.h"
+#include "libc/elf/elf.h"
+#include "libc/stdio/stdio.h"
+#include "tool/build/lib/ar.h"
 
-/**
- * Divides shorts by two power.
- *
- * @note c needs to be a literal, asmconstexpr, or linkconstsym
- * @note arithmetic shift right will sign extend negatives
- * @mayalias
- */
-void(psraw)(int16_t a[8], const int16_t b[8], unsigned char k) {
-  unsigned i;
-  if (k > 15)
-    k = 15;
-  for (i = 0; i < 8; ++i) {
-    a[i] = b[i] >> k;
+void ProcessFile(const char *path) {
+  struct Ar ar;
+  struct ArFile arf;
+  openar(&ar, path);
+  while (readar(&ar, &arf)) {
+    printf("%s: %s", path, arf.name);
+    if (IsElf64Binary(arf.data, arf.size))
+      printf(" is elf");
+    else
+      printf(" is not elf!!");
+    printf("\n");
   }
+  closear(&ar);
+}
+
+int main(int argc, char *argv[]) {
+  for (int i = 1; i < argc; ++i)
+    ProcessFile(argv[i]);
 }

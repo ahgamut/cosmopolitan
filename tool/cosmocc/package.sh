@@ -180,7 +180,7 @@ if [ ! -x bin/x86_64-linux-cosmo-gcc ]; then
   wait
   unzip aarch64-gcc.zip &
   unzip x86_64-gcc.zip &
-  unzip llvm.zip bin/clang-19 &
+  unzip llvm.zip bin/clang-19 bin/clang-format &
   wait
   rm -f aarch64-gcc.zip
   rm -f x86_64-gcc.zip
