@@ -17,9 +17,9 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/internal.h"
-#include "libc/intrin/fds.h"
 #include "libc/calls/struct/iovec.h"
 #include "libc/calls/struct/sigset.internal.h"
+#include "libc/intrin/fds.h"
 #include "libc/nt/struct/iovec.h"
 #include "libc/nt/winsock.h"
 #include "libc/sock/internal.h"
@@ -42,7 +42,7 @@ struct RecvFromArgs {
   struct NtIovec iovnt[16];
 };
 
-static textwindows int sys_recvfrom_nt_start(int64_t handle,
+textwindows static int sys_recvfrom_nt_start(int64_t handle,
                                              struct NtOverlapped *overlap,
                                              uint32_t *flags, void *arg) {
   struct RecvFromArgs *args = arg;

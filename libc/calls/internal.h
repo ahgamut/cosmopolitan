@@ -25,8 +25,8 @@ int __ensurefds(int);
 uint32_t sys_getuid_nt(void);
 int __ensurefds_unlocked(int);
 void __printfds(struct Fd *, size_t);
+int __sigcheck(sigset_t, bool);
 int CountConsoleInputBytes(void);
-int CountConsoleInputBytesBlocking(uint32_t, sigset_t);
 int FlushConsoleInputBytes(void);
 int64_t GetConsoleInputHandle(void);
 int64_t GetConsoleOutputHandle(void);
@@ -43,6 +43,7 @@ forceinline bool __isfdkind(int fd, int kind) {
 
 int _check_signal(bool);
 int _check_cancel(void);
+bool _is_canceled(void);
 int sys_close_nt(int, int);
 int _park_norestart(uint32_t, uint64_t);
 int _park_restartable(uint32_t, uint64_t);

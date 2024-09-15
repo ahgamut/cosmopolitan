@@ -21,12 +21,16 @@
 #include "libc/intrin/weaken.h"
 #include "libc/thread/posixthread.internal.h"
 
-int _check_cancel(void) {
-  if (_weaken(_pthread_cancel_ack) &&  //
-      _pthread_self() && !(_pthread_self()->pt_flags & PT_NOCANCEL) &&
-      atomic_load_explicit(&_pthread_self()->pt_canceled,
-                           memory_order_acquire)) {
+textwindows bool _is_canceled(void) {
+  struct PosixThread *pt;
+  return _weaken(_pthread_cancel_ack) && (pt = _pthread_self()) &&
+         atomic_load_explicit(&pt->pt_canceled, memory_order_acquire) &&
+         !(pt->pt_flags & PT_NOCANCEL);
+}
+
+textwindows int _check_cancel(void) {
+  if (_is_canceled())
+    // once acknowledged _is_canceled() will return false
     return _weaken(_pthread_cancel_ack)();
-  }
   return 0;
 }

@@ -40,6 +40,12 @@ atomic_int gotcleanup;
 
 void SetUpOnce(void) {
   testlib_enable_tmp_setup_teardown();
+  pthread_mutexattr_t at;
+  pthread_mutexattr_init(&at);
+  pthread_mutexattr_settype(&at, PTHREAD_MUTEX_NORMAL);
+  pthread_mutex_init(&mu, &at);
+  pthread_mutexattr_destroy(&at);
+  pthread_cond_init(&cv, 0);
 }
 
 void SetUp(void) {
@@ -97,8 +103,6 @@ TEST(pthread_cancel, synchronous) {
 TEST(pthread_cancel, synchronous_deferred) {
   void *rc;
   pthread_t th;
-  if (!IsWindows())
-    return;
   ASSERT_SYS(0, 0, pipe(pfds));
   ASSERT_EQ(0, pthread_create(&th, 0, Worker, 0));
   while (!ready)

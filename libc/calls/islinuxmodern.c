@@ -16,24 +16,12 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/calls/calls.h"
+#include "libc/calls/syscall-sysv.internal.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
+#include "libc/dce.h"
+#include "libc/errno.h"
 
-float __extendbfsf2(__bf16 f) {
-  union {
-    __bf16 f;
-    unsigned short i;
-  } ub = {f};
-
-  // convert brain16 to binary32
-  unsigned x = (unsigned)ub.i << 16;
-
-  // force nan to quiet
-  if ((x & 0x7fffffff) > 0x7f800000)
-    x |= 0x00400000;
-
-  // pun to float
-  union {
-    unsigned i;
-    float f;
-  } uf = {x};
-  return uf.f;
+bool IsLinuxModern(void) {
+  return IsLinux() && sys_close_range(-1, -2, 0) == -1 && errno == EINVAL;
 }

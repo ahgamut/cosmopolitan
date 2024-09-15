@@ -24,6 +24,7 @@
 #include "libc/calls/struct/iovec.h"
 #include "libc/calls/struct/sigset.internal.h"
 #include "libc/calls/struct/timespec.h"
+#include "libc/calls/struct/timespec.internal.h"
 #include "libc/calls/syscall_support-nt.internal.h"
 #include "libc/cosmo.h"
 #include "libc/ctype.h"
@@ -46,6 +47,7 @@
 #include "libc/nt/enum/vk.h"
 #include "libc/nt/enum/wait.h"
 #include "libc/nt/errors.h"
+#include "libc/nt/events.h"
 #include "libc/nt/runtime.h"
 #include "libc/nt/struct/inputrecord.h"
 #include "libc/nt/synchronization.h"
@@ -85,15 +87,15 @@ struct VirtualKey {
 #define S(s) W(s "\0\0")
 #define W(s) (s[3] << 24 | s[2] << 16 | s[1] << 8 | s[0])
 
-static const struct VirtualKey kVirtualKey[] = {
-    {kNtVkUp, S("A"), S("1;2A"), S("1;5A"), S("1;6A")},
-    {kNtVkDown, S("B"), S("1;2B"), S("1;5B"), S("1;6B")},
-    {kNtVkRight, S("C"), S("1;2C"), S("1;5C"), S("1;6C")},
-    {kNtVkLeft, S("D"), S("1;2D"), S("1;5D"), S("1;6D")},
+static struct VirtualKey kVirtualKey[] = {
+    {kNtVkUp, S("A"), S("1;2A"), S("1;5A"), S("1;6A")},     // order matters
+    {kNtVkDown, S("B"), S("1;2B"), S("1;5B"), S("1;6B")},   // order matters
+    {kNtVkRight, S("C"), S("1;2C"), S("1;5C"), S("1;6C")},  // order matters
+    {kNtVkLeft, S("D"), S("1;2D"), S("1;5D"), S("1;6D")},   // order matters
+    {kNtVkEnd, S("F"), S("1;2F"), S("1;5F"), S("1;6F")},    // order matters
+    {kNtVkHome, S("H"), S("1;2H"), S("1;5H"), S("1;6H")},   // order matters
     {kNtVkInsert, S("2~"), S("2;2~"), S("2;5~"), S("2;6~")},
     {kNtVkDelete, S("3~"), S("3;2~"), S("3;5~"), S("3;6~")},
-    {kNtVkHome, S("H"), S("1;2H"), S("1;5H"), S("1;6H")},
-    {kNtVkEnd, S("F"), S("1;2F"), S("1;5F"), S("1;6F")},
     {kNtVkPrior, S("5~"), S("5;2~"), S("5;5~"), S("5;6~")},
     {kNtVkNext, S("6~"), S("6;2~"), S("6;5~"), S("6;6~")},
     {kNtVkF1, -S("OP"), S("1;2P"), S("11^"), S("1;6P")},
@@ -108,17 +110,6 @@ static const struct VirtualKey kVirtualKey[] = {
     {kNtVkF10, S("21~"), S("34~"), S("21^"), S("34^")},
     {kNtVkF11, S("23~"), S("23$"), S("23^"), S("23@")},
     {kNtVkF12, S("24~"), S("24$"), S("24^"), S("24@")},
-    {0},
-};
-
-// TODO: How can we configure `less` to not need this bloat?
-static const struct VirtualKey kDecckm[] = {
-    {kNtVkUp, -S("OA"), -S("OA"), S("A"), S("A")},
-    {kNtVkDown, -S("OB"), -S("OB"), S("B"), S("B")},
-    {kNtVkRight, -S("OC"), -S("OC"), S("C"), S("C")},
-    {kNtVkLeft, -S("OD"), -S("OD"), S("D"), S("D")},
-    {kNtVkPrior, S("5~"), S("5;2~"), S("5;5~"), S("5;6~")},
-    {kNtVkNext, S("6~"), S("6;2~"), S("6;5~"), S("6;6~")},
     {0},
 };
 
@@ -142,7 +133,6 @@ struct Keystrokes {
   struct Dll *line;
   struct Dll *free;
   pthread_mutex_t lock;
-  const struct VirtualKey *vkt;
   struct Keystroke pool[512];
 };
 
@@ -180,7 +170,6 @@ textwindows static void FreeKeystrokes(struct Dll **list) {
 }
 
 textwindows static void OpenConsole(void) {
-  __keystroke.vkt = kVirtualKey;
   __keystroke.cin = CreateFile(u"CONIN$", kNtGenericRead | kNtGenericWrite,
                                kNtFileShareRead, 0, kNtOpenExisting, 0, 0);
   __keystroke.cot = CreateFile(u"CONOUT$", kNtGenericRead | kNtGenericWrite,
@@ -227,16 +216,16 @@ textwindows static bool IsMouseModeCommand(int x) {
 }
 
 textwindows static int GetVirtualKey(uint16_t vk, bool shift, bool ctrl) {
-  for (int i = 0; __keystroke.vkt[i].vk; ++i) {
-    if (__keystroke.vkt[i].vk == vk) {
+  for (int i = 0; kVirtualKey[i].vk; ++i) {
+    if (kVirtualKey[i].vk == vk) {
       if (shift && ctrl) {
-        return __keystroke.vkt[i].shift_ctrl_str;
+        return kVirtualKey[i].shift_ctrl_str;
       } else if (shift) {
-        return __keystroke.vkt[i].shift_str;
+        return kVirtualKey[i].shift_str;
       } else if (ctrl) {
-        return __keystroke.vkt[i].ctrl_str;
+        return kVirtualKey[i].ctrl_str;
       } else {
-        return __keystroke.vkt[i].normal_str;
+        return kVirtualKey[i].normal_str;
       }
     }
   }
@@ -397,12 +386,14 @@ textwindows static int ProcessMouseEvent(const struct NtInputRecord *r,
                   kNtLeftAltPressed | kNtRightAltPressed))) {
       // we disable mouse highlighting when the tty is put in raw mode
       // to mouse wheel events with widely understood vt100 arrow keys
-      *p++ = 033;
-      *p++ = !__keystroke.ohno_decckm ? '[' : 'O';
-      if (isup) {
-        *p++ = 'A';
-      } else {
-        *p++ = 'B';
+      for (int i = 0; i < 3; ++i) {
+        *p++ = 033;
+        *p++ = !__keystroke.ohno_decckm ? '[' : 'O';
+        if (isup) {
+          *p++ = 'A';
+        } else {
+          *p++ = 'B';
+        }
       }
     }
   } else if ((bs || currentbs) && (__ttyconf.magic & kTtyXtMouse)) {
@@ -737,8 +728,14 @@ textwindows void InterceptTerminalCommands(const char *data, size_t size) {
           x = 0;
         } else if (data[i] == 'h') {
           if (x == 1) {
-            __keystroke.vkt = kDecckm;  // \e[?1h decckm on
+            // \e[?1h decckm on
             __keystroke.ohno_decckm = true;
+            kVirtualKey[0].normal_str = -S("OA");  // kNtVkUp
+            kVirtualKey[1].normal_str = -S("OB");  // kNtVkDown
+            kVirtualKey[2].normal_str = -S("OC");  // kNtVkRight
+            kVirtualKey[3].normal_str = -S("OD");  // kNtVkLeft
+            kVirtualKey[4].normal_str = -S("OF");  // kNtVkEnd
+            kVirtualKey[5].normal_str = -S("OH");  // kNtVkHome
           } else if ((ismouse |= IsMouseModeCommand(x))) {
             __ttyconf.magic |= kTtyXtMouse;
             cm2 |= kNtEnableMouseInput;
@@ -747,8 +744,14 @@ textwindows void InterceptTerminalCommands(const char *data, size_t size) {
           t = ASC;
         } else if (data[i] == 'l') {
           if (x == 1) {
-            __keystroke.vkt = kVirtualKey;  // \e[?1l decckm off
+            // \e[?1l decckm off
             __keystroke.ohno_decckm = false;
+            kVirtualKey[0].normal_str = S("A");  // kNtVkUp
+            kVirtualKey[1].normal_str = S("B");  // kNtVkDown
+            kVirtualKey[2].normal_str = S("C");  // kNtVkRight
+            kVirtualKey[3].normal_str = S("D");  // kNtVkLeft
+            kVirtualKey[4].normal_str = S("F");  // kNtVkEnd
+            kVirtualKey[5].normal_str = S("H");  // kNtVkHome
           } else if ((ismouse |= IsMouseModeCommand(x))) {
             __ttyconf.magic &= ~kTtyXtMouse;
             cm2 |= kNtEnableQuickEditMode;  // release mouse
@@ -831,83 +834,91 @@ textwindows static void RestoreProcessedInput(uint32_t inmode) {
 textwindows static int CountConsoleInputBytesBlockingImpl(uint32_t ms,
                                                           sigset_t waitmask,
                                                           bool restartable) {
-  int sig;
-  int64_t sem;
-  uint32_t wi;
-  struct timespec now, deadline;
   InitConsole();
-  deadline = timespec_add(timespec_mono(), timespec_frommillis(ms));
-RestartOperation:
-  if (_check_cancel() == -1)
-    return -1;
-  if (_weaken(__sig_get) && (sig = _weaken(__sig_get)(waitmask)))
-    goto DeliverSignal;
-  struct PosixThread *pt = _pthread_self();
-  pt->pt_blkmask = waitmask;
-  pt->pt_semaphore = sem = CreateSemaphore(0, 0, 1, 0);
-  atomic_store_explicit(&pt->pt_blocker, PT_BLOCKER_SEM, memory_order_release);
-  wi = WaitForMultipleObjects(2, (int64_t[2]){__keystroke.cin, sem}, 0, ms);
-  atomic_store_explicit(&pt->pt_blocker, 0, memory_order_release);
-  CloseHandle(sem);
-
-  // check for wait timeout
-  if (wi == kNtWaitTimeout)
-    return etimedout();
-
-  // handle event on console handle. this means we can now read from the
-  // conosle without blocking. so the first thing we do is slurp up your
-  // keystroke data. some of those keystrokes might cause a signal to be
-  // raised. so we need to check for pending signals again and handle it
-  if (wi == 0) {
-    int got = CountConsoleInputBytes();
-    if (_weaken(__sig_get) && (sig = _weaken(__sig_get)(waitmask)))
-      goto DeliverSignal;
-    if (got == -1)
-      // this is a bona fide eof and console errors are logged to strace
-      return 0;
-    if (got == 0) {
-      // this can happen for multiple reasons. first our driver controls
-      // user interactions in canonical mode. secondly we could lose the
-      // race with another thread that's reading input.
-      now = timespec_mono();
-      if (timespec_cmp(now, deadline) >= 0)
-        return etimedout();
-      ms = timespec_tomillis(timespec_sub(deadline, now));
-      ms = ms > -1u ? -1u : ms;
-      goto RestartOperation;
-    }
-    return got;
-  }
-
-  // handle wait itself failing
-  if (wi != 1)
-    return __winerr();
-
-  // handle event on throwaway semaphore, it is poked by signal delivery
-  if (_weaken(__sig_get)) {
-    if (!(sig = _weaken(__sig_get)(waitmask)))
-      return eintr();
-  DeliverSignal:
-    int handler_was_called = _weaken(__sig_relay)(sig, SI_KERNEL, waitmask);
-    if (_check_cancel() == -1)
+  struct timespec deadline =
+      timespec_add(sys_clock_gettime_monotonic_nt(), timespec_frommillis(ms));
+  for (;;) {
+    int sig = 0;
+    intptr_t sev;
+    if (!(sev = CreateEvent(0, 0, 0, 0)))
+      return __winerr();
+    struct PosixThread *pt = _pthread_self();
+    pt->pt_event = sev;
+    pt->pt_blkmask = waitmask;
+    atomic_store_explicit(&pt->pt_blocker, PT_BLOCKER_EVENT,
+                          memory_order_release);
+    if (_check_cancel() == -1) {
+      atomic_store_explicit(&pt->pt_blocker, 0, memory_order_release);
+      CloseHandle(sev);
       return -1;
-    if (handler_was_called & SIG_HANDLED_NO_RESTART)
-      return eintr();
-    if (handler_was_called & SIG_HANDLED_SA_RESTART)
-      if (!restartable)
+    }
+    if (_weaken(__sig_get) && (sig = _weaken(__sig_get)(waitmask))) {
+      atomic_store_explicit(&pt->pt_blocker, 0, memory_order_release);
+      CloseHandle(sev);
+      goto DeliverSignal;
+    }
+    struct timespec now = sys_clock_gettime_monotonic_nt();
+    struct timespec remain = timespec_subz(deadline, now);
+    int64_t millis = timespec_tomillis(remain);
+    uint32_t waitms = MIN(millis, 0xffffffffu);
+    intptr_t hands[] = {__keystroke.cin, sev};
+    uint32_t wi = WaitForMultipleObjects(2, hands, 0, waitms);
+    atomic_store_explicit(&pt->pt_blocker, 0, memory_order_release);
+    CloseHandle(sev);
+    if (wi == -1u)
+      return __winerr();
+
+    // check for wait timeout
+    if (wi == kNtWaitTimeout)
+      return etimedout();
+
+    // handle event on console handle. this means we can now read from the
+    // conosle without blocking. so the first thing we do is slurp up your
+    // keystroke data. some of those keystrokes might cause a signal to be
+    // raised. so we need to check for pending signals again and handle it
+    if (wi == 0) {
+      int got = CountConsoleInputBytes();
+      // we might have read a keystroke that generated a signal
+      if (_weaken(__sig_get) && (sig = _weaken(__sig_get)(waitmask)))
+        goto DeliverSignal;
+      if (got == -1)
+        // this is a bona fide eof and console errors are logged to strace
+        return 0;
+      if (got == 0)
+        // this can happen for multiple reasons. first our driver controls
+        // user interactions in canonical mode. secondly we could lose the
+        // race with another thread that's reading input.
+        continue;
+      return got;
+    }
+
+    if (wi == 1 && _weaken(__sig_get) && (sig = _weaken(__sig_get)(waitmask))) {
+      // handle event on throwaway semaphore, it is poked by signal delivery
+    DeliverSignal:;
+      int handler_was_called = 0;
+      do {
+        handler_was_called |= _weaken(__sig_relay)(sig, SI_KERNEL, waitmask);
+      } while ((sig = _weaken(__sig_get)(waitmask)));
+      if (_check_cancel() == -1)
+        return -1;
+      if (handler_was_called & SIG_HANDLED_NO_RESTART)
         return eintr();
+      if (handler_was_called & SIG_HANDLED_SA_RESTART)
+        if (!restartable)
+          return eintr();
+    }
   }
-  goto RestartOperation;
 }
 
-textwindows int CountConsoleInputBytesBlocking(uint32_t ms, sigset_t waitmask) {
+textwindows static int CountConsoleInputBytesBlocking(uint32_t ms,
+                                                      sigset_t waitmask) {
   int got = CountConsoleInputBytes();
   if (got == -1)
     return 0;
   if (got > 0)
     return got;
   uint32_t inmode = DisableProcessedInput();
-  int rc = CountConsoleInputBytesBlockingImpl(ms, waitmask, false);
+  int rc = CountConsoleInputBytesBlockingImpl(ms, waitmask, true);
   RestoreProcessedInput(inmode);
   return rc;
 }

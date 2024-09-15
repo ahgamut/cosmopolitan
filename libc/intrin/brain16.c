@@ -17,12 +17,53 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 
-__bf16 __truncsfbf2(float f) {
+/**
+ * @fileoverview bf16 compiler runtime
+ */
+
+_Float32 __extendbfsf2(__bf16 f) {
   union {
-    float f;
-    unsigned i;
+    __bf16 f;
+    uint16_t i;
+  } ub = {f};
+
+  // convert brain16 to binary32
+  uint32_t x = (uint32_t)ub.i << 16;
+
+  // force nan to quiet
+  if ((x & 0x7fffffff) > 0x7f800000)
+    x |= 0x00400000;
+
+  // pun to _Float32
+  union {
+    uint32_t i;
+    _Float32 f;
+  } uf = {x};
+  return uf.f;
+}
+
+_Float64 __extendbfdf2(__bf16 f) {
+  return __extendbfsf2(f);
+}
+
+#ifdef __x86_64__
+__float80 __extendbfxf2(__bf16 f) {
+  return __extendbfsf2(f);
+}
+#endif
+
+#ifdef __aarch64__
+_Float128 __extendbftf2(__bf16 f) {
+  return __extendbfsf2(f);
+}
+#endif
+
+__bf16 __truncsfbf2(_Float32 f) {
+  union {
+    _Float32 f;
+    uint32_t i;
   } uf = {f};
-  unsigned x = uf.i;
+  uint32_t x = uf.i;
 
   if ((x & 0x7fffffff) > 0x7f800000)
     // force nan to quiet
@@ -33,8 +74,24 @@ __bf16 __truncsfbf2(float f) {
 
   // pun to bf16
   union {
-    unsigned short i;
+    uint16_t i;
     __bf16 f;
   } ub = {x};
   return ub.f;
 }
+
+__bf16 __truncdfbf2(_Float64 f) {
+  return __truncsfbf2(f);
+}
+
+#ifdef __x86_64__
+__bf16 __truncxfbf2(__float80 f) {
+  return __truncsfbf2(f);
+}
+#endif
+
+#ifdef __aarch64__
+__bf16 __trunctfbf2(_Float128 f) {
+  return __truncsfbf2(f);
+}
+#endif

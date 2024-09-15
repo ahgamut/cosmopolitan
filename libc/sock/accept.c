@@ -22,6 +22,9 @@
 /**
  * Creates client socket file descriptor for incoming connection.
  *
+ * On Windows, when this function blocks, there may be a 10 millisecond
+ * delay on the handling of signals or thread cancelation.
+ *
  * @param fd is the server socket file descriptor
  * @param opt_out_addr will receive the remote address
  * @param opt_inout_addrsize provides and receives addr's byte length

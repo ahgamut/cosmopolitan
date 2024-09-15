@@ -16,9 +16,25 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/calls/internal.h"
+#include "libc/calls/sig.internal.h"
+#include "libc/intrin/weaken.h"
+#include "libc/sysv/consts/sicode.h"
+#include "libc/sysv/errfuns.h"
 
-__bf16 __truncsfbf2(float);
-__bf16 __truncdfbf2(double f) {
-  // TODO(jart): What else are we supposed to do here?
-  return __truncsfbf2(f);
+textwindows int __sigcheck(sigset_t waitmask, bool restartable) {
+  int sig, handler_was_called;
+  if (_check_cancel() == -1)
+    return -1;
+  if (_weaken(__sig_get) && (sig = _weaken(__sig_get)(waitmask))) {
+    handler_was_called = _weaken(__sig_relay)(sig, SI_KERNEL, waitmask);
+    if (_check_cancel() == -1)
+      return -1;
+    if (handler_was_called & SIG_HANDLED_NO_RESTART)
+      return eintr();
+    if (handler_was_called & SIG_HANDLED_SA_RESTART)
+      if (!restartable)
+        return eintr();
+  }
+  return 0;
 }

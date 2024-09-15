@@ -53,7 +53,7 @@ int main() {
       float t = (float)g++ / SAMPLING_RATE;
       float s = sinf(2 * M_PIf * WAVE_INTERVAL * t);
       for (int c = 0; c < CHANNELS; c++)
-        buf[f * CHANNELS + c] = s;
+        buf[f * CHANNELS + c] = s * .3f;
     }
     status = cosmoaudio_write(ca, buf, frames);
     if (status != frames) {

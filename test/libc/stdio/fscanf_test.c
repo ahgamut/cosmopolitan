@@ -27,7 +27,7 @@ TEST(fscanf, test_readAfterFloat) {
   EXPECT_EQ(4, fscanf(f, "%f%x%f%x", &f1, &i1, &f2, &i2));
   EXPECT_TRUE(isinf(f1));
   EXPECT_EQ(0xDEAD, i1);
-  EXPECT_EQ(-0.125e-2f, f2);
+  EXPECT_FLOAT_EXACTLY_EQ(-0.125e-2f, f2);
   EXPECT_EQ(0xBEEF, i2);
   fclose(f);
 }

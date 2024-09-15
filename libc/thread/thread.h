@@ -8,7 +8,6 @@
 
 #define PTHREAD_BARRIER_SERIAL_THREAD 31337
 
-#define PTHREAD_MUTEX_DEFAULT    0
 #define PTHREAD_MUTEX_NORMAL     0
 #define PTHREAD_MUTEX_RECURSIVE  1
 #define PTHREAD_MUTEX_ERRORCHECK 2
@@ -48,6 +47,9 @@ COSMOPOLITAN_C_START_
 
 #define PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP {0, {}, PTHREAD_MUTEX_RECURSIVE}
 
+#define PTHREAD_SIGNAL_SAFE_MUTEX_INITIALIZER_NP \
+  {0, {}, PTHREAD_MUTEX_RECURSIVE | PTHREAD_PROCESS_SHARED}
+
 #ifndef __cplusplus
 #define _PTHREAD_ATOMIC(x) _Atomic(x)
 #else
@@ -75,7 +77,9 @@ typedef struct pthread_mutex_s {
     int32_t _pid;
     _PTHREAD_ATOMIC(int32_t) _futex;
   };
+  /* this cleverly overlaps with NSYNC struct Dll *waiters; */
   _PTHREAD_ATOMIC(uint64_t) _word;
+  long _nsyncx[2];
 } pthread_mutex_t;
 
 typedef struct pthread_mutexattr_s {
@@ -94,6 +98,8 @@ typedef struct pthread_cond_s {
       uint32_t _nsync;
       char _pshared;
       char _clock;
+      char _footek;
+      _PTHREAD_ATOMIC(char) _waited;
     };
   };
   _PTHREAD_ATOMIC(uint32_t) _sequence;
