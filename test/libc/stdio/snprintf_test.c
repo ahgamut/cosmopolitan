@@ -217,39 +217,64 @@ TEST(snprintf, testLongDoubleRounding) {
   ASSERT_EQ(0, fesetround(previous_rounding));
 }
 
+void check_a_conversion_specifier_double(const char *fmt,
+                                         const char *expected_str,
+                                         double value) {
+  char buf[30] = {0};
+  int i = snprintf(buf, sizeof(buf), fmt, value);
+
+  ASSERT_EQ(strlen(expected_str), i);
+  ASSERT_STREQ(expected_str, buf);
+}
+
+void check_a_conversion_specifier_long_double(const char *fmt,
+                                              const char *expected_str,
+                                              long double value) {
+  char buf[30] = {0};
+  int i = snprintf(buf, sizeof(buf), fmt, value);
+
+  ASSERT_EQ(strlen(expected_str), i);
+  ASSERT_STREQ(expected_str, buf);
+}
+
+void check_a_conversion_specifier_double_prec_1(const char *expected_str,
+                                                double value) {
+  check_a_conversion_specifier_double("%.1a", expected_str, value);
+}
+
 TEST(snprintf, testAConversionSpecifierRounding) {
   int previous_rounding = fegetround();
-  ASSERT_EQ(0, fesetround(FE_DOWNWARD));
 
-  char buf[20];
-  int i = snprintf(buf, sizeof(buf), "%.1a", 0x1.fffffp+4);
-  ASSERT_EQ(8, i);
-  ASSERT_STREQ("0x1.fp+4", buf);
+  ASSERT_EQ(0, fesetround(FE_DOWNWARD));
+  check_a_conversion_specifier_double_prec_1("0x1.fp+4", 0x1.fffffp+4);
 
   ASSERT_EQ(0, fesetround(FE_UPWARD));
-
-  i = snprintf(buf, sizeof(buf), "%.1a", 0x1.f8p+4);
-  ASSERT_EQ(8, i);
-  ASSERT_STREQ("0x2.0p+4", buf);
+  check_a_conversion_specifier_double_prec_1("0x2.0p+4", 0x1.f8p+4);
 
   ASSERT_EQ(0, fesetround(previous_rounding));
 }
 
-// This test currently fails because of rounding issues
-// If that ever gets fixed, uncomment this
-/*
+// This test specifically checks that we round to even, accordingly to IEEE
+// rules
 TEST(snprintf, testAConversionSpecifier) {
-  char buf[20];
-  int i = snprintf(buf, sizeof(buf), "%.1a", 0x1.7800000000001p+4);
-  ASSERT_EQ(8, i);
-  ASSERT_STREQ("0x1.8p+4", buf);
+  check_a_conversion_specifier_double_prec_1("0x1.8p+4", 0x1.7800000000001p+4);
+  check_a_conversion_specifier_double_prec_1("0x1.8p+4", 0x1.78p+4);
+  check_a_conversion_specifier_double_prec_1("0x1.8p+4", 0x1.88p+4);
+  check_a_conversion_specifier_double_prec_1("0x1.6p+4", 0x1.58p+4);
+  check_a_conversion_specifier_double_prec_1("0x1.6p+4", 0x1.68p+4);
+  check_a_conversion_specifier_double_prec_1("0x1.ap+4", 0x1.98p+4);
+  check_a_conversion_specifier_double_prec_1("0x1.ap+4", 0x1.a8p+4);
 
-  memset(buf, 0, sizeof(buf));
-  i = snprintf(buf, sizeof(buf), "%.1a", 0x1.78p+4);
-  ASSERT_EQ(8, i);
-  ASSERT_STREQ("0x1.8p+4", buf);
+  check_a_conversion_specifier_double("%#a", "0x0.p+0", 0x0.0p0);
+  check_a_conversion_specifier_double("%#A", "0X0.P+0", 0x0.0p0);
+  check_a_conversion_specifier_long_double("%#La", "0x0.p+0", 0x0.0p0L);
+  check_a_conversion_specifier_long_double("%#LA", "0X0.P+0", 0x0.0p0L);
+
+  check_a_conversion_specifier_double("%.2a", "0x1.00p-1026", 0xf.fffp-1030);
+
+  // TODO(GabrielRavier): fix me on aarch64
+  /* check_a_conversion_specifier_long_double("%.1La", "0x1.0p+1", 1.999L); */
 }
-*/
 
 TEST(snprintf, apostropheFlag) {
   char buf[20];
