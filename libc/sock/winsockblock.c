@@ -30,10 +30,12 @@
 #include "libc/nt/events.h"
 #include "libc/nt/runtime.h"
 #include "libc/nt/struct/overlapped.h"
+#include "libc/nt/struct/pollfd.h"
 #include "libc/nt/synchronization.h"
 #include "libc/nt/thread.h"
 #include "libc/nt/winsock.h"
 #include "libc/sock/internal.h"
+#include "libc/sysv/consts/poll.h"
 #include "libc/sysv/consts/sicode.h"
 #include "libc/sysv/errfuns.h"
 #include "libc/thread/posixthread.internal.h"
@@ -70,6 +72,9 @@ __winsock_block(int64_t handle, uint32_t flags, bool nonblock,
     bool32 ok = !StartSocketOp(handle, &overlap, &flags, arg);
     if (!ok && WSAGetLastError() == kNtErrorIoPending) {
       if (nonblock) {
+        // send() and sendto() shall not pass O_NONBLOCK along to here
+        // because winsock has a bug that causes CancelIoEx() to cause
+        // WSAGetOverlappedResult() to report errors when it succeeded
         CancelIoEx(handle, &overlap);
         got_eagain = true;
       } else {
@@ -174,6 +179,11 @@ __winsock_block(int64_t handle, uint32_t flags, bool nonblock,
       // check if signal handler without SA_RESTART was called
       if (handler_was_called & SIG_HANDLED_NO_RESTART)
         return eintr();
+
+      // emulates linux behavior of having timeouts @norestart
+      if (handler_was_called & SIG_HANDLED_SA_RESTART)
+        if (srwtimeout)
+          return eintr();
     }
 
     // otherwise try the i/o operation again

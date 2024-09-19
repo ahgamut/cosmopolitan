@@ -1,7 +1,7 @@
-/*-*- mode:unix-assembly; indent-tabs-mode:t; tab-width:8; coding:utf-8     -*-│
-│ vi: set noet ft=asm ts=8 sw=8 fenc=utf-8                                 :vi │
+/*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
+│ vi: set et ft=c ts=8 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
-│ Copyright 2021 Justine Alexandra Roberts Tunney                              │
+│ Copyright 2020 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
 │ Permission to use, copy, modify, and/or distribute this software for         │
 │ any purpose with or without fee is hereby granted, provided that the         │
@@ -16,34 +16,54 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/fmt/magnumstrs.internal.h"
+#include "ape/sections.internal.h"
+#include "libc/assert.h"
+#include "libc/fmt/conv.h"
 #include "libc/macros.h"
+#include "libc/mem/mem.h"
+#include "libc/runtime/runtime.h"
+#include "libc/stdckdint.h"
+#include "libc/str/str.h"
+#include "libc/sysv/errfuns.h"
 
-	.macro	.e e s
-	.long	\e - kIpOptnames
-	.long	.L\@ - kIpOptnames
-	.rodata.str1.1
-.L\@:	.string	"\s"
-	.previous
-	.endm
+/* TODO(jart): DELETE */
 
-	.section .rodata
-	.balign	4
-	.underrun
-kIpOptnames:
-	.e	IP_TOS,"TOS"			// int
-	.e	IP_TTL,"TTL"			// int
-	.e	IP_MTU,"MTU"			// int
-	.e	IP_HDRINCL,"HDRINCL"		// bool32
-	.e	IP_OPTIONS,"OPTIONS"
-	.e	IP_RECVTTL,"RECVTTL"
-	.e	IP_ADD_MEMBERSHIP,"ADD_MEMBERSHIP"
-	.e	IP_DROP_MEMBERSHIP,"DROP_MEMBERSHIP"
-	.e	IP_MULTICAST_IF,"MULTICAST_IF"
-	.e	IP_MULTICAST_LOOP,"MULTICAST_LOOP"
-	.e	IP_MULTICAST_TTL,"MULTICAST_TTL"
-	.e	IP_PKTINFO,"PKTINFO"
-	.e	IP_RECVTOS,"RECVTOS"
-	.long	MAGNUM_TERMINATOR
-	.endobj	kIpOptnames,globl,hidden
-	.overrun
+#define GUARANTEE_TERMINATOR 1
+#define INITIAL_CAPACITY     (32 - GUARANTEE_TERMINATOR)
+
+static bool isheap(const void *p) {
+  if (__executable_start <= (const unsigned char *)p &&
+      (const unsigned char *)p < _end)
+    return false;
+  return true;
+}
+
+bool __grow(void *pp, size_t *capacity, size_t itemsize, size_t extra) {
+  void **p, *p1, *p2;
+  size_t n1, n2;
+  size_t t1, t2;
+  extra += GUARANTEE_TERMINATOR;
+  p = (void **)pp;
+  unassert(itemsize);
+  unassert((*p && *capacity) || (!*p && !*capacity));
+  unassert(!isheap(*p) || ((intptr_t)*p & 15) == 0);
+  p1 = isheap(*p) ? *p : NULL;
+  p2 = NULL;
+  n1 = *capacity;
+  n2 = (*p ? n1 + (n1 >> 1) : MAX(4, INITIAL_CAPACITY / itemsize)) + extra;
+  if (!ckd_mul(&t1, n1, itemsize) && !ckd_mul(&t2, n2, itemsize)) {
+    if ((p2 = realloc(p1, ROUNDUP(t2, 32)))) {
+      if (!p1 && *p)
+        memcpy(p2, *p, t1);
+      bzero((char *)p2 + t1, t2 - t1);
+      *capacity = n2;
+      *p = p2;
+      return true;
+    } else {
+      enomem();
+    }
+  } else {
+    eoverflow();
+  }
+  return false;
+}

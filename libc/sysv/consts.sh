@@ -651,14 +651,14 @@ syscon	so	SO_DEBUG				1			1			1			1			1			1			1			1			# debugging is enabled; co
 syscon	so	SO_TYPE					3			3			0x1008			0x1008			0x1008			0x1008			0x1008			0x1008			# bsd consensus
 syscon	so	SO_ERROR				4			4			0x1007			0x1007			0x1007			0x1007			0x1007			0x1007			# takes int pointer and stores/clears the pending error code; bsd consensus
 syscon	so	SO_ACCEPTCONN				30			30			2			2			2			2			2			2			# takes int pointer and stores boolean indicating if listen() was called on fd; bsd consensus
-syscon	so	SO_REUSEPORT				15			15			0x0200			0x0200			0x0200			0x0200			0x0200			0			# bsd consensus; no windows support
+syscon	so	SO_REUSEPORT				15			15			512			512			512			512			512			0			# bsd consensus; no windows support
 syscon	so	SO_REUSEADDR				2			2			4			4			4			4			4			-5			# SO_EXCLUSIVEADDRUSE on Windows (see third_party/python/Lib/test/support/__init__.py)
 syscon	so	SO_KEEPALIVE				9			9			8			8			8			8			8			8			# bsd consensus
-syscon	so	SO_DONTROUTE				5			5			0x10			0x10			0x10			0x10			0x10			0x10			# bsd consensus
-syscon	so	SO_BROADCAST				6			6			0x20			0x20			0x20			0x20			0x20			0x20			# socket is configured for broadcast messages; bsd consensus
-syscon	so	SO_USELOOPBACK				0			0			0x40			0x40			0x40			0x40			0x40			0x40			# bsd consensus
-syscon	so	SO_LINGER				13			13			0x1080			0x1080			0x80			0x80			0x80			0x80			# takes struct linger; causes close() return value to actually mean something; SO_LINGER_SEC on XNU; bsd consensus
-syscon	so	SO_OOBINLINE				10			10			0x0100			0x0100			0x0100			0x0100			0x0100			0x0100			# bsd consensus
+syscon	so	SO_DONTROUTE				5			5			16			16			16			16			16			16			# bsd consensus
+syscon	so	SO_BROADCAST				6			6			32			32			32			32			32			32			# socket is configured for broadcast messages; bsd consensus
+syscon	so	SO_USELOOPBACK				0			0			64			64			64			64			64			64			# bsd consensus
+syscon	so	SO_LINGER				13			13			4224			4224			128			128			128			128			# takes struct linger; causes close() return value to actually mean something; SO_LINGER_SEC on XNU; bsd consensus
+syscon	so	SO_OOBINLINE				10			10			256			256			256			256			256			256			# bsd consensus
 syscon	so	SO_SNDBUF				7			7			0x1001			0x1001			0x1001			0x1001			0x1001			0x1001			# bsd consensus
 syscon	so	SO_RCVBUF				8			8			0x1002			0x1002			0x1002			0x1002			0x1002			0x1002			# bsd consensus
 syscon	so	SO_RCVTIMEO				20			20			0x1006			0x1006			0x1006			0x1006			0x100c			0x1006			# recv timeout; takes struct timeval (overrides SA_RESTART restoring EINTR behavior on recv/send/connect/accept/etc.; bsd consensus)
@@ -678,18 +678,18 @@ syscon	tcp	TCP_CORK				3			3			4			4			4			16			4			0			# nagle's algorithm stri
 syscon	tcp	TCP_MAXSEG				2			2			2			2			2			2			2			0			# reduces tcp segment size; see also tcp offloading
 syscon	tcp	TCP_FASTOPEN				23			23			0x105			0x105			0x0401			0			0			15			# reduces roundtrips; for listener; Linux 3.7+ (c. 2012) / or is windows it 0x22? /proc/sys/net/ipv4/tcp_fastopen TODO(jart): MSG_FASTOPEN; XNU sources say 261 but not sure if that's true
 syscon	tcp	TCP_FASTOPEN_CONNECT			30			30			0			0			0			0			0			0			# reduces roundtrips; for listener; Linux 3.7+ (c. 2012) / or is windows it 0x22? /proc/sys/net/ipv4/tcp_fastopen TODO(jart): MSG_FASTOPEN; XNU sources say 261 but not sure if that's true
-syscon	tcp	TCP_KEEPIDLE				4			4			0			0			0x100			0			3			0			# start keepalives after this period
-syscon	tcp	TCP_KEEPINTVL				5			5			0x101			0x101			0x200			0			5			0			# interval between keepalives
-syscon	tcp	TCP_KEEPCNT				6			6			0x102			0x102			0x400			0			6			0			# number of keepalives before death
+syscon	tcp	TCP_KEEPIDLE				4			4			0			0			0x100			0			3			3			# start keepalives after this period
+syscon	tcp	TCP_KEEPINTVL				5			5			0x101			0x101			0x200			0			5			17			# interval between keepalives
+syscon	tcp	TCP_KEEPCNT				6			6			0x102			0x102			0x400			0			6			16			# number of keepalives before death
+syscon	tcp	TCP_INFO				11			11			0x200			0x200			32			9			9			0			# get connection info
+syscon	tcp	TCP_NOTSENT_LOWAT			25			25			513			513			0			0			0			0			# limit unset byte queue
+syscon	tcp	TCP_MD5SIG				14			14			0			0			16			4			16			0			# what is it (rfc2385)
+syscon	tcp	TCP_CONGESTION				13			13			0			0			64			0			0			0			# set traffic control
 syscon	tcp	TCP_SYNCNT				7			7			0			0			0			0			0			0			# how hard to syn packet the enemy
 syscon	tcp	TCP_ULP					31			31			0			0			0			0			0			0			# setsockopt(sock, IPPROTO_TCP, TCP_ULP, "tls", 4)
 syscon	tcp	TCP_COOKIE_TRANSACTIONS			15			15			0			0			0			0			0			0			# defense against the syn packets
 syscon	tcp	TCP_LINGER2				8			8			0			0			0			0			0			0			# orphaned fin-wait-2 lifetime cf. net.ipv4.tcp_fin_timeout see cloudflare blog
-syscon	tcp	TCP_NOTSENT_LOWAT			25			25			513			513			0			0			0			0			# limit unset byte queue
-syscon	tcp	TCP_INFO				11			11			0			0			0x20			0			9			0			# get connection info
 syscon	tcp	TCP_CC_INFO				26			26			0			0			0			0			0			0			# get congestion control info
-syscon	tcp	TCP_CONGESTION				13			13			0			0			0x40			0			0			0			# set traffic control
-syscon	tcp	TCP_MD5SIG				14			14			0			0			0x10			4			16			0			# what is it (rfc2385)
 syscon	tcp	TCP_MD5SIG_MAXKEYLEN			80			80			0			0			0			0			0			0			# what is it
 syscon	tcp	TCP_TIMESTAMP				24			24			0			0			0			0			0			0			# what is it
 syscon	tcp	TCP_USER_TIMEOUT			18			18			0			0			0			0			0			0			# what is it
@@ -705,6 +705,79 @@ syscon	tcp	TCP_REPAIR_OPTIONS			22			22			0			0			0			0			0			0			# what is it
 syscon	tcp	TCP_REPAIR_QUEUE			20			20			0			0			0			0			0			0			# what is it
 syscon	tcp	TCP_THIN_LINEAR_TIMEOUTS		16			16			0			0			0			0			0			0			# what is it
 
+#	IPPROTO_IP (or SOL_IP) socket options
+#
+#	group	name					GNU/Systemd		GNU/Systemd (Aarch64)	XNU's Not UNIX!		MacOS (Arm64)		FreeBSD			OpenBSD			NetBSD			The New Technology	Commentary
+syscon	ip	IP_TOS					1			1			3			3			3			3			3			3			# bsd consensus
+syscon	ip	IP_TTL					2			2			4			4			4			4			4			4			# bsd consensus
+syscon	ip	IP_MTU					14			14			0			0			0			0			0			73			# bsd consensus
+syscon	ip	IP_HDRINCL				3			3			2			2			2			2			2			2			# bsd consensus
+syscon	ip	IP_OPTIONS				4			4			1			1			1			1			1			1			# bsd consensus
+syscon	ip	IP_RECVTTL				12			12			24			24			65			31			23			21
+syscon	ip	IP_ADD_MEMBERSHIP			35			35			12			12			12			12			12			12			# bsd consensus
+syscon	ip	IP_DROP_MEMBERSHIP			36			36			13			13			13			13			13			13			# bsd consensus
+syscon	ip	IP_MULTICAST_IF				32			32			9			9			9			9			9			9			# bsd consensus
+syscon	ip	IP_MULTICAST_LOOP			34			34			11			11			11			11			11			11			# bsd consensus
+syscon	ip	IP_MULTICAST_TTL			33			33			10			10			10			10			10			10			# bsd consensus
+syscon	ip	IP_PKTINFO				8			8			26			26			0			0			25			19
+syscon	ip	IP_RECVTOS				13			13			0			0			68			0			0			40
+
+#	IPPROTO_IPV6 (or SOL_IPV6) socket options
+#
+#	group	name					GNU/Systemd		GNU/Systemd (Aarch64)	XNU's Not UNIX!		MacOS (Arm64)		FreeBSD			OpenBSD			NetBSD			The New Technology	Commentary
+syscon	ipv6	IPV6_V6ONLY				26			26			27			27			27			27			27			27			# bsd consensus
+syscon	ipv6	IPV6_CHECKSUM				7			7			26			26			26			26			26			26			# bsd consensus
+syscon	ipv6	IPV6_JOIN_GROUP				20			20			12			12			12			12			12			12			# bsd consensus
+syscon	ipv6	IPV6_LEAVE_GROUP			21			21			13			13			13			13			13			13			# bsd consensus
+syscon	ipv6	IPV6_MULTICAST_HOPS			18			18			10			10			10			10			10			10			# bsd consensus
+syscon	ipv6	IPV6_MULTICAST_IF			17			17			9			9			9			9			9			9			# bsd consensus
+syscon	ipv6	IPV6_MULTICAST_LOOP			19			19			11			11			11			11			11			11			# bsd consensus
+syscon	ipv6	IPV6_UNICAST_HOPS			16			16			4			4			4			4			4			4			# bsd consensus
+syscon	ipv6	IPV6_RECVTCLASS				66			66			35			35			57			57			57			40
+syscon	ipv6	IPV6_TCLASS				67			67			36			36			61			61			61			39
+syscon	ipv6	IPV6_DONTFRAG				62			62			0			0			62			62			62			14
+syscon	ipv6	IPV6_HOPLIMIT				52			52			0			0			47			47			47			21
+syscon	ipv6	IPV6_HOPOPTS				54			54			0			0			49			49			49			1
+syscon	ipv6	IPV6_PKTINFO				50			50			0			0			46			46			46			19
+syscon	ipv6	IPV6_RECVRTHDR				56			56			0			0			38			38			38			38
+syscon	ipv6	IPV6_RTHDR				57			57			0			0			51			51			51			32
+
+#	IPPROTO_ICMPV6 (or SOL_ICMPV6) socket options
+#
+#	group	name					GNU/Systemd		GNU/Systemd (Aarch64)	XNU's Not UNIX!		MacOS (Arm64)		FreeBSD			OpenBSD			NetBSD			The New Technology	Commentary
+syscon	icmp6	ICMP6_DST_UNREACH_NOROUTE		0			0			0			0			0			0			0			0			# consensus
+syscon	icmp6	ICMP6_PARAMPROB_HEADER			0			0			0			0			0			0			0			0			# consensus
+syscon	icmp6	ICMP6_TIME_EXCEED_TRANSIT		0			0			0			0			0			0			0			0			# consensus
+syscon	icmp6	ICMP6_DST_UNREACH_ADMIN			1			1			1			1			1			1			1			1			# consensus
+syscon	icmp6	ICMP6_PARAMPROB_NEXTHEADER		1			1			1			1			1			1			1			1			# consensus
+syscon	icmp6	ICMP6_TIME_EXCEED_REASSEMBLY		1			1			1			1			1			1			1			1			# consensus
+syscon	icmp6	ICMP6_DST_UNREACH			1			1			1			1			1			1			1			0			# unix consensus
+syscon	icmp6	ICMP6_FILTER				1			1			18			18			18			18			18			0			# bsd consensus
+syscon	icmp6	ICMP6_DST_UNREACH_BEYONDSCOPE		2			2			2			2			2			2			2			2			# consensus
+syscon	icmp6	ICMP6_PARAMPROB_OPTION			2			2			2			2			2			2			2			2			# consensus
+syscon	icmp6	ICMP6_PACKET_TOO_BIG			2			2			2			2			2			2			2			0			# unix consensus
+syscon	icmp6	ICMP6_DST_UNREACH_ADDR			3			3			3			3			3			3			3			3			# consensus
+syscon	icmp6	ICMP6_TIME_EXCEEDED			3			3			3			3			3			3			3			0			# unix consensus
+syscon	icmp6	ICMP6_DST_UNREACH_NOPORT		4			4			4			4			4			4			4			4			# consensus
+syscon	icmp6	ICMP6_PARAM_PROB			4			4			4			4			4			4			4			0			# unix consensus
+syscon	icmp6	ICMP6_RR_FLAGS_PREVDONE			8			8			8			8			8			8			8			0			# unix consensus
+syscon	icmp6	ICMP6_RR_FLAGS_SPECSITE			0x10			0x10			0x10			0x10			0x10			0x10			0x10			0			# unix consensus
+syscon	icmp6	ICMP6_RR_PCOUSE_RAFLAGS_AUTO		0x10			0x10			0x40			0x40			0x40			0x40			0x40			0			# bsd consensus
+syscon	icmp6	ICMP6_RR_FLAGS_FORCEAPPLY		0x20			0x20			0x20			0x20			0x20			0x20			0x20			0			# unix consensus
+syscon	icmp6	ICMP6_RR_PCOUSE_RAFLAGS_ONLINK		0x20			0x20			0x80			0x80			0x80			0x80			0x80			0			# bsd consensus
+syscon	icmp6	ICMP6_RR_FLAGS_REQRESULT		0x40			0x40			0x40			0x40			0x40			0x40			0x40			0			# unix consensus
+syscon	icmp6	ICMP6_RR_PCOUSE_FLAGS_DECRPLTIME	0x40			0x40			0x40			0x40			0x40			0x40			0x40			0			# unix consensus
+syscon	icmp6	ICMP6_INFOMSG_MASK			0x80			0x80			0x80			0x80			0x80			0x80			0x80			0x80			# consensus
+syscon	icmp6	ICMP6_ECHO_REQUEST			0x80			0x80			0x80			0x80			0x80			0x80			0x80			0			# unix consensus
+syscon	icmp6	ICMP6_RR_FLAGS_TEST			0x80			0x80			0x80			0x80			0x80			0x80			0x80			0			# unix consensus
+syscon	icmp6	ICMP6_RR_PCOUSE_FLAGS_DECRVLTIME	0x80			0x80			0x80			0x80			0x80			0x80			0x80			0			# unix consensus
+syscon	icmp6	ICMP6_ECHO_REPLY			129			129			129			129			129			129			129			0			# unix consensus
+syscon	icmp6	ICMP6_ROUTER_RENUMBERING		138			138			138			138			138			138			138			0			# unix consensus
+syscon	icmp6	ICMP6_RR_RESULT_FLAGS_FORBIDDEN		0x0100			0x0100			0x0100			0x0100			0x0100			0x0100			0x0100			0			# unix consensus
+syscon	icmp6	ICMP6_RR_RESULT_FLAGS_OOB		0x0200			0x0200			0x0200			0x0200			0x0200			0x0200			0x0200			0			# unix consensus
+
+syscon	ipport	IPPORT_USERRESERVED			5000			5000			5000			5000			5000			49151			5000			5000
+
 #	https://blog.cloudflare.com/know-your-scm_rights/
 #
 #	group	name					GNU/Systemd		GNU/Systemd (Aarch64)	XNU's Not UNIX!		MacOS (Arm64)		FreeBSD			OpenBSD			NetBSD			The New Technology	Commentary
@@ -714,60 +787,6 @@ syscon	scm	SCM_CREDENTIALS				2			2			0			0			0			0			0			0
 syscon	scm	SCM_TIMESTAMPING			37			37			0			0			0			0			0			0
 syscon	scm	SCM_TIMESTAMPNS				35			35			0			0			0			0			0			0
 syscon	scm	SCM_WIFI_STATUS				41			41			0			0			0			0			0			0
-
-#	group	name					GNU/Systemd		GNU/Systemd (Aarch64)	XNU's Not UNIX!		MacOS (Arm64)		FreeBSD			OpenBSD			NetBSD			The New Technology	Commentary
-syscon	ip	IP_TOS					1			1			3			3			3			3			3			3			# bsd consensus
-syscon	ip	IP_TTL					2			2			4			4			4			4			4			4			# bsd consensus
-syscon	ip	IP_HDRINCL				3			3			2			2			2			2			2			2			# bsd consensus
-syscon	ip	IP_DEFAULT_MULTICAST_LOOP		1			1			1			1			1			1			1			1			# consensus
-syscon	ip	IP_DEFAULT_MULTICAST_TTL		1			1			1			1			1			1			1			1			# consensus
-syscon	ip	IP_PMTUDISC_DONT			0			0			0			0			0			0			0			0			# consensus
-syscon	ip	IP_MAX_MEMBERSHIPS			20			20			0x0fff			0x0fff			0x0fff			0x0fff			0x0fff			20			# bsd consensus
-syscon	ip	IP_OPTIONS				4			4			1			1			1			1			1			1			# bsd consensus
-syscon	ip	IP_RECVTTL				12			12			24			24			65			31			23			21
-syscon	ip	IP_ADD_MEMBERSHIP			35			35			12			12			12			12			12			12			# bsd consensus
-syscon	ip	IP_DROP_MEMBERSHIP			36			36			13			13			13			13			13			13			# bsd consensus
-syscon	ip	IP_MULTICAST_IF				0x20			0x20			9			9			9			9			9			9			# bsd consensus
-syscon	ip	IP_MULTICAST_LOOP			34			34			11			11			11			11			11			11			# bsd consensus
-syscon	ip	IP_MULTICAST_TTL			33			33			10			10			10			10			10			10			# bsd consensus
-syscon	ip	IP_RECVOPTS				6			6			5			5			5			5			5			0			# bsd consensus
-syscon	ip	IP_RECVRETOPTS				7			7			6			6			6			6			6			0			# bsd consensus
-syscon	ip	IP_RECVDSTADDR				0			0			7			7			7			7			7			0			# bsd consensus
-syscon	ip	IP_RETOPTS				7			7			8			8			8			8			8			0			# bsd consensus
-syscon	ip	IP_ADD_SOURCE_MEMBERSHIP		39			39			70			70			70			0			0			15
-syscon	ip	IP_BLOCK_SOURCE				38			38			72			72			72			0			0			17
-syscon	ip	IP_DROP_SOURCE_MEMBERSHIP		40			40			71			71			71			0			0			16
-syscon	ip	IP_UNBLOCK_SOURCE			37			37			73			73			73			0			0			18
-syscon	ip	IP_IPSEC_POLICY				0x10			0x10			21			21			21			0			0			0
-syscon	ip	IP_MINTTL				21			21			0			0			66			32			24			0			# minimum ttl for packet or drop
-syscon	ip	IP_MSFILTER				41			41			74			74			74			0			0			0
-syscon	ip	IP_PKTINFO				8			8			26			26			0			0			25			19
-syscon	ip	IP_RECVTOS				13			13			0			0			68			0			0			40
-syscon	ip	IP_MTU					14			14			0			0			0			0			0			73			# bsd consensus
-syscon	ip	IP_MTU_DISCOVER				10			10			0			0			0			0			0			71			# bsd consensus
-syscon	ip	IP_RECVERR				11			11			0			0			0			0			0			75			# bsd consensus
-syscon	ip	IP_UNICAST_IF				50			50			0			0			0			0			0			31			# bsd consensus
-syscon	ip	IP_ORIGDSTADDR				20			20			0			0			27			0			0			0
-syscon	ip	IP_RECVORIGDSTADDR			20			20			0			0			27			0			0			0
-syscon	ip	IP_BIND_ADDRESS_NO_PORT			24			24			0			0			0			0			0			0
-syscon	ip	IP_CHECKSUM				23			23			0			0			0			0			0			0
-syscon	ip	IP_FREEBIND				15			15			0			0			0			0			0			0
-syscon	ip	IP_MULTICAST_ALL			49			49			0			0			0			0			0			0
-syscon	ip	IP_NODEFRAG				22			22			0			0			0			0			0			0
-syscon	ip	IP_PASSSEC				18			18			0			0			0			0			0			0
-syscon	ip	IP_PKTOPTIONS				9			9			0			0			0			0			0			0
-syscon	ip	IP_PMTUDISC				10			10			0			0			0			0			0			0
-syscon	ip	IP_PMTUDISC_DO				2			2			0			0			0			0			0			0
-syscon	ip	IP_PMTUDISC_INTERFACE			4			4			0			0			0			0			0			0
-syscon	ip	IP_PMTUDISC_OMIT			5			5			0			0			0			0			0			0
-syscon	ip	IP_PMTUDISC_PROBE			3			3			0			0			0			0			0			0
-syscon	ip	IP_PMTUDISC_WANT			1			1			0			0			0			0			0			0
-syscon	ip	IP_ROUTER_ALERT				5			5			0			0			0			0			0			0
-syscon	ip	IP_TRANSPARENT				19			19			0			0			0			0			0			0
-syscon	ip	IP_XFRM_POLICY				17			17			0			0			0			0			0			0
-syscon	ip	INET_ADDRSTRLEN				0x10			0x10			0x10			0x10			0x10			0x10			0x10			22			# unix consensus
-
-syscon	ipport	IPPORT_USERRESERVED			5000			5000			5000			5000			5000			49151			5000			5000
 
 #	ptrace() codes
 #
@@ -1119,32 +1138,12 @@ syscon	reboot	RB_NOSYNC				0x20000000		0x20000000		4			4			4			4			4			0x2000000
 syscon	msg	MSG_OOB					1			1			1			1			1			1			1			1			# consensus
 syscon	msg	MSG_PEEK				2			2			2			2			2			2			2			2			# consensus
 syscon	msg	MSG_DONTROUTE				4			4			4			4			4			4			4			4			# consensus
-syscon	msg	MSG_FASTOPEN				0x20000000		0x20000000		0			0			0			0			0			0			# TODO
-syscon	msg	MSG_WAITALL				0x0100			0x0100			0x40			0x40			0x40			0x40			0x40			8			# bsd consensus
-syscon	msg	MSG_MORE				0x8000			0x8000			0			0			0			0			0			0			# send/sendto: manual TCP_CORK hbasically
-syscon	msg	MSG_NOSIGNAL				0x4000			0x4000			0x80000			0x80000			0x020000		0x0400			0x0400			0			# send/sendto: don't SIGPIPE on EOF
 syscon	msg	MSG_DONTWAIT				0x40			0x40			0x80			0x80			0x80			0x80			0x80			0x40			# send/sendto: manual non-blocking
+syscon	msg	MSG_WAITALL				0x0100			0x0100			0x40			0x40			0x40			0x40			0x40			8			# bsd consensus
+syscon	msg	MSG_NOSIGNAL				0x4000			0x4000			0x80000			0x80000			0x020000		0x0400			0x0400			0x10000000		# send/sendto: don't raise sigpipe on local shutdown
 syscon	msg	MSG_TRUNC				0x20			0x20			0x10			0x10			0x10			0x10			0x10			0x0100			# bsd consensus
 syscon	msg	MSG_CTRUNC				8			8			0x20			0x20			0x20			0x20			0x20			0x0200			# bsd consensus
-syscon	msg	MSG_ERRQUEUE				0x2000			0x2000			0			0			0			0			0			0x1000			# bsd consensus
-syscon	msg	MSG_NOERROR				0x1000			0x1000			0x1000			0x1000			0x1000			0x1000			0x1000			0			# unix consensus
-syscon	msg	MSG_EOR					0x80			0x80			8			8			8			8			8			0			# bsd consensus
-syscon	msg	MSG_CMSG_CLOEXEC			0x40000000		0x40000000		0			0			0x040000		0x0800			0x0800			0
-syscon	msg	MSG_WAITFORONE				0x010000		0x010000		0			0			0x080000		0			0x2000			0
-syscon	msg	MSG_BATCH				0x040000		0x040000		0			0			0			0			0			0
-syscon	msg	MSG_CONFIRM				0x0800			0x0800			0			0			0			0			0			0
-syscon	msg	MSG_EXCEPT				0x2000			0x2000			0			0			0			0			0			0
-syscon	msg	MSG_FIN					0x0200			0x0200			0x0100			0x0100			0x0100			0			0			0
-syscon	msg	MSG_EOF					0x0200			0x0200			0x0100			0x0100			0x0100			0			0			0
-syscon	msg	MSG_INFO				12			12			0			0			0			0			0			0
-syscon	msg	MSG_PARITY_ERROR			9			9			0			0			0			0			0			0
-syscon	msg	MSG_PROXY				0x10			0x10			0			0			0			0			0			0
-syscon	msg	MSG_RST					0x1000			0x1000			0			0			0			0			0			0
-syscon	msg	MSG_STAT				11			11			0			0			0			0			0			0
-syscon	msg	MSG_SYN					0x0400			0x0400			0			0			0			0			0			0
-syscon	msg	MSG_BCAST				0			0			0			0			0			0x100			0x100			0
-syscon	msg	MSG_MCAST				0			0			0			0			0			0x200			0x200			0
-syscon	msg	MSG_NOTIFICATION			0x8000			0x8000			0			0			0x2000			0			0x4000			0
+syscon	msg	MSG_FASTOPEN				0x20000000		0x20000000		-1			-1			-1			-1			-1			-1			#
 
 #	getpriority() / setpriority() magnums (a.k.a. nice)
 #
@@ -1944,107 +1943,13 @@ syscon	junkerr	EKEYREJECTED				129			129			-1			-1			-1			-1			-1			-1
 syscon	junkerr	ERFKILL					132			132			-1			-1			-1			-1			-1			-1
 syscon	junkerr	EHWPOISON				133			133			-1			-1			-1			-1			-1			-1
 
-#	arpanet fork combating human-induced exhaustion of our ipv4 address space
-#
-#	group	name					GNU/Systemd		GNU/Systemd (Aarch64)	XNU's Not UNIX!		MacOS (Arm64)		FreeBSD			OpenBSD			NetBSD			The New Technology	Commentary
-syscon	ipv6	IPV6_PMTUDISC_DONT			0			0			0			0			0			0			0			0			# consensus
-syscon	ipv6	IPV6_RTHDR_LOOSE			0			0			0			0			0			0			0			0			# consensus
-syscon	ipv6	IPV6_RTHDR_TYPE_0			0			0			0			0			0			0			0			0			# consensus
-syscon	ipv6	IPV6_CHECKSUM				7			7			26			26			26			26			26			26			# bsd consensus
-syscon	ipv6	IPV6_JOIN_GROUP				20			20			12			12			12			12			12			12			# bsd consensus
-syscon	ipv6	IPV6_LEAVE_GROUP			21			21			13			13			13			13			13			13			# bsd consensus
-syscon	ipv6	IPV6_MULTICAST_HOPS			18			18			10			10			10			10			10			10			# bsd consensus
-syscon	ipv6	IPV6_MULTICAST_IF			17			17			9			9			9			9			9			9			# bsd consensus
-syscon	ipv6	IPV6_MULTICAST_LOOP			19			19			11			11			11			11			11			11			# bsd consensus
-syscon	ipv6	IPV6_UNICAST_HOPS			0x10			0x10			4			4			4			4			4			4			# bsd consensus
-syscon	ipv6	IPV6_V6ONLY				26			26			27			27			27			27			27			27			# bsd consensus
-syscon	ipv6	IPV6_RECVTCLASS				66			66			35			35			57			57			57			40
-syscon	ipv6	IPV6_TCLASS				67			67			36			36			61			61			61			39
-syscon	ipv6	IPV6_DONTFRAG				62			62			0			0			62			62			62			14
-syscon	ipv6	IPV6_HOPLIMIT				52			52			0			0			47			47			47			21
-syscon	ipv6	IPV6_HOPOPTS				54			54			0			0			49			49			49			1
-syscon	ipv6	IPV6_PKTINFO				50			50			0			0			46			46			46			19
-syscon	ipv6	IPV6_RECVRTHDR				56			56			0			0			38			38			38			38
-syscon	ipv6	IPV6_RTHDR				57			57			0			0			51			51			51			0x20
-syscon	ipv6	IPV6_DSTOPTS				59			59			0			0			50			50			50			0
-syscon	ipv6	IPV6_IPSEC_POLICY			34			34			28			28			28			0			0			0
-syscon	ipv6	IPV6_NEXTHOP				9			9			0			0			48			48			48			0
-syscon	ipv6	IPV6_PATHMTU				61			61			0			0			44			44			44			0
-syscon	ipv6	IPV6_RECVDSTOPTS			58			58			0			0			40			40			40			0
-syscon	ipv6	IPV6_RECVHOPLIMIT			51			51			0			0			37			37			37			0
-syscon	ipv6	IPV6_RECVHOPOPTS			53			53			0			0			39			39			39			0
-syscon	ipv6	IPV6_RECVPATHMTU			60			60			0			0			43			43			43			0
-syscon	ipv6	IPV6_RECVPKTINFO			49			49			0			0			36			36			36			0
-syscon	ipv6	IPV6_RTHDRDSTOPTS			55			55			0			0			35			35			35			0
-syscon	ipv6	IPV6_RTHDR_STRICT			1			1			1			1			1			0			0			0
-syscon	ipv6	IPV6_ADD_MEMBERSHIP			20			20			0			0			0			0			0			12			# bsd consensus
-syscon	ipv6	IPV6_DROP_MEMBERSHIP			21			21			0			0			0			0			0			13			# bsd consensus
-syscon	ipv6	IPV6_HDRINCL				36			36			0			0			0			0			0			2			# bsd consensus
-syscon	ipv6	IPV6_MTU				24			24			0			0			0			0			0			72			# bsd consensus
-syscon	ipv6	IPV6_MTU_DISCOVER			23			23			0			0			0			0			0			71			# bsd consensus
-syscon	ipv6	IPV6_RECVERR				25			25			0			0			0			0			0			75			# bsd consensus
-syscon	ipv6	IPV6_2292DSTOPTS			4			4			23			23			0			0			0			0
-syscon	ipv6	IPV6_2292HOPLIMIT			8			8			20			20			0			0			0			0
-syscon	ipv6	IPV6_2292HOPOPTS			3			3			22			22			0			0			0			0
-syscon	ipv6	IPV6_2292PKTINFO			2			2			19			19			0			0			0			0
-syscon	ipv6	IPV6_2292PKTOPTIONS			6			6			25			25			0			0			0			0
-syscon	ipv6	IPV6_2292RTHDR				5			5			24			24			0			0			0			0
-syscon	ipv6	IPV6_AUTOFLOWLABEL			0			0			0			0			59			59			59			0
-syscon	ipv6	IPV6_ADDRFORM				1			1			0			0			0			0			0			0
-syscon	ipv6	IPV6_AUTHHDR				10			10			0			0			0			0			0			0
-syscon	ipv6	IPV6_JOIN_ANYCAST			27			27			0			0			0			0			0			0
-syscon	ipv6	IPV6_LEAVE_ANYCAST			28			28			0			0			0			0			0			0
-syscon	ipv6	IPV6_PMTUDISC_DO			2			2			0			0			0			0			0			0
-syscon	ipv6	IPV6_PMTUDISC_INTERFACE			4			4			0			0			0			0			0			0
-syscon	ipv6	IPV6_PMTUDISC_OMIT			5			5			0			0			0			0			0			0
-syscon	ipv6	IPV6_PMTUDISC_PROBE			3			3			0			0			0			0			0			0
-syscon	ipv6	IPV6_PMTUDISC_WANT			1			1			0			0			0			0			0			0
-syscon	ipv6	IPV6_ROUTER_ALERT			22			22			0			0			0			0			0			0
-syscon	ipv6	IPV6_RXDSTOPTS				59			59			0			0			0			0			0			0
-syscon	ipv6	IPV6_RXHOPOPTS				54			54			0			0			0			0			0			0
-syscon	ipv6	IPV6_XFRM_POLICY			35			35			0			0			0			0			0			0
-syscon	ipv6	IPV6_MINHOPCOUNT			0			0			0			0			0			65			65			0
-syscon	ipv6	IPV6_ORIGDSTADDR			0			0			0			0			72			0			0			0
-syscon	ipv6	IPV6_RECVORIGDSTADDR			0			0			0			0			72			0			0			0
-syscon	ipv6	INET6_ADDRSTRLEN			46			46			46			46			46			46			46			65			# unix consensus
-syscon	icmp6	ICMP6_DST_UNREACH_NOROUTE		0			0			0			0			0			0			0			0			# consensus
-syscon	icmp6	ICMP6_PARAMPROB_HEADER			0			0			0			0			0			0			0			0			# consensus
-syscon	icmp6	ICMP6_TIME_EXCEED_TRANSIT		0			0			0			0			0			0			0			0			# consensus
-syscon	icmp6	ICMP6_DST_UNREACH_ADMIN			1			1			1			1			1			1			1			1			# consensus
-syscon	icmp6	ICMP6_PARAMPROB_NEXTHEADER		1			1			1			1			1			1			1			1			# consensus
-syscon	icmp6	ICMP6_TIME_EXCEED_REASSEMBLY		1			1			1			1			1			1			1			1			# consensus
-syscon	icmp6	ICMP6_DST_UNREACH			1			1			1			1			1			1			1			0			# unix consensus
-syscon	icmp6	ICMP6_FILTER				1			1			18			18			18			18			18			0			# bsd consensus
-syscon	icmp6	ICMP6_DST_UNREACH_BEYONDSCOPE		2			2			2			2			2			2			2			2			# consensus
-syscon	icmp6	ICMP6_PARAMPROB_OPTION			2			2			2			2			2			2			2			2			# consensus
-syscon	icmp6	ICMP6_PACKET_TOO_BIG			2			2			2			2			2			2			2			0			# unix consensus
-syscon	icmp6	ICMP6_DST_UNREACH_ADDR			3			3			3			3			3			3			3			3			# consensus
-syscon	icmp6	ICMP6_TIME_EXCEEDED			3			3			3			3			3			3			3			0			# unix consensus
-syscon	icmp6	ICMP6_DST_UNREACH_NOPORT		4			4			4			4			4			4			4			4			# consensus
-syscon	icmp6	ICMP6_PARAM_PROB			4			4			4			4			4			4			4			0			# unix consensus
-syscon	icmp6	ICMP6_RR_FLAGS_PREVDONE			8			8			8			8			8			8			8			0			# unix consensus
-syscon	icmp6	ICMP6_RR_FLAGS_SPECSITE			0x10			0x10			0x10			0x10			0x10			0x10			0x10			0			# unix consensus
-syscon	icmp6	ICMP6_RR_PCOUSE_RAFLAGS_AUTO		0x10			0x10			0x40			0x40			0x40			0x40			0x40			0			# bsd consensus
-syscon	icmp6	ICMP6_RR_FLAGS_FORCEAPPLY		0x20			0x20			0x20			0x20			0x20			0x20			0x20			0			# unix consensus
-syscon	icmp6	ICMP6_RR_PCOUSE_RAFLAGS_ONLINK		0x20			0x20			0x80			0x80			0x80			0x80			0x80			0			# bsd consensus
-syscon	icmp6	ICMP6_RR_FLAGS_REQRESULT		0x40			0x40			0x40			0x40			0x40			0x40			0x40			0			# unix consensus
-syscon	icmp6	ICMP6_RR_PCOUSE_FLAGS_DECRPLTIME	0x40			0x40			0x40			0x40			0x40			0x40			0x40			0			# unix consensus
-syscon	icmp6	ICMP6_INFOMSG_MASK			0x80			0x80			0x80			0x80			0x80			0x80			0x80			0x80			# consensus
-syscon	icmp6	ICMP6_ECHO_REQUEST			0x80			0x80			0x80			0x80			0x80			0x80			0x80			0			# unix consensus
-syscon	icmp6	ICMP6_RR_FLAGS_TEST			0x80			0x80			0x80			0x80			0x80			0x80			0x80			0			# unix consensus
-syscon	icmp6	ICMP6_RR_PCOUSE_FLAGS_DECRVLTIME	0x80			0x80			0x80			0x80			0x80			0x80			0x80			0			# unix consensus
-syscon	icmp6	ICMP6_ECHO_REPLY			129			129			129			129			129			129			129			0			# unix consensus
-syscon	icmp6	ICMP6_ROUTER_RENUMBERING		138			138			138			138			138			138			138			0			# unix consensus
-syscon	icmp6	ICMP6_RR_RESULT_FLAGS_FORBIDDEN		0x0100			0x0100			0x0100			0x0100			0x0100			0x0100			0x0100			0			# unix consensus
-syscon	icmp6	ICMP6_RR_RESULT_FLAGS_OOB		0x0200			0x0200			0x0200			0x0200			0x0200			0x0200			0x0200			0			# unix consensus
-
 syscon	misc	FIFOTYPE				54			54			54			54			54			54			54			0			# unix consensus
 syscon	misc	GRPQUOTA				1			1			1			1			1			1			1			0			# unix consensus
 syscon	misc	IF_NAMESIZE				0x10			0x10			0x10			0x10			0x10			0x10			0x10			0			# unix consensus
 syscon	misc	INTERMEDIATE_C_GOOD			10			10			0			0			0			0			0			0
 syscon	misc	INTERMEDIATE_GOOD			8			8			0			0			0			0			0			0
 
-syscon	misc	IOV_MAX					0x0400			0x0400			0x0400			0x0400			0x0400			0x0400			0x0400			16			# unix consensus & MSG_MAXIOVLEN
+syscon	misc	IOV_MAX					1024			1024			1024			1024			1024			1024			1024			16			# unix consensus & MSG_MAXIOVLEN
 syscon	misc	LINE_MAX				0x0800			0x0800			0x0800			0x0800			0x0800			0x0800			0x0800			0			# unix consensus
 syscon	misc	LINKED_CMD_COMPLETE			10			10			0			0			0			0			0			0
 syscon	misc	LINKED_FLG_CMD_COMPLETE			11			11			0			0			0			0			0			0

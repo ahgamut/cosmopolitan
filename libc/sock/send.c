@@ -21,6 +21,7 @@
 #include "libc/calls/struct/iovec.h"
 #include "libc/calls/struct/iovec.internal.h"
 #include "libc/dce.h"
+#include "libc/intrin/describeflags.h"
 #include "libc/intrin/strace.h"
 #include "libc/macros.h"
 #include "libc/sock/internal.h"
@@ -29,6 +30,18 @@
 
 /**
  * Sends data to network socket.
+ *
+ * Calling `send(fd, p, n, 0)` is equivalent to `write(fd, p, n)`.
+ *
+ * On Windows, calling send() or write() on a socket in `O_NONBLOCK`
+ * mode will block. This is done for many reasons. First, most UNIX OSes
+ * have a similar behavior, due to how little code checks the return
+ * status of write(). Secondly, WIN32 has bugs that prevent us from
+ * canceling an overlapped WSASend() operation safely. Programs that
+ * want to avoid send() blocking should call poll() beforehand with the
+ * POLLOUT flag to test when the socket can safely be written without
+ * blocking. It's also possible to pass `MSG_DONTWAIT` via `flags` in
+ * which case send() will do this for you automatically.
  *
  * @param fd is the file descriptor returned by socket()
  * @param buf is the data to send, which we'll copy if necessary
@@ -39,7 +52,7 @@
  *     EPIPE (if MSG_NOSIGNAL), EMSGSIZE, ENOTSOCK, EFAULT, etc.
  * @cancelationpoint
  * @asyncsignalsafe
- * @restartable (unless SO_RCVTIMEO)
+ * @restartable (unless SO_SNDTIMEO on Linux or Windows)
  */
 ssize_t send(int fd, const void *buf, size_t size, int flags) {
   ssize_t rc;
@@ -66,7 +79,7 @@ ssize_t send(int fd, const void *buf, size_t size, int flags) {
   }
 
   END_CANCELATION_POINT;
-  DATATRACE("send(%d, %#.*hhs%s, %'zu, %#x) → %'ld% lm", fd,
-            MAX(0, MIN(40, rc)), buf, rc > 40 ? "..." : "", size, flags, rc);
+  DATATRACE("send(%d, %#.*hhs%s, %'zu, %s) → %'ld% lm", fd, MAX(0, MIN(40, rc)),
+            buf, rc > 40 ? "..." : "", size, DescribeMsg(flags), rc);
   return rc;
 }
