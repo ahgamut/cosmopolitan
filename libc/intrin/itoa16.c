@@ -1,7 +1,7 @@
-/*-*- mode:unix-assembly; indent-tabs-mode:t; tab-width:8; coding:utf-8     -*-│
-│ vi: set noet ft=asm ts=8 sw=8 fenc=utf-8                                 :vi │
+/*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
-│ Copyright 2020 Justine Alexandra Roberts Tunney                              │
+│ Copyright 2024 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
 │ Permission to use, copy, modify, and/or distribute this software for         │
 │ any purpose with or without fee is hereby granted, provided that the         │
@@ -16,11 +16,22 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/macros.h"
+#include "libc/fmt/internal.h"
 
-//	__cxxabiv1::__function_type_info (?)
-//	Because Clang in MODE=dbg doesn't respect -fno-rtti
-	.balign	8
-_ZTVN10__cxxabiv120__function_type_infoE:
-	.quad	0
-	.endobj	_ZTVN10__cxxabiv120__function_type_infoE,globl
+__msabi textwindows dontinstrument char16_t *__itoa16(char16_t p[21],
+                                                      uint64_t x) {
+  char t;
+  size_t a, b, i = 0;
+  do {
+    p[i++] = x % 10 + '0';
+    x = x / 10;
+  } while (x > 0);
+  if (i) {
+    for (a = 0, b = i - 1; a < b; ++a, --b) {
+      t = p[a];
+      p[a] = p[b];
+      p[b] = t;
+    }
+  }
+  return p + i;
+}

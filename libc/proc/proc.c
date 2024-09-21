@@ -23,6 +23,7 @@
 #include "libc/calls/struct/rusage.h"
 #include "libc/calls/struct/siginfo.h"
 #include "libc/calls/struct/sigset.internal.h"
+#include "libc/calls/syscall_support-nt.internal.h"
 #include "libc/cosmo.h"
 #include "libc/errno.h"
 #include "libc/fmt/wintime.internal.h"
@@ -169,7 +170,7 @@ static textwindows dontinstrument uint32_t __proc_worker(void *arg) {
 
     // wait for something to happen
     if (n == 64) {
-      millis = 5;
+      millis = POLL_INTERVAL_MS;
     } else {
       millis = -1u;
       handles[n++] = __proc.onbirth;
@@ -323,6 +324,7 @@ textwindows int64_t __proc_search(int pid) {
   int64_t handle = 0;
   BLOCK_SIGNALS;
   __proc_lock();
+  // TODO(jart): we should increment a reference count when returning
   for (e = dll_first(__proc.list); e; e = dll_next(__proc.list, e)) {
     if (pid == PROC_CONTAINER(e)->pid) {
       handle = PROC_CONTAINER(e)->handle;

@@ -16,16 +16,22 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/atomic.h"
 #include "libc/calls/calls.h"
+#include "libc/calls/sig.internal.h"
 #include "libc/calls/struct/sigset.internal.h"
 #include "libc/calls/syscall-nt.internal.h"
 #include "libc/errno.h"
+#include "libc/intrin/atomic.h"
 #include "libc/intrin/dll.h"
+#include "libc/intrin/kprintf.h"
 #include "libc/intrin/strace.h"
 #include "libc/nt/console.h"
+#include "libc/nt/enum/creationdisposition.h"
 #include "libc/nt/enum/ctrlevent.h"
 #include "libc/nt/enum/processaccess.h"
 #include "libc/nt/errors.h"
+#include "libc/nt/memory.h"
 #include "libc/nt/process.h"
 #include "libc/nt/runtime.h"
 #include "libc/proc/proc.internal.h"
@@ -36,31 +42,39 @@
 textwindows int sys_kill_nt(int pid, int sig) {
 
   // validate api usage
-  if (!(0 <= sig && sig <= 64)) {
+  if (!(0 <= sig && sig <= 64))
     return einval();
-  }
 
   // XXX: NT doesn't really have process groups. For instance the
   //      CreateProcess() flag for starting a process group actually
   //      just does an "ignore ctrl-c" internally.
-  if (pid < -1) {
+  if (pid < -1)
     pid = -pid;
-  }
 
   // no support for kill all yet
-  if (pid == -1) {
+  if (pid == -1)
     return einval();
-  }
 
   // just call raise() if we're targeting self
   if (pid <= 0 || pid == getpid()) {
     if (sig) {
       if (pid <= 0) {
+        // if pid is 0 or -1 then kill the processes beneath us too.
+        // this isn't entirely right but it's closer to being right.
+        // having this behavior is helpful for servers like redbean.
         struct Dll *e;
         BLOCK_SIGNALS;
         __proc_lock();
-        for (e = dll_first(__proc.list); e; e = dll_next(__proc.list, e))
-          TerminateProcess(PROC_CONTAINER(e)->handle, sig);
+        for (e = dll_first(__proc.list); e; e = dll_next(__proc.list, e)) {
+          atomic_ulong *sigproc;
+          struct Proc *pr = PROC_CONTAINER(e);
+          if (sig != 9 && (sigproc = __sig_map_process(pid, kNtOpenExisting))) {
+            atomic_fetch_or_explicit(sigproc, 1ull << (sig - 1),
+                                     memory_order_release);
+          } else {
+            TerminateProcess(pr->handle, sig);
+          }
+        }
         __proc_unlock();
         ALLOW_SIGNALS;
       }
@@ -71,12 +85,34 @@ textwindows int sys_kill_nt(int pid, int sig) {
   }
 
   // find existing handle we own for process
+  //
+  // this step should come first to verify process existence. this is
+  // because there's no guarantee that just because the shared memory
+  // file exists, the process actually exists.
   int64_t handle, closeme = 0;
   if (!(handle = __proc_handle(pid))) {
     if ((handle = OpenProcess(kNtProcessTerminate, false, pid))) {
       closeme = handle;
     } else {
       goto OnError;
+    }
+  }
+
+  // attempt to signal via shared memory file
+  //
+  // now that we know the process exists, if it has a shared memory file
+  // then we can be reasonably certain it's a cosmo process which should
+  // be trusted to deliver its signal, unless it's a nine exterminations
+  if (pid > 0 && sig != 9) {
+    atomic_ulong *sigproc;
+    if ((sigproc = __sig_map_process(pid, kNtOpenExisting))) {
+      if (sig > 0)
+        atomic_fetch_or_explicit(sigproc, 1ull << (sig - 1),
+                                 memory_order_release);
+      UnmapViewOfFile(sigproc);
+      if (closeme)
+        CloseHandle(closeme);
+      return 0;
     }
   }
 

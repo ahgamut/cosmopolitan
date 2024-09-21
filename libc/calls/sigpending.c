@@ -53,7 +53,7 @@ int sigpending(sigset_t *pending) {
     }
     rc = 0;
   } else if (IsWindows()) {
-    *pending = atomic_load_explicit(&__sig.pending, memory_order_acquire) |
+    *pending = atomic_load_explicit(__sig.process, memory_order_acquire) |
                atomic_load_explicit(&__get_tls()->tib_sigpending,
                                     memory_order_acquire);
     rc = 0;
