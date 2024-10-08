@@ -67,7 +67,6 @@
 int pselect(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
             const struct timespec *timeout, const sigset_t *sigmask) {
   int rc;
-  struct timeval tv, *tvp;
   struct timespec ts, *tsp;
   struct {
     const sigset_t *s;
@@ -111,24 +110,17 @@ int pselect(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
       rc = sys_pselect(nfds, readfds, writefds, exceptfds,
                        (struct timespec *)timeout, sigmask);
     } else {
-      if (timeout) {
-        tv.tv_sec = timeout->tv_sec;
-        tv.tv_usec = timeout->tv_nsec / 1000;
-        tvp = &tv;
-      } else {
-        tvp = 0;
-      }
-      rc = sys_select_nt(nfds, readfds, writefds, exceptfds, tvp, sigmask);
+      rc = sys_select_nt(nfds, readfds, writefds, exceptfds, timeout, sigmask);
     }
   }
   END_CANCELATION_POINT;
 
   STRACE("pselect(%d, %s → [%s], %s → [%s], %s → [%s], %s, %s) → %d% m", nfds,
-         DescribeFdSet(rc, nfds, old_readfds_ptr),
+         DescribeFdSet(0, nfds, old_readfds_ptr),
          DescribeFdSet(rc, nfds, readfds),
-         DescribeFdSet(rc, nfds, old_writefds_ptr),
+         DescribeFdSet(0, nfds, old_writefds_ptr),
          DescribeFdSet(rc, nfds, writefds),
-         DescribeFdSet(rc, nfds, old_exceptfds_ptr),
+         DescribeFdSet(0, nfds, old_exceptfds_ptr),
          DescribeFdSet(rc, nfds, exceptfds),  //
          DescribeTimespec(0, timeout),        //
          DescribeSigset(0, sigmask), rc);
