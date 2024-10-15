@@ -1,7 +1,7 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
 │ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
-│ Copyright 2020 Justine Alexandra Roberts Tunney                              │
+│ Copyright 2024 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
 │ Permission to use, copy, modify, and/or distribute this software for         │
 │ any purpose with or without fee is hereby granted, provided that the         │
@@ -16,48 +16,50 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/blockcancel.internal.h"
-#include "libc/calls/syscall_support-sysv.internal.h"
-#include "libc/dce.h"
-#include "libc/errno.h"
-#include "libc/intrin/strace.h"
-#include "libc/sysv/errfuns.h"
+#include "libc/fmt/conv.h"
+#include "libc/intrin/describeflags.h"
+#include "libc/intrin/kprintf.h"
+#include "libc/macros.h"
+#include "libc/nt/enum/memflags.h"
+#include "libc/nt/memory.h"
+#include "libc/runtime/runtime.h"
+#include "libc/str/str.h"
 
-int sys_getentropy(void *, size_t) asm("sys_getrandom");
+static const struct DescribeFlags kNtMemState[] = {
+    {kNtMemCommit, "Commit"},    //
+    {kNtMemFree, "Free"},        //
+    {kNtMemReserve, "Reserve"},  //
+};
 
-/**
- * Returns random seeding bytes, the POSIX way.
- *
- * @return 0 on success, or -1 w/ errno
- * @raise EFAULT if the `n` bytes at `p` aren't valid memory
- * @raise EIO is returned if more than 256 bytes are requested
- * @see getrandom()
- */
-int getentropy(void *p, size_t n) {
-  int rc;
-  if (n > 256) {
-    rc = eio();
-  } else if ((!p && n)) {
-    rc = efault();
-  } else if (IsXnu() || IsOpenbsd()) {
-    rc = sys_getentropy(p, n);
-  } else {
-    ssize_t got;
-    BLOCK_CANCELATION;
-    rc = 0;
-    for (size_t i = 0; i < n; i += got) {
-      got = __getrandom(p + i, n - i, 0);
-      if (got == -1) {
-        if (errno == EAGAIN || errno == EINTR) {
-          got = 0;
-        } else {
-          rc = -1;
-          break;
-        }
-      }
-    }
-    ALLOW_CANCELATION;
+const char *DescribeNtMemState(char buf[64], uint32_t x) {
+  return _DescribeFlags(buf, 64, kNtMemState, ARRAYLEN(kNtMemState), "kNtMem",
+                        x);
+}
+
+static const struct DescribeFlags kNtMemType[] = {
+    {kNtMemImage, "Image"},      //
+    {kNtMemMapped, "Mapped"},    //
+    {kNtMemPrivate, "Private"},  //
+};
+
+const char *DescribeNtMemType(char buf[64], uint32_t x) {
+  return _DescribeFlags(buf, 64, kNtMemType, ARRAYLEN(kNtMemType), "kNtMem", x);
+}
+
+void __print_maps_win32(void) {
+  char *p, b[5][64];
+  struct NtMemoryBasicInformation mi;
+  kprintf("%-12s %-12s %10s %16s %16s %32s %32s\n", "Allocation", "BaseAddress",
+          "RegionSize", "State", "Type", "AllocationProtect", "Protect");
+  for (p = 0;; p = (char *)mi.BaseAddress + mi.RegionSize) {
+    bzero(&mi, sizeof(mi));
+    if (!VirtualQuery(p, &mi, sizeof(mi)))
+      break;
+    sizefmt(b[0], mi.RegionSize, 1024);
+    kprintf("%.12lx %.12lx %10s %16s %16s %32s %32s\n", mi.AllocationBase,
+            mi.BaseAddress, b[0], DescribeNtMemState(b[1], mi.State),
+            DescribeNtMemType(b[2], mi.Type),
+            _DescribeNtPageFlags(b[3], mi.AllocationProtect),
+            _DescribeNtPageFlags(b[4], mi.Protect));
   }
-  STRACE("getentropy(%p, %'zu) → %'ld% m", p, n, rc);
-  return rc;
 }
