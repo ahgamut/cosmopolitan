@@ -16,6 +16,7 @@
 // TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
 // PERFORMANCE OF THIS SOFTWARE.
 
+#include "ctl/string.h"
 #include "ctl/string_view.h"
 #include "libc/mem/leaks.h"
 #include "libc/str/str.h"
@@ -170,6 +171,71 @@ main(int argc, char* argv[])
         ctl::string_view b = "";
         if (a.compare(b) != 0)
             return 32;
+    }
+
+    {
+        ctl::string b;
+        const ctl::string_view s = "hi";
+        for (char c : s)
+            b += c;
+        if (b != "hi")
+            return 2;
+    }
+
+    {
+        ctl::string_view s = "ee";
+        if (s.find_last_of('E') != ctl::string_view::npos)
+            return 108;
+        if (s.find_last_of('e') != 1)
+            return 109;
+    }
+
+    {
+        ctl::string_view e = "";
+        ctl::string_view s = "ee";
+        if (e.find_last_of("") != ctl::string_view::npos)
+            return 110;
+        if (s.find_last_of("") != ctl::string_view::npos)
+            return 111;
+        if (s.find_last_of("AE") != ctl::string_view::npos)
+            return 112;
+        if (s.find_last_of("ae") != 1)
+            return 113;
+        if (s.find_last_of("ae", 1) != 1)
+            return 114;
+        if (s.find_last_of("ae", 0) != 0)
+            return 115;
+        if (s.find_last_of("ae", 10) != 1)
+            return 116;
+    }
+
+    {
+        ctl::string_view s = "ee";
+        if (s.find_first_of('E') != ctl::string_view::npos)
+            return 117;
+        if (s.find_first_of('e') != 0)
+            return 118;
+        if (s.find_first_of('e', 1) != 1)
+            return 119;
+    }
+
+    {
+        ctl::string_view e = "";
+        ctl::string_view s = "ee";
+        if (e.find_first_of("") != ctl::string_view::npos)
+            return 120;
+        if (s.find_first_of("") != ctl::string_view::npos)
+            return 121;
+        if (s.find_first_of("AE") != ctl::string_view::npos)
+            return 122;
+        if (s.find_first_of("ae") != 0)
+            return 123;
+        if (s.find_first_of("ae", 1) != 1)
+            return 124;
+        if (s.find_first_of("ae", 0) != 0)
+            return 125;
+        if (s.find_first_of("ae", 10) != ctl::string_view::npos)
+            return 126;
     }
 
     CheckForMemoryLeaks();

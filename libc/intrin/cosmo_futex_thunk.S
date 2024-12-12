@@ -16,17 +16,35 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/sysv/consts/nr.h"
 #include "libc/macros.h"
+.privileged
 
-//	Gets machine state.
-//
-//	@return	0 on success, or -1 w/ errno
-//	@see	makecontext()
-//	@see	swapcontext()
-//	@see	setcontext()
-	.ftrace1
-getcontext:
-	.ftrace2
-#include "libc/calls/getcontext.inc"
-	jmp	__getcontextsig
-	.endfn	getcontext,globl
+cosmo_futex_thunk:
+#ifdef __x86_64__
+	push	%rbp
+	mov	%rsp,%rbp
+	mov	%rcx,%r10
+	mov	__NR_futex,%eax
+	clc
+	syscall
+	jnc	1f
+	neg	%eax
+1:	pop	%rbp
+#elif defined(__aarch64__)
+	ldr	x7,=__hostos
+	ldr	w7,[x7]
+	tst	x7,1			// IsLinux()
+	mov	x7,98			// futex (Linux)
+	mov	x8,454			// _umtx_op (FreeBSD)
+	csel	x8,x7,x8,ne		// choose syscall magnum
+	mov	x7,0			// clear carry (for Linux)
+	adds	x7,x7,0			// clear carry
+	svc	#0			// call kernel
+	bcc	1f			// jump if not carry
+	neg	x0,x0			// linux style errno
+#else
+#error "unsupported architecture"
+#endif /* __x86_64__ */
+1:	ret
+	.endfn	cosmo_futex_thunk,globl,hidden

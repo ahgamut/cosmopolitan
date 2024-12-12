@@ -1,7 +1,7 @@
-/*-*- mode:unix-assembly; indent-tabs-mode:t; tab-width:8; coding:utf-8     -*-│
-│ vi: set noet ft=asm ts=8 sw=8 fenc=utf-8                                 :vi │
+/*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
-│ Copyright 2022 Justine Alexandra Roberts Tunney                              │
+│ Copyright 2021 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
 │ Permission to use, copy, modify, and/or distribute this software for         │
 │ any purpose with or without fee is hereby granted, provided that the         │
@@ -16,35 +16,15 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/sysv/consts/nr.h"
-#include "libc/macros.h"
-.privileged
+#include "libc/fmt/wintime.internal.h"
+#include "libc/limits.h"
+#include "libc/stdckdint.h"
 
-_futex:
-#ifdef __x86_64__
-	push	%rbp
-	mov	%rsp,%rbp
-	mov	%rcx,%r10
-	mov	__NR_futex,%eax
-	clc
-	syscall
-	jnc	1f
-	neg	%eax
-1:	pop	%rbp
-#elif defined(__aarch64__)
-	ldr	x7,=__hostos
-	ldr	w7,[x7]
-	tst	x7,1			// IsLinux()
-	mov	x7,98			// futex (Linux)
-	mov	x8,454			// _umtx_op (FreeBSD)
-	csel	x8,x7,x8,ne		// choose syscall magnum
-	mov	x7,0			// clear carry (for Linux)
-	adds	x7,x7,0			// clear carry
-	svc	#0			// call kernel
-	bcc	1f			// jump if not carry
-	neg	x0,x0			// linux style errno
-#else
-#error "unsupported architecture"
-#endif /* __x86_64__ */
-1:	ret
-	.endfn	_futex,globl,hidden
+int64_t TimeSpecToWindowsTime(struct timespec time) {
+  int64_t wt;
+  if (ckd_add(&wt, time.tv_sec, MODERNITYSECONDS) ||
+      ckd_mul(&wt, wt, HECTONANOSECONDS) ||
+      ckd_add(&wt, wt, time.tv_nsec / 100))
+    wt = INT64_MAX;
+  return wt;
+}

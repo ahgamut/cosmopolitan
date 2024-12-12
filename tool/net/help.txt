@@ -569,7 +569,7 @@ HOOKS
           *). See functions like Route which asks redbean to do its default
           thing from the handler.
 
-  OnError(status:int, message:string)
+  OnError(status:int, message:string, details:string)
           If this function is defined and if any errors occurs in
           OnHttpRequest() then this method will be called instead of displaying
           the default error page. Useful if you need to display the error page
@@ -2877,11 +2877,13 @@ UNIX MODULE
         unix.execve(prog, {prog, '-hal', '.'}, {'PATH=/bin'})
         unix.exit(127)
 
-    We automatically suffix `.com` and `.exe` for all platforms when
-    path searching. By default, the current directory is not on the
-    path. If `prog` is an absolute path, then it's returned as-is. If
-    `prog` contains slashes then it's not path searched either and will
-    be returned if it exists.
+    If `prog` is an absolute path, then it's returned as-is. If `prog`
+    contains slashes then it's not path searched either and will be
+    returned if it exists. On Windows, it's recommended that you install
+    programs from cosmos to c:/bin/ without any .exe or .com suffix, so
+    they can be discovered like they would on UNIX. If you want to find
+    a program like notepad on the $PATH using this function, then you
+    need to specify "notepad.exe" so it includes the extension.
 
   unix.execve(prog:str[, args:List<*>, env:List<*>])
       └─→ nil, unix.Errno

@@ -19,6 +19,7 @@
 #include "libc/assert.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/syscall-sysv.internal.h"
+#include "libc/cosmo.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/intrin/atomic.h"
@@ -26,7 +27,6 @@
 #include "libc/runtime/syslib.internal.h"
 #include "libc/sysv/errfuns.h"
 #include "libc/thread/semaphore.h"
-#include "third_party/nsync/futex.internal.h"
 
 /**
  * Unlocks semaphore.
@@ -46,7 +46,7 @@ int sem_post(sem_t *sem) {
   old = atomic_fetch_add_explicit(&sem->sem_value, 1, memory_order_acq_rel);
   unassert(old > INT_MIN);
   if (old >= 0) {
-    wakeups = nsync_futex_wake_(&sem->sem_value, 1, sem->sem_pshared);
+    wakeups = cosmo_futex_wake(&sem->sem_value, 1, sem->sem_pshared);
     npassert(wakeups >= 0);
     rc = 0;
   } else {

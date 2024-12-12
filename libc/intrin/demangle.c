@@ -103,6 +103,7 @@ Copyright (c) 2024 Justine Tunney <jtunney@gmail.com>");
 #define ELFTC_SUCCESS	    1
 
 #define VECTOR_DEF_CAPACITY 1
+#define MAX_DEPTH           20
 
 typedef unsigned short index_t;
 
@@ -188,6 +189,7 @@ struct demangle_data {
 	enum type_qualifier ref_qualifier_type; /* ref qualifier type */
 	enum push_qualifier push_qualifier;	/* which qualifiers to push */
 	int func_type;
+	int depth;
 	const char *cur;	/* current mangled name ptr */
 	const char *last_sname; /* last source name */
 	intptr_t jmpbuf[5];
@@ -380,13 +382,16 @@ demangle_free(struct demangle_data *h, void *ptr)
 }
 
 static privileged returnspointerwithnoaliases returnsnonnull void *
-demangle_malloc(struct demangle_data *h, int a, int n)
+demangle_malloc(struct demangle_data *h, long a, long n)
 {
-	int rem;
+	long rem;
 	uintptr_t ptr;
 	index_t next, next2;
 	index_t *link, *link2;
-	int b = sizeof(index_t);
+	long b = sizeof(index_t);
+
+	if (n < 0 || n >= 32768)
+		__builtin_longjmp(h->jmpbuf, 1);
 
 	/* Roundup size. */
 	n += a - 1;
@@ -2098,10 +2103,11 @@ demangle_read_tmpl_param(struct demangle_data *ddata)
 		/* T_ is first */
 		++nth;
 
-		while (*ddata->cur != '_')
+		while (*ddata->cur && *ddata->cur != '_')
 			++ddata->cur;
 
-		ASSERT(nth > 0);
+		if (nth <= 0)
+			return 0;
 
 		return demangle_get_tmpl_param(ddata, nth);
 	}
@@ -2257,7 +2263,7 @@ demangle_read_expression_binary(struct demangle_data *ddata, const char *name,
 }
 
 static privileged int
-demangle_read_expression(struct demangle_data *ddata)
+demangle_read_expression_impl(struct demangle_data *ddata)
 {
 	if (*ddata->cur == '\0')
 		return 0;
@@ -2539,6 +2545,17 @@ demangle_read_expression(struct demangle_data *ddata)
 }
 
 static privileged int
+demangle_read_expression(struct demangle_data *ddata)
+{
+	if (ddata->depth == MAX_DEPTH)
+		__builtin_longjmp(ddata->jmpbuf, 1);
+	++ddata->depth;
+	int res = demangle_read_expression_impl(ddata);
+	--ddata->depth;
+	return res;
+}
+
+static privileged int
 demangle_read_expression_flat(struct demangle_data *ddata, char **str)
 {
 	struct vector_str *output;
@@ -2752,7 +2769,7 @@ demangle_read_offset_number(struct demangle_data *ddata)
 		start = ddata->cur;
 	}
 
-	while (*ddata->cur != '_')
+	while (*ddata->cur && *ddata->cur != '_')
 		++ddata->cur;
 
 	if (negative && !DEM_PUSH_STR(ddata, "-"))
@@ -2859,12 +2876,11 @@ demangle_read_number(struct demangle_data *ddata, long *rtn)
 		return 0;
 
 	len = demangle_strtol(ddata->cur, 10);
+	if (len < 0)
+		__builtin_longjmp(ddata->jmpbuf, 1);
 
 	while (ELFTC_ISDIGIT(*ddata->cur))
 		++ddata->cur;
-
-	ASSERT(len >= 0);
-	ASSERT(negative_factor == 1 || negative_factor == -1);
 
 	*rtn = len * negative_factor;
 
@@ -2888,9 +2904,8 @@ demangle_read_number_as_string(struct demangle_data *ddata, char **str)
 	return 1;
 }
 
-/* read encoding, encoding are function name, data name, special-name */
 static privileged int
-demangle_read_encoding(struct demangle_data *ddata)
+demangle_read_encoding_impl(struct demangle_data *ddata)
 {
 	char *name, *type, *num_str;
 	long offset;
@@ -3097,6 +3112,18 @@ demangle_read_encoding(struct demangle_data *ddata)
 	return demangle_read_name(ddata);
 }
 
+/* read encoding, encoding are function name, data name, special-name */
+static privileged int
+demangle_read_encoding(struct demangle_data *ddata)
+{
+	if (ddata->depth == MAX_DEPTH)
+		__builtin_longjmp(ddata->jmpbuf, 1);
+	++ddata->depth;
+	int res = demangle_read_encoding_impl(ddata);
+	--ddata->depth;
+	return res;
+}
+
 static privileged int
 demangle_read_local_name(struct demangle_data *ddata)
 {
@@ -3267,7 +3294,7 @@ next:
 }
 
 static privileged int
-demangle_read_name(struct demangle_data *ddata)
+demangle_read_name_impl(struct demangle_data *ddata)
 {
 	struct stack_str v;
 	struct vector_str *output;
@@ -3326,6 +3353,17 @@ clean:
 	demangle_free(ddata, subst_str);
 
 	return rtn;
+}
+
+static privileged int
+demangle_read_name(struct demangle_data *ddata)
+{
+	if (ddata->depth == MAX_DEPTH)
+		__builtin_longjmp(ddata->jmpbuf, 1);
+	++ddata->depth;
+	int res = demangle_read_name_impl(ddata);
+	--ddata->depth;
+	return res;
 }
 
 static privileged int
@@ -3419,6 +3457,7 @@ clean1:
 static privileged int
 demangle_read_sname(struct demangle_data *ddata)
 {
+	size_t lim;
 	long len;
 	int err;
 
@@ -3438,6 +3477,9 @@ demangle_read_sname(struct demangle_data *ddata)
 		ddata->last_sname = VEC_STR(ddata, ddata->cur_output,
 		    ddata->cur_output->size - 1);
 
+	lim = demangle_strlen(ddata->cur);
+	if (len > lim)
+		len = lim;
 	ddata->cur += len;
 
 	return 1;
@@ -3647,10 +3689,11 @@ demangle_read_subst(struct demangle_data *ddata)
 		/* first was '_', so increase one */
 		++nth;
 
-		while (*ddata->cur != '_')
+		while (*ddata->cur && *ddata->cur != '_')
 			++ddata->cur;
 
-		ASSERT(nth > 0);
+		if (nth <= 0)
+			return 0;
 
 		return demangle_get_subst(ddata, nth);
 	}
@@ -3689,7 +3732,7 @@ demangle_vector_type_qualifier_push(struct demangle_data *ddata,
 }
 
 static privileged int
-demangle_read_type(struct demangle_data *ddata, struct type_delimit *td)
+demangle_read_type_impl(struct demangle_data *ddata, struct type_delimit *td)
 {
 	struct vector_type_qualifier v;
 	struct vector_str *output, sv;
@@ -3881,7 +3924,7 @@ again:
 
 	case 'E':
 		/* unexpected end (except some things) */
-		if (ddata->is_guard_variable)
+		if (td && ddata->is_guard_variable)
 			td->paren = false;
 		if (ddata->is_guard_variable ||
 		    (ddata->ref_qualifier && ddata->is_functype)) {
@@ -4102,6 +4145,8 @@ again:
 		if (!demangle_vector_str_push(ddata, &v.ext_name, ddata->cur,
 			len))
 			return 0;
+		if (len > demangle_strlen(ddata->cur))
+			len = demangle_strlen(ddata->cur);
 		ddata->cur += len;
 		if (!demangle_vector_type_qualifier_push(ddata, &v, TYPE_EXT))
 			return 0;
@@ -4207,6 +4252,17 @@ clean:
 	demangle_vector_type_qualifier_dest(ddata, &v);
 
 	return 0;
+}
+
+static privileged int
+demangle_read_type(struct demangle_data *ddata, struct type_delimit *td)
+{
+	if (ddata->depth == MAX_DEPTH)
+		__builtin_longjmp(ddata->jmpbuf, 1);
+	++ddata->depth;
+	int res = demangle_read_type_impl(ddata, td);
+	--ddata->depth;
+	return res;
 }
 
 static privileged int
