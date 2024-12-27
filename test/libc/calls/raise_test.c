@@ -20,6 +20,7 @@
 #include "libc/calls/struct/sigaction.h"
 #include "libc/calls/struct/siginfo.h"
 #include "libc/dce.h"
+#include "libc/mem/leaks.h"
 #include "libc/runtime/runtime.h"
 #include "libc/sysv/consts/sa.h"
 #include "libc/sysv/consts/sicode.h"
@@ -30,6 +31,7 @@
 #include "libc/thread/thread.h"
 
 TEST(raise, trap) {
+  AssertNoLocksAreHeld();
   signal(SIGTRAP, SIG_DFL);
   SPAWN(fork);
   raise(SIGTRAP);
@@ -44,6 +46,7 @@ TEST(raise, fpe) {
 }
 
 TEST(raise, usr1) {
+  AssertNoLocksAreHeld();
   SPAWN(fork);
   raise(SIGUSR1);
   TERMS(SIGUSR1);
@@ -53,9 +56,8 @@ int threadid;
 
 void WorkerQuit(int sig, siginfo_t *si, void *ctx) {
   ASSERT_EQ(SIGILL, sig);
-  if (!IsXnu() && !IsOpenbsd()) {
+  if (!IsXnu() && !IsOpenbsd())
     ASSERT_EQ(SI_TKILL, si->si_code);
-  }
   ASSERT_EQ(threadid, gettid());
 }
 
@@ -69,6 +71,7 @@ void *Worker(void *arg) {
 
 TEST(raise, threaded) {
   SPAWN(fork);
+  AssertNoLocksAreHeld();
   signal(SIGILL, SIG_DFL);
   pthread_t worker;
   ASSERT_EQ(0, pthread_create(&worker, 0, Worker, 0));

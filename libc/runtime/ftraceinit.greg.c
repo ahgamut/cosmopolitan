@@ -16,6 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/dce.h"
 #include "libc/runtime/internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/runtime/symbols.internal.h"
@@ -37,7 +38,7 @@ __static_yoink("zipos");
  * @see libc/runtime/_init.S for documentation
  */
 textstartup int ftrace_init(void) {
-  if (strace_enabled(0) > 0) {
+  if (IsModeDbg() || strace_enabled(0) > 0) {
     GetSymbolTable();
   }
   if (__intercept_flag(&__argc, __argv, "--ftrace")) {

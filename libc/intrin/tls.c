@@ -1,7 +1,7 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
 │ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
-│ Copyright 2022 Justine Alexandra Roberts Tunney                              │
+│ Copyright 2024 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
 │ Permission to use, copy, modify, and/or distribute this software for         │
 │ any purpose with or without fee is hereby granted, provided that the         │
@@ -16,28 +16,39 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/errno.h"
-#include "libc/thread/lock.h"
-#include "libc/thread/thread.h"
+#include "libc/thread/tls.h"
+#include "libc/dce.h"
 
 /**
- * Sets mutex type.
+ * Returns location of thread information block.
  *
- * @param type can be one of
- *     - `PTHREAD_MUTEX_NORMAL`
- *     - `PTHREAD_MUTEX_RECURSIVE`
- *     - `PTHREAD_MUTEX_ERRORCHECK`
- * @return 0 on success, or error on failure
- * @raises EINVAL if `type` is invalid
+ * This should be favored over __get_tls() for .privileged code that
+ * can't be self-modified by __enable_tls().
  */
-errno_t pthread_mutexattr_settype(pthread_mutexattr_t *attr, int type) {
-  switch (type) {
-    case PTHREAD_MUTEX_NORMAL:
-    case PTHREAD_MUTEX_RECURSIVE:
-    case PTHREAD_MUTEX_ERRORCHECK:
-      attr->_word = MUTEX_SET_TYPE(attr->_word, type);
-      return 0;
-    default:
-      return EINVAL;
+privileged optimizespeed struct CosmoTib *__get_tls_privileged(void) {
+#if defined(__x86_64__)
+  char *tib, *lin = (char *)0x30;
+  if (IsNetbsd() || IsOpenbsd()) {
+    asm("mov\t%%fs:(%1),%0" : "=a"(tib) : "r"(lin) : "memory");
+  } else {
+    asm("mov\t%%gs:(%1),%0" : "=a"(tib) : "r"(lin) : "memory");
+    if (IsWindows())
+      tib = *(char **)(tib + 0x1480 + __tls_index * 8);
   }
+  return (struct CosmoTib *)tib;
+#elif defined(__aarch64__)
+  return __get_tls();
+#endif
 }
+
+#if defined(__x86_64__)
+privileged optimizespeed struct CosmoTib *__get_tls_win32(void) {
+  char *tib, *lin = (char *)0x30;
+  asm("mov\t%%gs:(%1),%0" : "=a"(tib) : "r"(lin) : "memory");
+  tib = *(char **)(tib + 0x1480 + __tls_index * 8);
+  return (struct CosmoTib *)tib;
+}
+privileged void __set_tls_win32(void *tls) {
+  asm("mov\t%1,%%gs:%0" : "=m"(*((long *)0x1480 + __tls_index)) : "r"(tls));
+}
+#endif

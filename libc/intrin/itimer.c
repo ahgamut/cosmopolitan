@@ -1,7 +1,7 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
 │ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
-│ Copyright 2020 Justine Alexandra Roberts Tunney                              │
+│ Copyright 2024 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
 │ Permission to use, copy, modify, and/or distribute this software for         │
 │ any purpose with or without fee is hereby granted, provided that the         │
@@ -16,13 +16,28 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/stdio/rand.h"
+#include "libc/thread/itimer.h"
+#include "libc/str/str.h"
+#include "libc/thread/posixthread.internal.h"
 
-extern uint64_t g_rando;
+struct IntervalTimer __itimer = {
+    .lock = PTHREAD_MUTEX_INITIALIZER,
+    .cond = PTHREAD_COND_INITIALIZER,
+};
 
-/**
- * Seeds random number generator that's used by rand().
- */
-void srand(unsigned seed) {
-  g_rando = seed;
+textwindows void __itimer_lock(void) {
+  _pthread_mutex_lock(&__itimer.lock);
+}
+
+textwindows void __itimer_unlock(void) {
+  _pthread_mutex_unlock(&__itimer.lock);
+}
+
+textwindows void __itimer_wipe_and_reset(void) {
+  // timers aren't inherited by forked subprocesses
+  bzero(&__itimer.it, sizeof(__itimer.it));
+  _pthread_mutex_wipe_np(&__itimer.lock);
+  bzero(&__itimer.cond, sizeof(__itimer.cond));
+  __itimer.thread = 0;
+  __itimer.once = 0;
 }

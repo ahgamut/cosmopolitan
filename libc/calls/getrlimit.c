@@ -21,6 +21,7 @@
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/intrin/describeflags.h"
+#include "libc/intrin/rlimit.h"
 #include "libc/intrin/strace.h"
 #include "libc/runtime/runtime.h"
 #include "libc/runtime/stack.h"
@@ -47,8 +48,7 @@ int getrlimit(int resource, struct rlimit *rlim) {
   } else if (!IsWindows()) {
     rc = sys_getrlimit(resource, rlim);
   } else if (resource == RLIMIT_STACK) {
-    rlim->rlim_cur = GetStaticStackSize();
-    rlim->rlim_max = GetStaticStackSize();
+    *rlim = __rlimit_stack_get();
     rc = 0;
   } else if (resource == RLIMIT_AS) {
     rlim->rlim_cur = __virtualmax;

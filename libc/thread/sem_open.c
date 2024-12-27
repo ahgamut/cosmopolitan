@@ -17,10 +17,12 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
+#include "libc/atomic.h"
 #include "libc/calls/blockcancel.internal.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/stat.h"
 #include "libc/calls/syscall-sysv.internal.h"
+#include "libc/cosmo.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/intrin/atomic.h"
@@ -35,12 +37,13 @@
 #include "libc/sysv/consts/o.h"
 #include "libc/sysv/consts/prot.h"
 #include "libc/sysv/errfuns.h"
+#include "libc/thread/posixthread.internal.h"
 #include "libc/thread/semaphore.h"
 #include "libc/thread/thread.h"
 #include "libc/thread/tls.h"
 
 static struct Semaphores {
-  pthread_once_t once;
+  atomic_uint once;
   pthread_mutex_t lock;
   struct Semaphore {
     struct Semaphore *next;
@@ -49,27 +52,28 @@ static struct Semaphores {
     bool dead;
     int refs;
   } *list;
-} g_semaphores;
+} g_semaphores = {
+    .lock = PTHREAD_MUTEX_INITIALIZER,
+};
 
 static void sem_open_lock(void) {
-  pthread_mutex_lock(&g_semaphores.lock);
+  _pthread_mutex_lock(&g_semaphores.lock);
 }
 
 static void sem_open_unlock(void) {
-  pthread_mutex_unlock(&g_semaphores.lock);
+  _pthread_mutex_unlock(&g_semaphores.lock);
 }
 
 static void sem_open_wipe(void) {
-  pthread_mutex_init(&g_semaphores.lock, 0);
+  _pthread_mutex_wipe_np(&g_semaphores.lock);
 }
 
 static void sem_open_setup(void) {
-  sem_open_wipe();
   pthread_atfork(sem_open_lock, sem_open_unlock, sem_open_wipe);
 }
 
 static void sem_open_init(void) {
-  pthread_once(&g_semaphores.once, sem_open_setup);
+  cosmo_once(&g_semaphores.once, sem_open_setup);
 }
 
 static sem_t *sem_open_impl(const char *path, int oflag, unsigned mode,

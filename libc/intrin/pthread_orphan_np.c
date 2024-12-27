@@ -16,6 +16,8 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/assert.h"
+#include "libc/intrin/atomic.h"
 #include "libc/thread/posixthread.internal.h"
 #include "libc/thread/thread.h"
 
@@ -28,5 +30,6 @@ int pthread_orphan_np(void) {
   res = _pthread_list == _pthread_list->prev &&
         _pthread_list == _pthread_list->next;
   _pthread_unlock();
+  unassert(!res || atomic_load(&_pthread_count) <= 1);
   return res;
 }

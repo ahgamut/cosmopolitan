@@ -1,7 +1,7 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
 │ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
-│ Copyright 2022 Justine Alexandra Roberts Tunney                              │
+│ Copyright 2024 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
 │ Permission to use, copy, modify, and/or distribute this software for         │
 │ any purpose with or without fee is hereby granted, provided that the         │
@@ -16,55 +16,61 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/calls.h"
-#include "libc/calls/syscall-sysv.internal.h"
+#include "libc/atomic.h"
+#include "libc/calls/struct/rlimit.h"
+#include "libc/calls/struct/rlimit.internal.h"
+#include "libc/cosmo.h"
 #include "libc/dce.h"
-#include "libc/runtime/memtrack.internal.h"
-#include "libc/runtime/runtime.h"
+#include "libc/intrin/cxaatexit.h"
+#include "libc/intrin/lockless.h"
+#include "libc/intrin/rlimit.h"
 #include "libc/runtime/stack.h"
-#include "libc/sysv/consts/auxv.h"
-#include "libc/sysv/consts/map.h"
-#include "libc/sysv/consts/prot.h"
+#include "libc/sysv/consts/rlim.h"
+#include "libc/sysv/consts/rlimit.h"
 
-#define MAP_ANON_OPENBSD  0x1000
-#define MAP_STACK_OPENBSD 0x4000
+struct atomic_rlimit {
+  atomic_ulong cur;
+  atomic_ulong max;
+  atomic_uint once;
+  atomic_uint gen;
+};
 
-/**
- * Allocates stack.
- *
- * The size of your returned stack is always GetStackSize().
- *
- * The bottom 4096 bytes of your stack can't be used, since it's always
- * reserved for a read-only guard page. With ASAN it'll be poisoned too.
- *
- * The top 16 bytes of a stack can't be used due to openbsd:stackbound
- * and those bytes are also poisoned under ASAN build modes.
- *
- * @return stack bottom address on success, or null w/ errno
- */
-void *NewCosmoStack(void) {
-  char *p;
-  size_t n = GetStackSize();
-  if ((p = mmap(0, n, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1,
-                0)) != MAP_FAILED) {
-    if (IsOpenbsd() && __sys_mmap(p, n, PROT_READ | PROT_WRITE,
-                                  MAP_PRIVATE | MAP_FIXED | MAP_ANON_OPENBSD |
-                                      MAP_STACK_OPENBSD,
-                                  -1, 0, 0) != p)
-      notpossible;
-    if (mprotect(p, GetGuardSize(), PROT_NONE | PROT_GUARD))
-      notpossible;
-    return p;
+static struct atomic_rlimit __rlimit_stack;
+
+static void __rlimit_stack_init(void) {
+  struct rlimit rlim;
+  if (IsWindows()) {
+    rlim.rlim_cur = GetStaticStackSize();
+    rlim.rlim_max = -1;  // RLIM_INFINITY in consts.sh
   } else {
-    return 0;
+    sys_getrlimit(RLIMIT_STACK, &rlim);
   }
+  atomic_init(&__rlimit_stack.cur, rlim.rlim_cur);
+  atomic_init(&__rlimit_stack.max, rlim.rlim_max);
 }
 
-/**
- * Frees stack.
- *
- * @param stk was allocated by NewCosmoStack()
- */
-int FreeCosmoStack(void *stk) {
-  return munmap(stk, GetStackSize());
+struct rlimit __rlimit_stack_get(void) {
+  unsigned gen;
+  unsigned long cur, max;
+  cosmo_once(&__rlimit_stack.once, __rlimit_stack_init);
+  gen = lockless_read_begin(&__rlimit_stack.gen);
+  do {
+    cur = atomic_load_explicit(&__rlimit_stack.cur, memory_order_acquire);
+    max = atomic_load_explicit(&__rlimit_stack.max, memory_order_acquire);
+  } while (!lockless_read_end(&__rlimit_stack.gen, &gen));
+  return (struct rlimit){cur, max};
+}
+
+void __rlimit_stack_set(struct rlimit rlim) {
+  unsigned gen;
+  unsigned long cur, max;
+  cosmo_once(&__rlimit_stack.once, __rlimit_stack_init);
+  __cxa_lock();
+  cur = rlim.rlim_cur;
+  max = rlim.rlim_max;
+  gen = lockless_write_begin(&__rlimit_stack.gen);
+  atomic_store_explicit(&__rlimit_stack.cur, cur, memory_order_release);
+  atomic_store_explicit(&__rlimit_stack.max, max, memory_order_release);
+  lockless_write_end(&__rlimit_stack.gen, gen);
+  __cxa_unlock();
 }

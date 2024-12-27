@@ -1,7 +1,7 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
 │ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
-│ Copyright 2021 Justine Alexandra Roberts Tunney                              │
+│ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
 │ Permission to use, copy, modify, and/or distribute this software for         │
 │ any purpose with or without fee is hereby granted, provided that the         │
@@ -16,7 +16,20 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/stdio/fflush.internal.h"
+#include "libc/thread/lock.h"
+#include "libc/thread/thread.h"
 
-pthread_mutex_t __fflush_lock_obj;
-struct StdioFlush __fflush;
+/**
+ * Gets mutex type.
+ *
+ * @param type will be set to one of these on success
+ *     - `PTHREAD_MUTEX_DEFAULT`
+ *     - `PTHREAD_MUTEX_NORMAL`
+ *     - `PTHREAD_MUTEX_RECURSIVE`
+ *     - `PTHREAD_MUTEX_ERRORCHECK`
+ * @return 0 on success, or error on failure
+ */
+errno_t pthread_mutexattr_gettype(const pthread_mutexattr_t *attr, int *type) {
+  *type = MUTEX_TYPE(attr->_word);
+  return 0;
+}

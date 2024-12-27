@@ -16,16 +16,19 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/mem/leaks.h"
 #include "libc/cxxabi.h"
 #include "libc/intrin/cxaatexit.h"
 #include "libc/intrin/dll.h"
 #include "libc/intrin/kprintf.h"
 #include "libc/intrin/weaken.h"
+#include "libc/macros.h"
 #include "libc/mem/mem.h"
 #include "libc/nt/typedef/imagetlscallback.h"
 #include "libc/runtime/runtime.h"
 #include "libc/thread/posixthread.internal.h"
 #include "libc/thread/thread.h"
+#include "libc/thread/tls.h"
 
 #define LEAK_CONTAINER(e) DLL_CONTAINER(struct Leak, elem, e)
 
@@ -37,12 +40,12 @@ struct Leak {
 static int leak_count;
 static struct Dll *leaks;
 static struct Dll *freaks;
-static pthread_mutex_t lock;
+static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
 void __may_leak(void *alloc) {
   if (!alloc)
     return;
-  pthread_mutex_lock(&lock);
+  _pthread_mutex_lock(&lock);
   if (dll_is_empty(freaks)) {
     int g = __gransize;
     struct Leak *p = _mapanon(g);
@@ -56,7 +59,7 @@ void __may_leak(void *alloc) {
   LEAK_CONTAINER(e)->alloc = alloc;
   dll_remove(&freaks, e);
   dll_make_first(&leaks, e);
-  pthread_mutex_unlock(&lock);
+  _pthread_mutex_unlock(&lock);
 }
 
 static void visitor(void *start, void *end, size_t used_bytes, void *arg) {
@@ -76,7 +79,7 @@ void CheckForMemoryLeaks(void) {
 
   // validate usage of this api
   if (_weaken(_pthread_decimate))
-    _weaken(_pthread_decimate)(false);
+    _weaken(_pthread_decimate)();
   if (!pthread_orphan_np())
     kprintf("warning: called CheckForMemoryLeaks() from non-orphaned thread\n");
 
@@ -87,8 +90,29 @@ void CheckForMemoryLeaks(void) {
   // check for leaks
   malloc_inspect_all(visitor, 0);
   if (leak_count) {
-    kprintf("you forgot to call free %'d time%s\n", leak_count,
+    kprintf("       you forgot to call free %'d time%s\n", leak_count,
             leak_count == 1 ? "" : "s");
     _exit(73);
+  }
+}
+
+static bool IsHoldingLocks(struct CosmoTib *tib) {
+  for (int i = 0; i < ARRAYLEN(tib->tib_locks); ++i)
+    if (tib->tib_locks[i])
+      return true;
+  return false;
+}
+
+/**
+ * Aborts if any locks are held by calling thread.
+ */
+void AssertNoLocksAreHeld(void) {
+  struct CosmoTib *tib = __get_tls();
+  if (IsHoldingLocks(tib)) {
+    kprintf("error: the following locks are held by this thread:\n");
+    for (int i = 0; i < ARRAYLEN(tib->tib_locks); ++i)
+      if (tib->tib_locks[i])
+        kprintf("\t- %t\n", tib->tib_locks[i]);
+    _Exit(74);
   }
 }

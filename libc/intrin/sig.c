@@ -53,6 +53,8 @@
 #include "libc/runtime/internal.h"
 #include "libc/runtime/symbols.internal.h"
 #include "libc/str/str.h"
+#include "libc/sysv/consts/map.h"
+#include "libc/sysv/consts/prot.h"
 #include "libc/sysv/consts/sa.h"
 #include "libc/sysv/consts/sicode.h"
 #include "libc/sysv/consts/ss.h"
@@ -72,6 +74,8 @@ struct SignalFrame {
   siginfo_t si;
   ucontext_t ctx;
 };
+
+extern pthread_mutex_t __sig_worker_lock;
 
 static textwindows bool __sig_ignored_by_default(int sig) {
   return sig == SIGURG ||   //
@@ -678,8 +682,10 @@ textwindows dontinstrument static uint32_t __sig_worker(void *arg) {
   __bootstrap_tls(&tls, __builtin_frame_address(0));
   char *sp = __builtin_frame_address(0);
   __maps_track((char *)(((uintptr_t)sp + __pagesize - 1) & -__pagesize) - STKSZ,
-               STKSZ);
+               STKSZ, PROT_READ | PROT_WRITE,
+               MAP_PRIVATE | MAP_ANONYMOUS | MAP_NOFORK);
   for (;;) {
+    _pthread_mutex_lock(&__sig_worker_lock);
 
     // dequeue all pending signals and fire them off. if there's no
     // thread that can handle them then __sig_generate will requeue
@@ -693,37 +699,43 @@ textwindows dontinstrument static uint32_t __sig_worker(void *arg) {
     }
 
     // unblock stalled asynchronous signals in threads
-    _pthread_lock();
-    for (struct Dll *e = dll_first(_pthread_list); e;
-         e = dll_next(_pthread_list, e)) {
-      struct PosixThread *pt = POSIXTHREAD_CONTAINER(e);
-      if (atomic_load_explicit(&pt->pt_status, memory_order_acquire) >=
-          kPosixThreadTerminated) {
-        break;
+    struct PosixThread *mark;
+    for (;;) {
+      sigset_t pending, mask;
+      mark = 0;
+      _pthread_lock();
+      for (struct Dll *e = dll_first(_pthread_list); e;
+           e = dll_next(_pthread_list, e)) {
+        struct PosixThread *pt = POSIXTHREAD_CONTAINER(e);
+        if (atomic_load_explicit(&pt->pt_status, memory_order_acquire) >=
+            kPosixThreadTerminated)
+          break;
+        pending = atomic_load_explicit(&pt->tib->tib_sigpending,
+                                       memory_order_acquire);
+        mask =
+            atomic_load_explicit(&pt->tib->tib_sigmask, memory_order_acquire);
+        if (pending & ~mask) {
+          _pthread_ref(pt);
+          mark = pt;
+          break;
+        }
       }
-      sigset_t pending =
-          atomic_load_explicit(&pt->tib->tib_sigpending, memory_order_acquire);
-      sigset_t mask =
-          atomic_load_explicit(&pt->tib->tib_sigmask, memory_order_acquire);
-      if (pending & ~mask) {
-        _pthread_ref(pt);
-        _pthread_unlock();
-        while (!atomic_compare_exchange_weak_explicit(
-            &pt->tib->tib_sigpending, &pending, pending & ~mask,
-            memory_order_acq_rel, memory_order_relaxed)) {
-        }
-        while ((pending = pending & ~mask)) {
-          int sig = bsfl(pending) + 1;
-          pending &= ~(1ull << (sig - 1));
-          __sig_killer(pt, sig, SI_KERNEL);
-        }
-        _pthread_lock();
-        _pthread_unref(pt);
+      _pthread_unlock();
+      if (!mark)
+        break;
+      while (!atomic_compare_exchange_weak_explicit(
+          &mark->tib->tib_sigpending, &pending, pending & ~mask,
+          memory_order_acq_rel, memory_order_relaxed)) {
+      }
+      while ((pending = pending & ~mask)) {
+        int sig = bsfl(pending) + 1;
+        pending &= ~(1ull << (sig - 1));
+        __sig_killer(mark, sig, SI_KERNEL);
       }
     }
-    _pthread_unlock();
 
     // wait until next scheduler quantum
+    _pthread_mutex_unlock(&__sig_worker_lock);
     Sleep(POLL_INTERVAL_MS);
   }
   return 0;

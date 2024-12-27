@@ -54,6 +54,7 @@
 #include "libc/sysv/consts/sicode.h"
 #include "libc/sysv/consts/sig.h"
 #include "libc/sysv/errfuns.h"
+#include "libc/thread/thread.h"
 #include "libc/thread/tls.h"
 #include "third_party/nsync/mu.h"
 #ifdef __x86_64__
@@ -64,7 +65,9 @@
 
 #define STACK_SIZE 65536
 
-struct Procs __proc;
+struct Procs __proc = {
+    .lock = PTHREAD_MUTEX_INITIALIZER,
+};
 
 static textwindows void __proc_stats(int64_t h, struct rusage *ru) {
   bzero(ru, sizeof(*ru));
@@ -138,7 +141,8 @@ static textwindows dontinstrument uint32_t __proc_worker(void *arg) {
   __bootstrap_tls(&tls, __builtin_frame_address(0));
   __maps_track(
       (char *)(((uintptr_t)sp + __pagesize - 1) & -__pagesize) - STACK_SIZE,
-      STACK_SIZE);
+      STACK_SIZE, PROT_READ | PROT_WRITE,
+      MAP_PRIVATE | MAP_ANONYMOUS | MAP_NOFORK);
   for (;;) {
 
     // assemble a group of processes to wait on. if more than 64
@@ -252,21 +256,25 @@ static textwindows void __proc_setup(void) {
  */
 textwindows void __proc_lock(void) {
   cosmo_once(&__proc.once, __proc_setup);
-  nsync_mu_lock(&__proc.lock);
+  _pthread_mutex_lock(&__proc.lock);
 }
 
 /**
  * Unlocks process tracker.
  */
 textwindows void __proc_unlock(void) {
-  nsync_mu_unlock(&__proc.lock);
+  _pthread_mutex_unlock(&__proc.lock);
 }
 
 /**
  * Resets process tracker from forked child.
  */
-textwindows void __proc_wipe(void) {
+textwindows void __proc_wipe_and_reset(void) {
+  // TODO(jart): Should we preserve this state in forked children?
+  pthread_mutex_t lock = __proc.lock;
   bzero(&__proc, sizeof(__proc));
+  __proc.lock = lock;
+  _pthread_mutex_wipe_np(&__proc.lock);
 }
 
 /**

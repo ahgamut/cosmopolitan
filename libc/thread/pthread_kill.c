@@ -43,6 +43,8 @@ errno_t pthread_kill(pthread_t thread, int sig) {
   int err = 0;
   struct PosixThread *pt;
   pt = (struct PosixThread *)thread;
+  if (pt)
+    _pthread_ref(pt);
   if (!thread) {
     err = EFAULT;
   } else if (!(1 <= sig && sig <= 64)) {
@@ -69,5 +71,7 @@ errno_t pthread_kill(pthread_t thread, int sig) {
   }
   STRACE("pthread_kill(%d, %G) → %s", _pthread_tid(pt), sig,
          DescribeErrno(err));
+  if (pt)
+    _pthread_unref(pt);
   return err;
 }
