@@ -19,7 +19,7 @@
 #include "libc/thread/posixthread.internal.h"
 #include "libc/thread/thread.h"
 
-pthread_mutex_t __dlopen_lock_obj = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t __dlopen_lock_obj = PTHREAD_MUTEX_INITIALIZER;
 
 void __dlopen_lock(void) {
   _pthread_mutex_lock(&__dlopen_lock_obj);
@@ -27,4 +27,8 @@ void __dlopen_lock(void) {
 
 void __dlopen_unlock(void) {
   _pthread_mutex_unlock(&__dlopen_lock_obj);
+}
+
+void __dlopen_wipe(void) {
+  _pthread_mutex_wipe_np(&__dlopen_lock_obj);
 }

@@ -1,7 +1,7 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
 │ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
-│ Copyright 2020 Justine Alexandra Roberts Tunney                              │
+│ Copyright 2024 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
 │ Permission to use, copy, modify, and/or distribute this software for         │
 │ any purpose with or without fee is hereby granted, provided that the         │
@@ -16,51 +16,26 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/calls.h"
-#include "libc/calls/syscall-sysv.internal.h"
-#include "libc/dce.h"
-#include "libc/errno.h"
+#include "libc/calls/syscall_support-nt.internal.h"
 #include "libc/intrin/describeflags.h"
-#include "libc/intrin/directmap.h"
 #include "libc/intrin/strace.h"
-#include "libc/nt/runtime.h"
-#include "libc/runtime/memtrack.internal.h"
-#include "libc/runtime/runtime.h"
-#include "libc/runtime/syslib.internal.h"
-#include "libc/sysv/errfuns.h"
+#include "libc/nt/memory.h"
+#include "libc/nt/thunk/msabi.h"
+
+__msabi extern typeof(VirtualAllocEx) *const __imp_VirtualAllocEx;
 
 /**
- * Obtains memory mapping directly from system.
- *
- * The mmap() function needs to track memory mappings in order to
- * support Windows NT and Address Sanitizer. That memory tracking can be
- * bypassed by calling this function. However the caller is responsible
- * for passing the magic memory handle on Windows NT to CloseHandle().
- *
- * @asyncsignalsafe
+ * Allocates memory on The New Technology.
  */
-struct DirectMap sys_mmap(void *addr, size_t size, int prot, int flags, int fd,
-                          int64_t off) {
-  struct DirectMap d;
-  if ((__virtualsize += size) >= __virtualmax) {
-    d.maphandle = kNtInvalidHandleValue;
-    d.addr = (void *)enomem();
-  } else if (IsXnuSilicon()) {
-    long p = _sysret(__syslib->__mmap(addr, size, prot, flags, fd, off));
-    d.maphandle = kNtInvalidHandleValue;
-    d.addr = (void *)p;
-  } else if (!IsWindows() && !IsMetal()) {
-    d.addr = __sys_mmap(addr, size, prot, flags, fd, off, off);
-    d.maphandle = kNtInvalidHandleValue;
-  } else if (IsMetal()) {
-    d = sys_mmap_metal(addr, size, prot, flags, fd, off);
-  } else {
-    d = sys_mmap_nt(addr, size, prot, flags, fd, off);
-  }
-  if (d.addr == MAP_FAILED)
-    __virtualsize -= size;
-  KERNTRACE("sys_mmap(%.12p, %'zu, %s, %s, %d, %'ld) → {%.12p, %p}% m", addr,
-            size, DescribeProtFlags(prot), DescribeMapFlags(flags), fd, off,
-            d.addr, d.maphandle);
-  return d;
+textwindows void *VirtualAllocEx(int64_t hProcess, void *lpAddress,
+                                 uint64_t dwSize, uint32_t flAllocationType,
+                                 uint32_t flProtect) {
+  void *res = __imp_VirtualAllocEx(hProcess, lpAddress, dwSize,
+                                   flAllocationType, flProtect);
+  if (!res)
+    __winerr();
+  NTTRACE("VirtualAllocEx(%ld, %p, %'lu, %s, %s) → %p% m", hProcess, lpAddress,
+          dwSize, DescribeNtAllocationType(flAllocationType),
+          DescribeNtPageFlags(flProtect), res);
+  return res;
 }

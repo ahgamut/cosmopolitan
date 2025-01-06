@@ -227,7 +227,6 @@ syscon	mmap	MAP_LOCKED				0x00002000		0x00002000		0			0			0			0			0			0
 syscon	mmap	MAP_NORESERVE				0x00004000		0x00004000		0x00000040		0x00000040		0			0			0x00000040		0			# Linux calls it "reserve"; NT calls it "commit"? which is default?
 syscon	mmap	MAP_POPULATE				0x00008000		0x00008000		0			0			0x00040000		0			0			0			# MAP_PREFAULT_READ on FreeBSD; can avoid madvise(MADV_WILLNEED) on private file mapping
 syscon	mmap	MAP_NONBLOCK				0x00010000		0x00010000		0			0			0			0			0			0
-syscon	mmap	MAP_NOFORK				0			0			0			0			0			0			0			0x10000000		# used on pages internal to our mmap() implemention on windows
 syscon	mmap	MAP_SYNC				0x00080000		0x00080000		0			0			0			0			0			0			# perform synchronous page faults for mapping (Linux 4.15+)
 syscon	mmap	MAP_HUGETLB				0x00040000		-1			-1			-1			-1			-1			-1			-1			# make it inherit across execve()
 syscon	mmap	MAP_INHERIT				-1			-1			-1			-1			-1			-1			0x00000080		-1			# make it inherit across execve()
@@ -1104,8 +1103,8 @@ syscon	limits	_ARG_MAX				128*1024		128*1024		1024*1024		1024*1024		512*1024		51
 syscon	limits	_NAME_MAX				255			255			255			255			255			255			511			255			# probably higher on windows?
 syscon	limits	_PATH_MAX				4096			4096			1024			1024			1024			1024			1024			260			#
 syscon	limits	_NSIG					64			64			32			32			128			32			64			64			# _SIG_MAXSIG on FreeBSD
-syscon	limits	_MINSIGSTKSZ				2048			2048			32768			32768			4096			12288			8192			2048			#
-syscon	limits	_SIGSTKSZ				8192			2048			131072			131072			36864			28672			40960			8192			#
+syscon	limits	_MINSIGSTKSZ				2048			6144			8192			32768			6656			14336			8192			2048			# FreeBSD upscaled a bit for ARM
+syscon	limits	_SIGSTKSZ				10240			10240			131072			131072			36864			28672			40960			10240			#
 
 #	unmount() flags
 #	a.k.a. umount2() on linux
@@ -1982,4 +1981,4 @@ syscon	misc	UL_SETFSIZE				2			2			2			2			2			0			0			0
 syscon	misc	XATTR_CREATE				1			1			2			2			0			0			0			0
 syscon	misc	XATTR_REPLACE				2			2			4			4			0			0			0			0
 
-# https://youtu.be/GUQUD3IMbb4?t=85
+# https://youtu.be/3SNBXoWs4GM

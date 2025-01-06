@@ -16,6 +16,7 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/proc/proc.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/internal.h"
 #include "libc/calls/sig.internal.h"
@@ -33,11 +34,13 @@
 #include "libc/intrin/weaken.h"
 #include "libc/mem/leaks.h"
 #include "libc/nt/accounting.h"
+#include "libc/nt/enum/heap.h"
 #include "libc/nt/enum/processaccess.h"
 #include "libc/nt/enum/processcreationflags.h"
 #include "libc/nt/enum/status.h"
 #include "libc/nt/enum/wait.h"
 #include "libc/nt/events.h"
+#include "libc/nt/memory.h"
 #include "libc/nt/process.h"
 #include "libc/nt/runtime.h"
 #include "libc/nt/struct/filetime.h"
@@ -45,7 +48,6 @@
 #include "libc/nt/struct/processmemorycounters.h"
 #include "libc/nt/synchronization.h"
 #include "libc/nt/thread.h"
-#include "libc/proc/proc.internal.h"
 #include "libc/runtime/runtime.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/map.h"
@@ -65,11 +67,10 @@
 
 #define STACK_SIZE 65536
 
-struct Procs __proc = {
-    .lock = PTHREAD_MUTEX_INITIALIZER,
-};
+struct Procs __proc;
+static pthread_mutex_t __proc_lock_obj = PTHREAD_MUTEX_INITIALIZER;
 
-static textwindows void __proc_stats(int64_t h, struct rusage *ru) {
+textwindows static void __proc_stats(int64_t h, struct rusage *ru) {
   bzero(ru, sizeof(*ru));
   struct NtProcessMemoryCountersEx memcount = {sizeof(memcount)};
   GetProcessMemoryInfo(h, &memcount, sizeof(memcount));
@@ -135,7 +136,7 @@ textwindows int __proc_harvest(struct Proc *pr, bool iswait4) {
   return sic;
 }
 
-static textwindows dontinstrument uint32_t __proc_worker(void *arg) {
+textwindows dontinstrument static uint32_t __proc_worker(void *arg) {
   struct CosmoTib tls;
   char *sp = __builtin_frame_address(0);
   __bootstrap_tls(&tls, __builtin_frame_address(0));
@@ -244,7 +245,7 @@ static textwindows dontinstrument uint32_t __proc_worker(void *arg) {
 /**
  * Lazy initializes process tracker data structures and worker.
  */
-static textwindows void __proc_setup(void) {
+textwindows static void __proc_setup(void) {
   __proc.onbirth = CreateEvent(0, 0, 0, 0);     // auto reset
   __proc.haszombies = CreateEvent(0, 1, 0, 0);  // manual reset
   __proc.thread = CreateThread(0, STACK_SIZE, __proc_worker, 0,
@@ -256,14 +257,14 @@ static textwindows void __proc_setup(void) {
  */
 textwindows void __proc_lock(void) {
   cosmo_once(&__proc.once, __proc_setup);
-  _pthread_mutex_lock(&__proc.lock);
+  _pthread_mutex_lock(&__proc_lock_obj);
 }
 
 /**
  * Unlocks process tracker.
  */
 textwindows void __proc_unlock(void) {
-  _pthread_mutex_unlock(&__proc.lock);
+  _pthread_mutex_unlock(&__proc_lock_obj);
 }
 
 /**
@@ -271,10 +272,8 @@ textwindows void __proc_unlock(void) {
  */
 textwindows void __proc_wipe_and_reset(void) {
   // TODO(jart): Should we preserve this state in forked children?
-  pthread_mutex_t lock = __proc.lock;
+  _pthread_mutex_wipe_np(&__proc_lock_obj);
   bzero(&__proc, sizeof(__proc));
-  __proc.lock = lock;
-  _pthread_mutex_wipe_np(&__proc.lock);
 }
 
 /**
@@ -292,16 +291,9 @@ textwindows struct Proc *__proc_new(void) {
     proc = PROC_CONTAINER(e);
     dll_remove(&__proc.free, &proc->elem);
   }
-  if (proc) {
-    bzero(proc, sizeof(*proc));
-  } else {
-    proc = mmap(0, sizeof(struct Proc), PROT_READ | PROT_WRITE,
-                MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-    if (proc == MAP_FAILED) {
-      enomem();
-      return 0;
-    }
-  }
+  if (!proc && !(proc = HeapAlloc(GetProcessHeap(), 0, sizeof(struct Proc))))
+    return 0;
+  bzero(proc, sizeof(*proc));
   dll_init(&proc->elem);
   return proc;
 }

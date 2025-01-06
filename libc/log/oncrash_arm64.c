@@ -47,6 +47,7 @@
 #include "libc/runtime/runtime.h"
 #include "libc/runtime/stack.h"
 #include "libc/runtime/symbols.internal.h"
+#include "libc/runtime/syslib.internal.h"
 #include "libc/stdio/stdio.h"
 #include "libc/str/str.h"
 #include "libc/sysv/consts/auxv.h"
@@ -395,12 +396,6 @@ relegated void __oncrash(int sig, siginfo_t *si, void *arg) {
   BLOCK_CANCELATION;
   SpinLock(&lock);
   __oncrash_impl(sig, si, arg);
-
-  // unlike amd64, the instruction pointer on arm64 isn't advanced past
-  // the debugger breakpoint instruction automatically. we need this so
-  // execution can resume after __builtin_trap().
-  if (arg && sig == SIGTRAP)
-    ((ucontext_t *)arg)->uc_mcontext.PC += 4;
 
   // ensure execution doesn't resume for anything but SIGTRAP / SIGQUIT
   if (arg && sig != SIGTRAP && sig != SIGQUIT) {

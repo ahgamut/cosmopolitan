@@ -41,8 +41,6 @@ int sys_munmap(void *p, size_t n) {
   } else {
     rc = __sys_munmap(p, n);
   }
-  if (!rc)
-    __virtualsize -= n;
   KERNTRACE("sys_munmap(%p, %'zu) → %d", p, n, rc);
   return rc;
 }

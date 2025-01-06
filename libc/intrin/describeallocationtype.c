@@ -16,7 +16,17 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/thread/thread.h"
+#include "libc/intrin/describeflags.h"
+#include "libc/macros.h"
+#include "libc/nt/enum/memflags.h"
 
-// this mutex is needed so execve() can shut down the signal worker
-pthread_mutex_t __sig_worker_lock = PTHREAD_MUTEX_INITIALIZER;
+static const struct DescribeFlags kNtAllocationTypeFlags[] = {
+    {kNtMemCommit, "Commit"},    //
+    {kNtMemReserve, "Reserve"},  //
+    {kNtMemReset, "Reset"},      //
+};
+
+const char *_DescribeNtAllocationType(char buf[48], uint32_t x) {
+  return _DescribeFlags(buf, 48, kNtAllocationTypeFlags,
+                        ARRAYLEN(kNtAllocationTypeFlags), "kNtMem", x);
+}

@@ -53,12 +53,12 @@ TEST(execve, testArgPassing) {
   char ibuf[12], buf[8];
   const char *prog = "./execve_test_prog1";
   testlib_extract("/zip/execve_test_prog1", prog, 0755);
+  testlib_extract("/zip/execve_test_prog2", "execve_test_prog2", 0755);
   for (i = 0; i < N; ++i) {
     FormatInt32(ibuf, i);
     GenBuf(buf, i);
     SPAWN(vfork);
-    execve(prog, (char *const[]){(char *)prog, "-", ibuf, buf, 0},
-           (char *const[]){0});
+    execl(prog, prog, "-", ibuf, buf, NULL);
     kprintf("execve failed: %m\n");
     EXITS(0);
   }

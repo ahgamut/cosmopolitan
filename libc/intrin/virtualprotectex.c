@@ -1,7 +1,7 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
 │ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
-│ Copyright 2021 Justine Alexandra Roberts Tunney                              │
+│ Copyright 2022 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
 │ Permission to use, copy, modify, and/or distribute this software for         │
 │ any purpose with or without fee is hereby granted, provided that the         │
@@ -16,22 +16,28 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/syscall-nt.internal.h"
-#include "libc/nt/enum/status.h"
-#include "libc/nt/nt/process.h"
-#include "libc/nt/process.h"
-#include "libc/nt/runtime.h"
-#include "libc/nt/struct/processbasicinformation.h"
+#include "libc/calls/syscall_support-nt.internal.h"
+#include "libc/intrin/describeflags.h"
+#include "libc/intrin/strace.h"
+#include "libc/log/libfatal.internal.h"
+#include "libc/nt/memory.h"
 
-textwindows int sys_getppid_nt(void) {
-  struct NtProcessBasicInformation ProcessInformation;
-  uint32_t gotsize = 0;
-  if (!NtError(
-          NtQueryInformationProcess(GetCurrentProcess(), 0, &ProcessInformation,
-                                    sizeof(ProcessInformation), &gotsize)) &&
-      gotsize >= sizeof(ProcessInformation) &&
-      ProcessInformation.InheritedFromUniqueProcessId) {
-    return ProcessInformation.InheritedFromUniqueProcessId;
-  }
-  return GetCurrentProcessId();
+__msabi extern typeof(VirtualProtectEx) *const __imp_VirtualProtectEx;
+
+/**
+ * Protects memory on the New Technology.
+ * @note this wrapper takes care of ABI, STRACE(), and __winerr()
+ */
+textwindows bool32 VirtualProtectEx(int64_t hProcess, void *lpAddress,
+                                    uint64_t dwSize, uint32_t flNewProtect,
+                                    uint32_t *lpflOldProtect) {
+  bool32 bOk;
+  bOk = __imp_VirtualProtectEx(hProcess, lpAddress, dwSize, flNewProtect,
+                               lpflOldProtect);
+  if (!bOk)
+    __winerr();
+  NTTRACE("VirtualProtectEx(%ld, %p, %'zu, %s, [%s]) → %hhhd% m", hProcess,
+          lpAddress, dwSize, DescribeNtPageFlags(flNewProtect),
+          DescribeNtPageFlags(*lpflOldProtect), bOk);
+  return bOk;
 }

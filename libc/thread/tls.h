@@ -10,7 +10,6 @@ COSMOPOLITAN_C_START_
 
 struct CosmoFtrace {   /* 16 */
   char ft_once;        /*  0 */
-  char ft_noreentry;   /*  1 */
   int ft_skew;         /*  4 */
   int64_t ft_lastaddr; /*  8 */
 };
@@ -23,10 +22,10 @@ struct CosmoTib {
   struct CosmoTib *tib_self;      /* 0x00 */
   struct CosmoFtrace tib_ftracer; /* 0x08 */
   void *tib_garbages;             /* 0x18 */
-  intptr_t __unused;              /* 0x20 */
+  _Atomic(int32_t) tib_ptid;      /* 0x20 transitions 0 → tid */
   intptr_t tib_pthread;           /* 0x28 */
   struct CosmoTib *tib_self2;     /* 0x30 */
-  _Atomic(int32_t) tib_tid;       /* 0x38 transitions -1 → tid → 0 */
+  _Atomic(int32_t) tib_ctid;      /* 0x38 transitions -1 → tid → 0 */
   int32_t tib_errno;              /* 0x3c */
   uint64_t tib_flags;             /* 0x40 */
   int tib_ftrace;                 /* inherited */

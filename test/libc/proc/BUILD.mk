@@ -29,15 +29,17 @@ TEST_LIBC_PROC_DIRECTDEPS =						\
 	LIBC_MEM							\
 	LIBC_NEXGEN32E							\
 	LIBC_NT_KERNEL32						\
-	LIBC_RUNTIME							\
 	LIBC_PROC							\
+	LIBC_RUNTIME							\
+	LIBC_LOG							\
+	LIBC_STDIO							\
 	LIBC_STR							\
 	LIBC_SYSV							\
 	LIBC_TESTLIB							\
 	LIBC_THREAD							\
 	LIBC_X								\
 	THIRD_PARTY_MUSL						\
-	THIRD_PARTY_TR
+	THIRD_PARTY_TR							\
 
 TEST_LIBC_PROC_DEPS :=							\
 	$(call uniq,$(foreach x,$(TEST_LIBC_PROC_DIRECTDEPS),$($(x))))
@@ -59,6 +61,17 @@ o/$(MODE)/test/libc/proc/%.dbg:						\
 o/$(MODE)/test/libc/proc/posix_spawn_test.runs:				\
 		private QUOTA += -M8192m
 
+o/$(MODE)/test/libc/proc/fork_test.dbg:					\
+		$(TEST_LIBC_PROC_DEPS)					\
+		o/$(MODE)/test/libc/proc/fork_test.o			\
+		o/$(MODE)/test/libc/proc/proc.pkg			\
+		o/$(MODE)/tool/hello/life-pe.ape.zip.o			\
+		o/$(MODE)/test/libc/proc/life.zip.o			\
+		$(LIBC_TESTMAIN)					\
+		$(CRT)							\
+		$(APE_NO_MODIFY_SELF)
+	@$(APELINK)
+
 o/$(MODE)/test/libc/proc/posix_spawn_test.dbg:				\
 		$(TEST_LIBC_PROC_DEPS)					\
 		o/$(MODE)/test/libc/proc/posix_spawn_test.o		\
@@ -78,6 +91,7 @@ o/$(MODE)/test/libc/proc/execve_test.dbg:				\
 		o/$(MODE)/test/libc/proc/execve_test.o			\
 		o/$(MODE)/test/libc/calls/life-nomod.zip.o		\
 		o/$(MODE)/test/libc/proc/execve_test_prog1.zip.o	\
+		o/$(MODE)/test/libc/proc/execve_test_prog2.zip.o	\
 		o/$(MODE)/test/libc/mem/prog/life.elf.zip.o		\
 		o/$(MODE)/test/libc/mem/prog/sock.elf.zip.o		\
 		o/$(MODE)/test/libc/proc/proc.pkg			\
@@ -98,7 +112,16 @@ o/$(MODE)/test/libc/proc/fexecve_test.dbg:				\
 		$(APE_NO_MODIFY_SELF)
 	@$(APELINK)
 
+o/$(MODE)/test/libc/proc/life.dbg:					\
+		$(TEST_LIBC_PROC_DEPS)					\
+		o/$(MODE)/test/libc/proc/life.o				\
+		$(CRT)							\
+		$(APE_NO_MODIFY_SELF)
+	@$(APELINK)
+
+o/$(MODE)/test/libc/proc/life.zip.o					\
 o/$(MODE)/test/libc/proc/execve_test_prog1.zip.o			\
+o/$(MODE)/test/libc/proc/execve_test_prog2.zip.o			\
 o/$(MODE)/test/libc/proc/life-pe.zip.o: private				\
 		ZIPOBJ_FLAGS +=						\
 			-B

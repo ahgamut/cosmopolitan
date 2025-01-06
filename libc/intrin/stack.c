@@ -31,6 +31,8 @@
 #include "libc/intrin/rlimit.h"
 #include "libc/intrin/strace.h"
 #include "libc/intrin/weaken.h"
+#include "libc/limits.h"
+#include "libc/macros.h"
 #include "libc/runtime/runtime.h"
 #include "libc/sock/internal.h"
 #include "libc/sysv/consts/map.h"
@@ -118,7 +120,7 @@ static void *flixmap(void *addr, size_t size, int prot, int flags) {
 static void *slackmap(size_t stacksize, size_t guardsize) {
   int olde = errno;
   struct Map *prev, *map;
-  char *max = (char *)0x7fffffffffff;
+  char *max = (char *)PTRDIFF_MAX;
   size_t need = guardsize + stacksize;
   __maps_lock();
   for (;;) {
@@ -126,9 +128,9 @@ static void *slackmap(size_t stacksize, size_t guardsize) {
     // look for empty space beneath higher mappings
     char *region = 0;
     for (map = __maps_floor(max); map; map = prev) {
-      char *min = (char *)(intptr_t)__pagesize;
+      char *min = (char *)(intptr_t)__gransize;
       if ((prev = __maps_prev(map)))
-        min = prev->addr + prev->size;
+        min = prev->addr + ROUNDUP(prev->size, __gransize);
       if (map->addr - min >= need) {
         region = map->addr - need;
         max = region - 1;
@@ -356,7 +358,7 @@ void cosmo_stack_setmaxstacks(int maxstacks) {
  */
 errno_t cosmo_stack_alloc(size_t *inout_stacksize,  //
                           size_t *inout_guardsize,  //
-                          void **out_addr) {
+                          void **out_stackaddr) {
 
   // validate arguments
   size_t stacksize = *inout_stacksize;
@@ -423,7 +425,7 @@ errno_t cosmo_stack_alloc(size_t *inout_stacksize,  //
   // return stack
   *inout_stacksize = stacksize;
   *inout_guardsize = guardsize;
-  *out_addr = stackaddr;
+  *out_stackaddr = stackaddr;
   return 0;
 }
 
@@ -490,7 +492,7 @@ relegated bool TellOpenbsdThisIsStackMemory(void *addr, size_t size) {
 
 // OpenBSD only permits RSP to occupy memory that's been explicitly
 // defined as stack memory, i.e. `lo <= %rsp < hi` must be the case
-relegated errno_t FixupCustomStackOnOpenbsd(pthread_attr_t *attr) {
+relegated bool FixupCustomStackOnOpenbsd(pthread_attr_t *attr) {
 
   // get interval
   uintptr_t lo = (uintptr_t)attr->__stackaddr;
@@ -501,15 +503,11 @@ relegated errno_t FixupCustomStackOnOpenbsd(pthread_attr_t *attr) {
   hi = hi & -__pagesize;
 
   // tell os it's stack memory
-  errno_t olderr = errno;
-  if (!TellOpenbsdThisIsStackMemory((void *)lo, hi - lo)) {
-    errno_t err = errno;
-    errno = olderr;
-    return err;
-  }
+  if (!TellOpenbsdThisIsStackMemory((void *)lo, hi - lo))
+    return false;
 
   // update attributes with usable stack address
   attr->__stackaddr = (void *)lo;
   attr->__stacksize = hi - lo;
-  return 0;
+  return true;
 }

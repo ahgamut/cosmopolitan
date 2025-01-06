@@ -18,6 +18,7 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
 #include "libc/fmt/conv.h"
+#include "libc/runtime/runtime.h"
 #include "libc/str/str.h"
 
 void GenBuf(char buf[8], int x) {
@@ -40,5 +41,15 @@ int main(int argc, char *argv[]) {
     tinyprint(2, "error: buf check failed\n", NULL);
     return 10;
   }
+  const char *prog = "./execve_test_prog2";
+  if (!fork()) {
+    execl(prog, prog, NULL);
+    _Exit(127);
+  }
+  int ws;
+  if (wait(&ws) == -1)
+    return 30;
+  if (ws)
+    return 31;
   return 0;
 }

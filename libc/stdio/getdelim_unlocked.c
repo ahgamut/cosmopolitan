@@ -44,9 +44,8 @@ ssize_t getdelim_unlocked(char **s, size_t *n, int delim, FILE *f) {
     *n = 0;
   for (i = 0;; i += m) {
     m = f->end - f->beg;
-    if ((p = memchr(f->buf + f->beg, delim, m))) {
+    if ((p = memchr(f->buf + f->beg, delim, m)))
       m = p + 1 - (f->buf + f->beg);
-    }
     if (i + m + 1 > *n) {
       n2 = i + m + 1;
       s2 = realloc(*s, n2);
@@ -59,10 +58,9 @@ ssize_t getdelim_unlocked(char **s, size_t *n, int delim, FILE *f) {
       }
     }
     memcpy(*s + i, f->buf + f->beg, m);
-    (*s)[i + m] = '\0';
-    if ((f->beg += m) == f->end) {
+    (*s)[i + m] = 0;
+    if ((f->beg += m) == f->end)
       f->beg = f->end = 0;
-    }
     if (p) {
       return i + m;
     } else if (f->fd == -1) {
@@ -71,7 +69,7 @@ ssize_t getdelim_unlocked(char **s, size_t *n, int delim, FILE *f) {
       if (!rc)
         break;
       f->end = rc;
-    } else if (errno != EINTR) {
+    } else {
       f->state = errno;
       return -1;
     }

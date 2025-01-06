@@ -83,7 +83,6 @@ extern uint64_t kStartTsc;
 extern const char kNtSystemDirectory[];
 extern const char kNtWindowsDirectory[];
 extern size_t __virtualmax;
-extern size_t __virtualsize;
 extern size_t __stackmax;
 extern bool32 __isworker;
 /* utilities */
@@ -95,7 +94,7 @@ int ftrace_install(void) libcesque;
 int ftrace_enabled(int) libcesque;
 int strace_enabled(int) libcesque;
 void __print_maps(size_t) libcesque;
-void __print_maps_win32(void) libcesque;
+void __print_maps_win32(int64_t, const char *, size_t) libcesque;
 void __printargs(const char *) libcesque;
 /* builtin sh-like system/popen dsl */
 int _cocmd(int, char **, char **) libcesque;

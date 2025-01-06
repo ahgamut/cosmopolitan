@@ -40,9 +40,12 @@ imp	''							SetCurrentDirectoryW					kernel32	1
 imp	''							TerminateProcess					kernel32	2
 imp	''							UnlockFileEx						kernel32	5
 imp	''							UnmapViewOfFile						kernel32	1
+imp	''							VirtualAllocEx						kernel32	5
 imp	''							VirtualProtect						kernel32	4
+imp	''							VirtualProtectEx					kernel32	5
 imp	''							WaitForMultipleObjects					kernel32	4
 imp	''							WaitForSingleObject					kernel32	2
+imp	''							WriteProcessMemory					kernel32	5
 imp	'AcquireSRWLockExclusive'				AcquireSRWLockExclusive					kernel32	1
 imp	'AcquireSRWLockShared'					AcquireSRWLockShared					kernel32	1
 imp	'AddDllDirectory'					AddDllDirectory						kernel32	1
@@ -185,8 +188,8 @@ imp	'GetWindowsDirectory'					GetWindowsDirectoryW					kernel32	2
 imp	'GetWindowsDirectoryA'					GetWindowsDirectoryA					kernel32	2
 imp	'GlobalAlloc'						GlobalAlloc						kernel32	2
 imp	'GlobalFree'						GlobalFree						kernel32	1
-imp	'GlobalMemoryStatusEx'					GlobalMemoryStatusEx					kernel32	1
 imp	'GlobalLock'						GlobalLock						kernel32	1
+imp	'GlobalMemoryStatusEx'					GlobalMemoryStatusEx					kernel32	1
 imp	'GlobalUnlock'						GlobalUnlock						kernel32	1
 imp	'HeapAlloc'						HeapAlloc						kernel32	3
 imp	'HeapCompact'						HeapCompact						kernel32	2
@@ -299,11 +302,10 @@ imp	'UnlockFile'						UnlockFile						kernel32	5
 imp	'UnmapViewOfFile2'					UnmapViewOfFile2					kernel32	2
 imp	'UnmapViewOfFileEx'					UnmapViewOfFileEx					kernel32	3
 imp	'UpdateProcThreadAttribute'				UpdateProcThreadAttribute				kernel32	7
-imp	'VirtualAlloc'						VirtualAlloc						kernel32	4
-imp	'VirtualAllocEx'					VirtualAllocEx						kernel32	5
 imp	'VirtualFree'						VirtualFree						kernel32	3
 imp	'VirtualLock'						VirtualLock						kernel32	2
 imp	'VirtualQuery'						VirtualQuery						kernel32	3
+imp	'VirtualQueryEx'					VirtualQueryEx						kernel32	4
 imp	'VirtualUnlock'						VirtualUnlock						kernel32	2
 imp	'WaitForMultipleObjectsEx'				WaitForMultipleObjectsEx				kernel32	5
 imp	'WaitForSingleObjectEx'					WaitForSingleObjectEx					kernel32	3

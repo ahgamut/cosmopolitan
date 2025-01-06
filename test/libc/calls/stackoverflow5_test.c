@@ -16,22 +16,28 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include <cosmo.h>
-#include <limits.h>
-#include <pthread.h>
-#include <signal.h>
-#include <unistd.h>
+#include "libc/assert.h"
+#include "libc/calls/calls.h"
+#include "libc/calls/struct/sigaction.h"
+#include "libc/calls/struct/siginfo.h"
+#include "libc/runtime/runtime.h"
+#include "libc/sysv/consts/sa.h"
+#include "libc/sysv/consts/sig.h"
+#include "libc/sysv/consts/ss.h"
+#include "libc/thread/thread.h"
+#include "libc/thread/tls.h"
 
 /**
- * stack overflow recovery technique #5
- * use the cosmo posix threads extensions
+ * stack overflow test #5
+ * - make sure fork() preserves sigaltstack()
+ * - make sure fork() preserves guard page status
  */
 
-sig_atomic_t smashed_stack;
+jmp_buf recover;
 
-void CrashHandler(int sig) {
-  smashed_stack = true;
-  pthread_exit(0);
+void CrashHandler(int sig, siginfo_t *si, void *ctx) {
+  unassert(__is_stack_overflow(si, ctx));
+  longjmp(recover, 123);
 }
 
 int StackOverflow(int d) {
@@ -44,42 +50,40 @@ int StackOverflow(int d) {
 }
 
 void *MyPosixThread(void *arg) {
-  exit(StackOverflow(0));
+  int pid;
+  unassert(__get_tls()->tib_sigstack_addr);
+  unassert((pid = fork()) != -1);
+  if (!pid) {
+    int jumpcode;
+    if (!(jumpcode = setjmp(recover))) {
+      StackOverflow(1);
+      _Exit(1);
+    }
+    unassert(123 == jumpcode);
+  } else {
+    int ws;
+    unassert(wait(&ws) != -1);
+    unassert(!ws);
+    pthread_exit(0);
+  }
   return 0;
 }
 
 int main() {
 
-  // choose the most dangerously small size possible
-  size_t sigstacksize = sysconf(_SC_MINSIGSTKSZ) + 2048;
-
-  // setup signal handler
   struct sigaction sa;
+  sa.sa_flags = SA_SIGINFO | SA_ONSTACK;
   sigemptyset(&sa.sa_mask);
-  sa.sa_flags = SA_ONSTACK;
-  sa.sa_handler = CrashHandler;
-  if (sigaction(SIGBUS, &sa, 0))
-    return 1;
-  if (sigaction(SIGSEGV, &sa, 0))
-    return 2;
+  sa.sa_sigaction = CrashHandler;
+  unassert(!sigaction(SIGBUS, &sa, 0));
+  unassert(!sigaction(SIGSEGV, &sa, 0));
 
-  // create thread with signal stack
-  pthread_t id;
+  pthread_t th;
   pthread_attr_t attr;
-  if (pthread_attr_init(&attr))
-    return 3;
-  if (pthread_attr_setguardsize(&attr, getpagesize()))
-    return 4;
-  if (pthread_attr_setsigaltstacksize_np(&attr, sigstacksize))
-    return 5;
-  if (pthread_create(&id, &attr, MyPosixThread, 0))
-    return 6;
-  if (pthread_attr_destroy(&attr))
-    return 7;
-  if (pthread_join(id, 0))
-    return 8;
-  if (!smashed_stack)
-    return 9;
-
-  CheckForMemoryLeaks();
+  unassert(!pthread_attr_init(&attr));
+  unassert(!pthread_attr_setguardsize(&attr, getpagesize()));
+  unassert(!pthread_attr_setsigaltstacksize_np(&attr, SIGSTKSZ));
+  unassert(!pthread_create(&th, &attr, MyPosixThread, 0));
+  unassert(!pthread_attr_destroy(&attr));
+  unassert(!pthread_join(th, 0));
 }

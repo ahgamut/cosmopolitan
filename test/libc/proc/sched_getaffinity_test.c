@@ -30,6 +30,8 @@
 #include "libc/thread/thread.h"
 #include "libc/thread/thread2.h"
 
+int disable_limit_process_to_single_cpu;
+
 void SetUp(void) {
   if (!IsLinux() && !IsFreebsd() && !IsWindows()) {
     exit(0);
@@ -90,7 +92,6 @@ __attribute__((__constructor__)) static void init(void) {
   }
 }
 
-#ifdef __x86_64__
 TEST(sched_setaffinity, isInheritedAcrossExecve) {
   cpu_set_t x;
   CPU_ZERO(&x);
@@ -105,7 +106,6 @@ TEST(sched_setaffinity, isInheritedAcrossExecve) {
   EXPECT_TRUE(WIFEXITED(ws));
   EXPECT_EQ(42, WEXITSTATUS(ws));
 }
-#endif /* __x86_64__ */
 
 TEST(sched_getaffinity, getpid) {
   cpu_set_t x, y;
