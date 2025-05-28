@@ -97,12 +97,12 @@ class shared_ref
 
     size_t use_count() const noexcept
     {
-        return shared + 1;
+        return __atomic_load_n(&shared, __ATOMIC_RELAXED) + 1;
     }
 
     size_t weak_count() const noexcept
     {
-        return weak;
+        return __atomic_load_n(&weak, __ATOMIC_RELAXED);
     }
 
   private:
@@ -349,7 +349,7 @@ class shared_ptr
     template<typename U>
     bool owner_before(const weak_ptr<U>& r) const noexcept
     {
-        return !r.owner_before(*this);
+        return rc < r.rc;
     }
 
   private:
@@ -382,6 +382,34 @@ class weak_ptr
             rc->keep_weak();
     }
 
+    weak_ptr(const weak_ptr& r) noexcept : p(r.p), rc(r.rc)
+    {
+        if (rc)
+            rc->keep_weak();
+    }
+
+    template<typename U>
+        requires __::shared_ptr_compatible<T, U>
+    weak_ptr(const weak_ptr<U>& r) noexcept : p(r.p), rc(r.rc)
+    {
+        if (rc)
+            rc->keep_weak();
+    }
+
+    weak_ptr(weak_ptr&& r) noexcept : p(r.p), rc(r.rc)
+    {
+        r.p = nullptr;
+        r.rc = nullptr;
+    }
+
+    template<typename U>
+        requires __::shared_ptr_compatible<T, U>
+    weak_ptr(weak_ptr<U>&& r) noexcept : p(r.p), rc(r.rc)
+    {
+        r.p = nullptr;
+        r.rc = nullptr;
+    }
+
     ~weak_ptr()
     {
         if (rc)
@@ -408,6 +436,19 @@ class weak_ptr
         using ctl::swap;
         swap(p, r.p);
         swap(rc, r.rc);
+    }
+
+    weak_ptr& operator=(weak_ptr r) noexcept
+    {
+        swap(r);
+        return *this;
+    }
+
+    template<typename U>
+        requires __::shared_ptr_compatible<T, U>
+    weak_ptr& operator=(weak_ptr<U> r) noexcept
+    {
+        weak_ptr<T>(move(r)).swap(*this);
     }
 
     shared_ptr<T> lock() const noexcept
