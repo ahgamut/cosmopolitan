@@ -24,7 +24,7 @@
  * Returns pointer to first instance of character.
  */
 wchar_t *wcschr(const wchar_t *s, wchar_t c) {
-#if defined(__x86_64__) && !defined(__chibicc__)
+#if 0 && defined(__x86_64__) && !defined(__chibicc__)
   __m128i nv = _mm_set1_epi32(c);
   __m128i zv = _mm_setzero_si128();
   __m128i *v = (__m128i *)((intptr_t)s & -16);
@@ -42,7 +42,7 @@ wchar_t *wcschr(const wchar_t *s, wchar_t c) {
   s = (const wchar_t *)v;
   s += __builtin_ctz(m) >> 2;
   return (wchar_t *)(*s ? s : 0);
-#elif defined(__aarch64__) && defined(__ARM_NEON)
+#elif 0 && defined(__aarch64__) && defined(__ARM_NEON)
   uint32x4_t zv = vdupq_n_u32(0);
   uint32x4_t nv = vdupq_n_u32(c);
   uint32_t *v = (uint32_t *)((intptr_t)s & -16);
