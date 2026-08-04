@@ -69,7 +69,7 @@ static int clock_gettime_impl(int clock, struct timespec *ts) {
   struct timespec memory;
   if (!ts)
     ts = &memory;
-  return __clock_gettime(clock, ts);
+  return __clock_gettime(__linux2clock(clock), ts);
 }
 
 /**

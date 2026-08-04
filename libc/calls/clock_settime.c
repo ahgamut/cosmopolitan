@@ -18,6 +18,7 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/struct/timespec.internal.h"
 #include "libc/calls/struct/timeval.internal.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/cosmotime.h"
 #include "libc/dce.h"
 #include "libc/intrin/describeflags.h"
@@ -43,7 +44,7 @@ int clock_settime(int clockid, const struct timespec *ts) {
       rc = einval();
     }
   } else {
-    rc = sys_clock_settime(clockid, ts);
+    rc = sys_clock_settime(__linux2clock(clockid), ts);
   }
   STRACE("clock_settime(%s, %s) → %d% m", DescribeClockName(clockid),
          DescribeTimespec(0, ts), rc);

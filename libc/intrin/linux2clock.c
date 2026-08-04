@@ -1,7 +1,7 @@
-/*-*- mode:unix-assembly; indent-tabs-mode:t; tab-width:8; coding:utf-8     -*-│
-│ vi: set noet ft=asm ts=8 sw=8 fenc=utf-8                                 :vi │
+/*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
-│ Copyright 2021 Justine Alexandra Roberts Tunney                              │
+│ Copyright 2024 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
 │ Permission to use, copy, modify, and/or distribute this software for         │
 │ any purpose with or without fee is hereby granted, provided that the         │
@@ -16,29 +16,37 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/fmt/magnumstrs.internal.h"
-#include "libc/macros.h"
+#include "libc/dce.h"
+#include "libc/sysv/consts/clock.h"
 
-	.macro	.e e s
-	.long	\e - kClockNames
-	.long	.L\@ - kClockNames
-	.rodata.str1.1
-.L\@:	.string	"\s"
-	.previous
-	.endm
+#define ACTUAL2DEF(X) \
+  if (actual == X##_) \
+    return X;
 
-	.section .rodata,"a",@progbits
-	.balign	4
-	.underrun
-kClockNames:
-	.e	CLOCK_REALTIME_,"REALTIME"
-	.e	CLOCK_REALTIME_COARSE_,"REALTIME_COARSE"		// order matters
-	.e	CLOCK_MONOTONIC_,"MONOTONIC"
-	.e	CLOCK_MONOTONIC_RAW_,"MONOTONIC_RAW"		// order matters
-	.e	CLOCK_MONOTONIC_COARSE_,"MONOTONIC_COARSE"	// order matters
-	.e	CLOCK_PROCESS_CPUTIME_ID_,"PROCESS_CPUTIME_ID"
-	.e	CLOCK_THREAD_CPUTIME_ID_,"THREAD_CPUTIME_ID"
-	.e	CLOCK_BOOTTIME_,"BOOTTIME"
-	.long	MAGNUM_TERMINATOR
-	.endobj	kClockNames,globl,hidden
-	.overrun
+#define DEF2ACTUAL(X) \
+  if (clock == X)     \
+    return X##_;
+
+pureconst int __linux2clock(const int clock) {
+  DEF2ACTUAL(CLOCK_REALTIME);
+  DEF2ACTUAL(CLOCK_MONOTONIC);
+  DEF2ACTUAL(CLOCK_PROCESS_CPUTIME_ID);
+  DEF2ACTUAL(CLOCK_THREAD_CPUTIME_ID);
+  DEF2ACTUAL(CLOCK_MONOTONIC_RAW);
+  DEF2ACTUAL(CLOCK_REALTIME_COARSE);
+  DEF2ACTUAL(CLOCK_MONOTONIC_COARSE);
+  DEF2ACTUAL(CLOCK_BOOTTIME);
+  return -1;
+}
+
+pureconst int __clock2linux(const int actual) {
+  ACTUAL2DEF(CLOCK_REALTIME);
+  ACTUAL2DEF(CLOCK_MONOTONIC);
+  ACTUAL2DEF(CLOCK_PROCESS_CPUTIME_ID);
+  ACTUAL2DEF(CLOCK_THREAD_CPUTIME_ID);
+  ACTUAL2DEF(CLOCK_MONOTONIC_RAW);
+  ACTUAL2DEF(CLOCK_REALTIME_COARSE);
+  ACTUAL2DEF(CLOCK_MONOTONIC_COARSE);
+  ACTUAL2DEF(CLOCK_BOOTTIME);
+  return -1;
+}

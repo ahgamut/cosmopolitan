@@ -16,12 +16,25 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/fmt/magnumstrs.internal.h"
+#include "libc/dce.h"
 #include "libc/intrin/describeflags.h"
+#include "libc/macros.h"
+#include "libc/sysv/consts/clock.h"
 
 /**
  * Describes clock_gettime() clock argument.
  */
 const char *_DescribeClockName(char buf[32], int x) {
-  return _DescribeMagnum(buf, kClockNames, "CLOCK_", x);
+  const struct DescribeNumber clockNumbers[] = {
+      {CLOCK_REALTIME, "REALTIME"},                      //
+      {CLOCK_MONOTONIC, "MONOTONIC"},                    //
+      {CLOCK_PROCESS_CPUTIME_ID, "PROCESS_CPUTIME_ID"},  //
+      {CLOCK_THREAD_CPUTIME_ID, "THREAD_CPUTIME_ID"},    //
+      {CLOCK_MONOTONIC_RAW, "MONOTONIC_RAW"},            //
+      {CLOCK_REALTIME_COARSE, "REALTIME_COARSE"},        //
+      {CLOCK_MONOTONIC_COARSE, "MONOTONIC_COARSE"},      //
+      {CLOCK_BOOTTIME, "BOOTTIME"}                       //
+  };
+  return _DescribeNumbers(buf, 32, clockNumbers, ARRAYLEN(clockNumbers),
+                          "CLOCK_", (unsigned)x);
 }

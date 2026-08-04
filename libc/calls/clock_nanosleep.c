@@ -18,6 +18,7 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/struct/timespec.h"
 #include "libc/calls/struct/timespec.internal.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/intrin/describeflags.h"
@@ -101,7 +102,7 @@ errno_t clock_nanosleep(int clock, int flags,        //
     return EINVAL;
   int rc;
   errno_t err, old = errno;
-  rc = sys_clock_nanosleep(clock, flags, req, rem);
+  rc = sys_clock_nanosleep(__linux2clock(clock), flags, req, rem);
   err = !rc ? 0 : errno;
   errno = old;
   STRACE("clock_nanosleep(%s, %s, %s, [%s]) → %s", DescribeClockName(clock),

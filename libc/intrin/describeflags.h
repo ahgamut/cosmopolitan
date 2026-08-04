@@ -8,7 +8,15 @@ struct thatispacked DescribeFlags {
   const char *name;
 };
 
+struct thatispacked DescribeNumber {
+  unsigned number;
+  const char *name;
+};
+
 const char *_DescribeFlags(char *, size_t, const struct DescribeFlags *, size_t,
+                           const char *, unsigned) libcesque;
+
+const char *_DescribeNumbers(char *, size_t, const struct DescribeNumber *, size_t,
                            const char *, unsigned) libcesque;
 
 const char *_DescribeArchPrctlCode(char[12], int) libcesque;
