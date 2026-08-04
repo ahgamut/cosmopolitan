@@ -25,6 +25,7 @@
 #include "libc/calls/struct/sigset.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/calls/syscall_support-nt.internal.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/cosmo.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
@@ -70,9 +71,9 @@
 #define SPARSE_MINIMUM 2097152
 #define SPARSE_RANDPAD 2097152
 
-#define MAP_EXCL_freebsd 0x4000
+#define MAP_EXCL_freebsd 0x4000 // unused
 
-#define MAP_FIXED_NOREPLACE_linux 0x100000
+#define MAP_FIXED_NOREPLACE_linux 0x100000 // unused
 
 #define PGUP(x) (((x) + __pagesize - 1) & -__pagesize)
 #define GRUP(x) (((x) + __gransize - 1) & -__gransize)
@@ -516,16 +517,16 @@ static struct DirectMap sys_mmap(void *addr, size_t size, int prot, int flags,
                                  int fd, int64_t off) {
   struct DirectMap d;
   if (IsXnuSilicon()) {
-    long p = _sysret(__syslib->__mmap(addr, size, prot, flags, fd, off));
+    long p = _sysret(__syslib->__mmap(addr, size, prot, __linux2map(flags), fd, off));
     d.hand = -1;
     d.addr = (void *)p;
   } else if (IsWindows()) {
-    d = sys_mmap_nt(addr, size, prot, flags, fd, off);
+    d = sys_mmap_nt(addr, size, prot, __linux2map(flags), fd, off);
   } else if (IsMetal()) {
-    d.addr = sys_mmap_metal(addr, size, prot, flags, fd, off);
+    d.addr = sys_mmap_metal(addr, size, prot, __linux2map(flags), fd, off);
     d.hand = -1;
   } else {
-    d.addr = __sys_mmap(addr, size, prot, flags, fd, off, off);
+    d.addr = __sys_mmap(addr, size, prot, __linux2map(flags), fd, off, off);
     d.hand = -1;
   }
   return d;
@@ -646,11 +647,10 @@ static void *__mmap_impl(char *addr, size_t size, int prot, int flags, int fd,
       __maps_free(map);
       return (void *)einval();
     }
-    sysflags &= ~MAP_FIXED_NOREPLACE;
-    if (IsLinux()) {
-      sysflags |= MAP_FIXED_NOREPLACE_linux;
-    } else if (IsFreebsd()) {
-      sysflags |= MAP_FIXED | MAP_EXCL_freebsd;
+    if (!IsLinux() && !IsFreebsd()) {
+      /* todo: if only linux/freebsd are using this,
+       *       why not zero the number elsewhere? */
+      sysflags &= ~MAP_FIXED_NOREPLACE;
     }
     noreplace = true;
   } else if (flags & MAP_FIXED) {
@@ -659,8 +659,8 @@ static void *__mmap_impl(char *addr, size_t size, int prot, int flags, int fd,
     // POSIX says addr is a hint when MAP_FIXED isn't used, but behavior
     // is implementation defined. In practice, every kernel will give us
     // addr if it's available. The only exception is FreeBSD, which goes
-    // its own way. Cosmo believes mmap() should give you want you want.
-    sysflags |= MAP_FIXED | MAP_EXCL_freebsd;
+    // its own way. Cosmo believes mmap() should give you what you want.
+    sysflags |= MAP_FIXED_NOREPLACE;
     hintmode = true;
   }
 
@@ -770,7 +770,7 @@ static void *__mmap_impl(char *addr, size_t size, int prot, int flags, int fd,
       } else if (hintmode) {
         errno = olderr;
         hintmode = false;
-        sysflags &= ~(MAP_FIXED | MAP_EXCL_freebsd);
+        sysflags &= ~(MAP_FIXED_NOREPLACE);
         goto TryAgain;
       }
     }

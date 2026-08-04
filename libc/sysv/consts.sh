@@ -32,7 +32,7 @@ syscon	mmap	MAP_SHARED_VALIDATE			3			3			1			1			1			1			1			1			# weird linux 
 syscon	mmap	MAP_PRIVATE				2			2			2			2			2			2			2			2			# forced consensus & faked nt
 syscon	mmap	MAP_TYPE				15			15			15			15			15			15			15			15			# mask for type of mapping
 syscon	mmap	MAP_FIXED				0x00000010		0x00000010		0x00000010		0x00000010		0x00000010		0x00000010		0x00000010		0x00000010		# unix consensus; openbsd appears to forbid; faked nt
-syscon	mmap	MAP_FIXED_NOREPLACE			0x08000000		0x08000000		0x00004000		0x00004000		0x08000000		0x08000000		0x08000000		0x08000000     		# handled and defined by cosmo runtime; 0x100000 on linux 4.7+; MAP_FIXED|MAP_EXCL on FreeBSD
+syscon	mmap	MAP_FIXED_NOREPLACE			0x00100000		0x00100000		0x00004000		0x00004000		0x00004010		0        		0             		0             		# 0x100000 on linux 4.7+; MAP_FIXED|MAP_EXCL on FreeBSD (???)
 syscon	mmap	MAP_ANONYMOUS				0x00000020		0x00000020		0x00001000		0x00001000		0x00001000		0x00001000		0x00001000		0x00000020		# bsd consensus; faked nt
 syscon	mmap	MAP_LOCKED				0x00002000		0x00002000		0			0			0			0			0			0
 syscon	mmap	MAP_NORESERVE				0x00004000		0x00004000		0x00000040		0x00000040		0			0			0x00000040		0			# Linux calls it "reserve"; NT calls it "commit"? which is default?

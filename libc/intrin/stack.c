@@ -101,6 +101,7 @@ static size_t cosmo_stack_maxgrow(void) {
 
 // allocates private anonymous fixed noreplace memory on linux
 static void *flixmap(void *addr, size_t size, int prot, int flags) {
+  /* no need to linux2map, this is only on linux */
   flags |= MAP_PRIVATE | MAP_ANONYMOUS_LINUX | MAP_NOREPLACE_LINUX;
   void *res = __sys_mmap(addr, size, prot, flags, -1, 0, 0);
   if (res != MAP_FAILED) {
@@ -488,6 +489,7 @@ errno_t cosmo_stack_free(void *stackaddr, size_t stacksize, size_t guardsize) {
 }
 
 relegated bool TellOpenbsdThisIsStackMemory(void *addr, size_t size) {
+  /* no need to linux2map, this is only on openbsd */
   return __sys_mmap(
              addr, size, PROT_READ | PROT_WRITE,
              MAP_PRIVATE | MAP_FIXED | MAP_ANON_OPENBSD | MAP_STACK_OPENBSD, -1,

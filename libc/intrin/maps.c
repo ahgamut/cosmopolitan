@@ -22,6 +22,7 @@
 #include "libc/calls/calls.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/calls/syscall_support-nt.internal.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/intrin/describebacktrace.h"
@@ -155,7 +156,7 @@ static void *__maps_valloc(void *addr, size_t size) {
     res = VirtualAlloc(0, size, kNtMemReserve | kNtMemCommit, kNtPageReadwrite);
   } else {
     res = __sys_mmap(addr, size, PROT_READ | PROT_WRITE,
-                     MAP_PRIVATE | MAP_ANONYMOUS, -1, 0, 0);
+                     __linux2map(MAP_PRIVATE | MAP_ANONYMOUS), -1, 0, 0);
   }
   if (res == MAP_FAILED)
     res = 0;

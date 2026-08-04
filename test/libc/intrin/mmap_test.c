@@ -20,6 +20,7 @@
 #include "libc/assert.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/syscall-sysv.internal.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/intrin/kprintf.h"
@@ -740,13 +741,13 @@ TEST(mmap, sharedFileMapFork) {
 ////////////////////////////////////////////////////////////////////////////////
 // MAP_FIXED_NOREPLACE
 
-TEST(MAP_FIXED_NOREPLACE, nullPage_notAllowed) {
+TEST(mmap_MAP_FIXED_NOREPLACE, nullPage_notAllowed) {
   ASSERT_SYS(EPERM, MAP_FAILED,
              mmap(0, 1, PROT_READ | PROT_WRITE,
                   MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE, -1, 0));
 }
 
-TEST(MAP_FIXED_NOREPLACE, alreadyExists_raisesEexist) {
+TEST(mmap_MAP_FIXED_NOREPLACE, alreadyExists_raisesEexist) {
   char *p;
   ASSERT_NE(MAP_FAILED, (p = mmap(0, 1, PROT_READ | PROT_WRITE,
                                   MAP_PRIVATE | MAP_ANONYMOUS, -1, 0)));
@@ -756,7 +757,7 @@ TEST(MAP_FIXED_NOREPLACE, alreadyExists_raisesEexist) {
   ASSERT_SYS(0, 0, munmap(p, 1));
 }
 
-TEST(MAP_FIXED_NOREPLACE, doesntExist_getsCreated) {
+TEST(mmap_MAP_FIXED_NOREPLACE, doesntExist_getsCreated) {
   char *p;
   ASSERT_NE(MAP_FAILED, (p = mmap(0, 1, PROT_READ | PROT_WRITE,
                                   MAP_PRIVATE | MAP_ANONYMOUS, -1, 0)));
@@ -773,8 +774,8 @@ char *CreateSecretPage(void) {
     p = VirtualAlloc(0, 1, kNtMemReserve | kNtMemCommit, kNtPageReadwrite);
     ASSERT_NE(NULL, p);
   } else {
-    p = __sys_mmap(0, 1, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS,
-                   -1, 0, 0);
+    p = __sys_mmap(0, 1, PROT_READ | PROT_WRITE,
+                   __linux2map(MAP_PRIVATE | MAP_ANONYMOUS), -1, 0, 0);
     ASSERT_NE(MAP_FAILED, p);
   }
   return p;
@@ -788,7 +789,7 @@ void FreeSecretPage(char *p) {
   }
 }
 
-TEST(MAP_FIXED_NOREPLACE, secretlyExists_raisesEexist) {
+TEST(mmap_MAP_FIXED_NOREPLACE, secretlyExists_raisesEexist) {
   char *p = CreateSecretPage();
   ASSERT_SYS(EEXIST, MAP_FAILED,
              mmap(p, 1, PROT_READ | PROT_WRITE,

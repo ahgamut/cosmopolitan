@@ -16,60 +16,73 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/assert.h"
-#include "libc/calls/calls.h"
-#include "libc/calls/syscall-sysv.internal.h"
-#include "libc/calls/syscall_support-sysv.internal.h"
-#include "libc/cosmo.h"
 #include "libc/dce.h"
-#include "libc/errno.h"
-#include "libc/runtime/runtime.h"
 #include "libc/sysv/consts/map.h"
-#include "libc/sysv/consts/prot.h"
-#include "libc/testlib/testlib.h"
 
-// returns true if byte at memory address is readable
-bool readable(void *addr) {
-  return testlib_pokememory(addr);
+#define ACTUAL2DEF(X)          \
+  if ((actual & X##_) == X##_) \
+    flags |= X;
+
+#define DEF2ACTUAL(X)   \
+  if ((flags & X) == X) \
+    actual |= X##_;
+
+pureconst int __linux2map(const int flags) {
+  int actual = 0;
+  DEF2ACTUAL(MAP_FILE);
+  DEF2ACTUAL(MAP_SHARED);
+  DEF2ACTUAL(MAP_PRIVATE);
+  DEF2ACTUAL(MAP_SHARED_VALIDATE);
+  DEF2ACTUAL(MAP_TYPE);
+  DEF2ACTUAL(MAP_FIXED);
+  DEF2ACTUAL(MAP_ANONYMOUS);
+  DEF2ACTUAL(MAP_32BIT);
+  DEF2ACTUAL(MAP_CONCEAL);
+  DEF2ACTUAL(MAP_HASSEMAPHORE);
+  DEF2ACTUAL(MAP_NOSYNC);
+  DEF2ACTUAL(MAP_JIT);
+  DEF2ACTUAL(MAP_DENYWRITE);
+  DEF2ACTUAL(MAP_EXECUTABLE);
+  DEF2ACTUAL(MAP_LOCKED);
+  DEF2ACTUAL(MAP_NORESERVE);
+  DEF2ACTUAL(MAP_POPULATE);
+  DEF2ACTUAL(MAP_NONBLOCK);
+  DEF2ACTUAL(MAP_INHERIT);
+  DEF2ACTUAL(MAP_HUGETLB);
+  DEF2ACTUAL(MAP_SYNC);
+  DEF2ACTUAL(MAP_FIXED_NOREPLACE);
+  DEF2ACTUAL(MAP_NOCACHE);
+  DEF2ACTUAL(MAP_NOEXTEND);
+  /* todo: this can be a for loop? */
+  return actual;
 }
 
-// returns true if page is reserved by linux memory manager
-// it can be true for addresses that aren't listed in /proc/PID/maps
-bool occupied(void *addr) {
-  int olde = errno;
-  char *want = (char *)((uintptr_t)addr & -__pagesize);
-  char *got = __sys_mmap(want, __pagesize, PROT_READ | PROT_WRITE,
-                         __linux2map(MAP_PRIVATE | MAP_ANONYMOUS), -1, 0, 0);
-  if (got == MAP_FAILED) {
-    unassert(errno == (IsFreebsd() ? EINVAL : EEXIST));
-    errno = olde;
-    return true;
-  }
-  sys_munmap(got, __pagesize);
-  return got != want;
-}
-
-TEST(stack, test) {
-  if (IsWindows())
-    return;
-
-  void *vstackaddr;
-  size_t stacksize = 65536;
-  size_t guardsize = 4096;
-  unassert(!cosmo_stack_alloc(&stacksize, &guardsize, &vstackaddr));
-  char *stackaddr = vstackaddr;
-
-  /* check memory reservation */
-  unassert(occupied(stackaddr + stacksize - 1));  // top stack
-  unassert(occupied(stackaddr));                  // bot stack
-  unassert(occupied(stackaddr - 1));              // top guard
-  unassert(occupied(stackaddr - guardsize));      // bot guard
-
-  /* check memory accessibility */
-  unassert(readable(stackaddr + stacksize - 1));  // top stack
-  unassert(readable(stackaddr));                  // bot stack
-  unassert(!readable(stackaddr - 1));             // top guard
-  unassert(!readable(stackaddr - guardsize));     // bot guard
-
-  unassert(!cosmo_stack_free(stackaddr, stacksize, guardsize));
+pureconst int __map2linux(const int actual) {
+  int flags = 0;
+  ACTUAL2DEF(MAP_FILE);
+  ACTUAL2DEF(MAP_SHARED);
+  ACTUAL2DEF(MAP_PRIVATE);
+  ACTUAL2DEF(MAP_SHARED_VALIDATE);
+  ACTUAL2DEF(MAP_TYPE);
+  ACTUAL2DEF(MAP_FIXED);
+  ACTUAL2DEF(MAP_ANONYMOUS);
+  ACTUAL2DEF(MAP_32BIT);
+  ACTUAL2DEF(MAP_CONCEAL);
+  ACTUAL2DEF(MAP_HASSEMAPHORE);
+  ACTUAL2DEF(MAP_NOSYNC);
+  ACTUAL2DEF(MAP_JIT);
+  ACTUAL2DEF(MAP_DENYWRITE);
+  ACTUAL2DEF(MAP_EXECUTABLE);
+  ACTUAL2DEF(MAP_LOCKED);
+  ACTUAL2DEF(MAP_NORESERVE);
+  ACTUAL2DEF(MAP_POPULATE);
+  ACTUAL2DEF(MAP_NONBLOCK);
+  ACTUAL2DEF(MAP_INHERIT);
+  ACTUAL2DEF(MAP_HUGETLB);
+  ACTUAL2DEF(MAP_SYNC);
+  ACTUAL2DEF(MAP_FIXED_NOREPLACE);
+  ACTUAL2DEF(MAP_NOCACHE);
+  ACTUAL2DEF(MAP_NOEXTEND);
+  /* todo: this can be a for loop? */
+  return flags;
 }

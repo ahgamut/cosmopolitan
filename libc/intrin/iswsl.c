@@ -37,6 +37,7 @@ bool __iswsl1(void) {
   if (!res) {
     if (IsLinux()) {
       int e = errno;
+      /* no need to linux2map, this is only on linux */
       void *p =
           __sys_mmap((void *)1, 4096, PROT_READ | PROT_WRITE,
                      MAP_FIXED | MAP_PRIVATE | ANONYMOUS | GROWSDOWN, -1, 0, 0);
