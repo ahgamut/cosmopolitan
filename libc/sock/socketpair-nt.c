@@ -44,7 +44,7 @@ textwindows static int sys_socketpair_nt_impl(int family, int type, int proto,
   int rc, reader, writer, oflags;
 
   // Supports only AF_UNIX
-  if (family != AF_UNIX) {
+  if (family != AF_UNIX_) {
     return eafnosupport();
   }
 

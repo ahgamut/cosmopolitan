@@ -6672,7 +6672,9 @@ PyInit__socket(void)
     PyModule_AddStringConstant(m, "BDADDR_LOCAL", "00:00:00:FF:FF:FF");
 #endif
 
+#if defined(AF_CAN)
     if (AF_CAN) PyModule_AddIntMacro(m, AF_CAN); /* Controller Area Network */
+#endif
     if (PF_CAN) PyModule_AddIntMacro(m, PF_CAN);
     if (PF_RDS) PyModule_AddIntMacro(m, PF_RDS);
     if (AF_PACKET) PyModule_AddIntMacro(m, AF_PACKET);

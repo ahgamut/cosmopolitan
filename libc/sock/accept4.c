@@ -18,6 +18,7 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/cp.internal.h"
 #include "libc/calls/internal.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/intrin/strace.h"
 #include "libc/sock/internal.h"
@@ -68,6 +69,10 @@ int accept4(int fd, struct sockaddr *opt_out_addr, uint32_t *opt_inout_addrsize,
     rc = sys_accept_nt(__get_pib()->fds.p + fd, &ss, flags);
   } else {
     rc = enotsock();
+  }
+
+  if (rc != -1) {
+    ss.ss_family = __af2linux(ss.ss_family);
   }
 
   if (rc != -1) {

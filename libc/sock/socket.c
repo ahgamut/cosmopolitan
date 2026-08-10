@@ -17,6 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/dce.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/intrin/describeflags.h"
 #include "libc/intrin/strace.h"
 #include "libc/sock/internal.h"
@@ -46,9 +47,9 @@ int socket(int family, int type, int protocol) {
   if (family == -1) {
     rc = eafnosupport();
   } else if (!IsWindows()) {
-    rc = sys_socket(family, type, protocol);
+    rc = sys_socket(__linux2af(family), type, protocol);
   } else {
-    rc = sys_socket_nt(family, type, protocol);
+    rc = sys_socket_nt(__linux2af(family), type, protocol);
   }
   STRACE("socket(%s, %s, %s) → %d% lm", DescribeSocketFamily(family),
          DescribeSocketType(type), DescribeSocketProtocol(protocol), rc);

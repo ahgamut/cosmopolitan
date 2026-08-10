@@ -17,6 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/dce.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/sock/internal.h"
 #include "libc/sock/sock.h"
 #include "libc/sysv/consts/af.h"
@@ -40,8 +41,8 @@ int socketpair(int family, int type, int protocol, int sv[2]) {
   if (family == AF_UNSPEC)
     family = AF_UNIX;
   if (!IsWindows()) {
-    return sys_socketpair(family, type, protocol, sv);
+    return sys_socketpair(__linux2af(family), type, protocol, sv);
   } else {
-    return sys_socketpair_nt(family, type, protocol, sv);
+    return sys_socketpair_nt(__linux2af(family), type, protocol, sv);
   }
 }

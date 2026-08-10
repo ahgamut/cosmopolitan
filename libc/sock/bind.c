@@ -17,6 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/internal.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/intrin/fds.h"
 #include "libc/intrin/kprintf.h"
@@ -28,6 +29,9 @@
 #include "libc/sock/syscall_fd.internal.h"
 #include "libc/sysv/errfuns.h"
 #include "libc/sysv/pib.h"
+
+/* todo: copy the sockaddr data for __linux2af */
+#pragma GCC diagnostic ignored "-Wdiscarded-qualifiers"
 
 /**
  * Assigns local address and port number to socket, e.g.
@@ -49,6 +53,8 @@
  */
 int bind(int fd, const struct sockaddr *addr, uint32_t addrsize) {
   int rc;
+  struct sockaddr *dummy = addr;
+  dummy->sa_family = __linux2af(dummy->sa_family);
   if (addrsize < sizeof(struct sockaddr)) {
     rc = einval();
   } else if (kisdangerous(addr)) {
@@ -64,6 +70,7 @@ int bind(int fd, const struct sockaddr *addr, uint32_t addrsize) {
   } else {
     rc = enotsock();
   }
+  dummy->sa_family = __af2linux(dummy->sa_family);
   STRACE("bind(%d, %s) -> %d% lm", fd, DescribeSockaddr(addr, addrsize), rc);
   return rc;
 }

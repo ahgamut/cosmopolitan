@@ -1,2 +1,2 @@
 #include "libc/sysv/consts/syscon.internal.h"
-.syscon af,AF_CAIF,37,37,-1,-1,-1,-1,-1,-1
+.syscon af,AF_CAIF_,37,37,-1,-1,-1,-1,-1,-1

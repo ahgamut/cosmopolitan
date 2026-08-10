@@ -17,6 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/internal.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/intrin/fds.h"
 #include "libc/intrin/kprintf.h"
@@ -91,6 +92,10 @@ static int __getsockpeername(int fd, struct sockaddr *out_addr,
     }
   } else {
     rc = impl_sysv(fd, &ss, &size);
+  }
+
+  if (!rc) {
+    out_addr->sa_family = __af2linux(out_addr->sa_family);
   }
 
   if (!rc) {

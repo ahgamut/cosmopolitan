@@ -1,0 +1,128 @@
+/*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
+│ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
+╞══════════════════════════════════════════════════════════════════════════════╡
+│ Copyright 2024 Justine Alexandra Roberts Tunney                              │
+│                                                                              │
+│ Permission to use, copy, modify, and/or distribute this software for         │
+│ any purpose with or without fee is hereby granted, provided that the         │
+│ above copyright notice and this permission notice appear in all copies.      │
+│                                                                              │
+│ THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL                │
+│ WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED                │
+│ WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE             │
+│ AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL         │
+│ DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR        │
+│ PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER               │
+│ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
+│ PERFORMANCE OF THIS SOFTWARE.                                                │
+╚─────────────────────────────────────────────────────────────────────────────*/
+#include "libc/dce.h"
+#include "libc/sysv/consts/af.h"
+
+#define ACTUAL2DEF(X) \
+  if (actual == X##_) \
+    return X;
+
+#define DEF2ACTUAL(X) \
+  if (af == X)        \
+    return X##_;
+
+pureconst int __linux2af(const int af) {
+  DEF2ACTUAL(AF_UNSPEC);
+  DEF2ACTUAL(AF_UNIX);
+  DEF2ACTUAL(AF_LOCAL);
+  DEF2ACTUAL(AF_INET);
+  DEF2ACTUAL(AF_FILE);
+  DEF2ACTUAL(AF_AX25);
+  DEF2ACTUAL(AF_IPX);
+  DEF2ACTUAL(AF_APPLETALK);
+  DEF2ACTUAL(AF_NETROM);
+  DEF2ACTUAL(AF_BRIDGE);
+  DEF2ACTUAL(AF_ATMPVC);
+  DEF2ACTUAL(AF_X25);
+  DEF2ACTUAL(AF_INET6);
+  DEF2ACTUAL(AF_ROSE);
+  DEF2ACTUAL(AF_LINK);
+  DEF2ACTUAL(AF_NETBEUI);
+  DEF2ACTUAL(AF_SECURITY);
+  DEF2ACTUAL(AF_KEY);
+  DEF2ACTUAL(AF_NETLINK);
+  DEF2ACTUAL(AF_ROUTE);
+  DEF2ACTUAL(AF_PACKET);
+  DEF2ACTUAL(AF_ASH);
+  DEF2ACTUAL(AF_ECONET);
+  DEF2ACTUAL(AF_ATMSVC);
+  DEF2ACTUAL(AF_RDS);
+  DEF2ACTUAL(AF_SNA);
+  DEF2ACTUAL(AF_IRDA);
+  DEF2ACTUAL(AF_PPPOX);
+  DEF2ACTUAL(AF_WANPIPE);
+  DEF2ACTUAL(AF_LLC);
+  DEF2ACTUAL(AF_IB);
+  DEF2ACTUAL(AF_MPLS);
+  DEF2ACTUAL(AF_CAN);
+  DEF2ACTUAL(AF_TIPC);
+  DEF2ACTUAL(AF_BLUETOOTH);
+  DEF2ACTUAL(AF_IUCV);
+  DEF2ACTUAL(AF_RXRPC);
+  DEF2ACTUAL(AF_ISDN);
+  DEF2ACTUAL(AF_PHONET);
+  DEF2ACTUAL(AF_IEEE802154);
+  DEF2ACTUAL(AF_CAIF);
+  DEF2ACTUAL(AF_ALG);
+  DEF2ACTUAL(AF_NFC);
+  DEF2ACTUAL(AF_VSOCK);
+  DEF2ACTUAL(AF_KCM);
+  DEF2ACTUAL(AF_MAX);
+  return -1;
+}
+
+pureconst int __af2linux(const int actual) {
+  ACTUAL2DEF(AF_UNSPEC);
+  ACTUAL2DEF(AF_UNIX);
+  ACTUAL2DEF(AF_LOCAL);
+  ACTUAL2DEF(AF_INET);
+  ACTUAL2DEF(AF_FILE);
+  ACTUAL2DEF(AF_AX25);
+  ACTUAL2DEF(AF_IPX);
+  ACTUAL2DEF(AF_APPLETALK);
+  ACTUAL2DEF(AF_NETROM);
+  ACTUAL2DEF(AF_BRIDGE);
+  ACTUAL2DEF(AF_ATMPVC);
+  ACTUAL2DEF(AF_X25);
+  ACTUAL2DEF(AF_INET6);
+  ACTUAL2DEF(AF_ROSE);
+  ACTUAL2DEF(AF_LINK);
+  ACTUAL2DEF(AF_NETBEUI);
+  ACTUAL2DEF(AF_SECURITY);
+  ACTUAL2DEF(AF_KEY);
+  ACTUAL2DEF(AF_NETLINK);
+  ACTUAL2DEF(AF_ROUTE);
+  ACTUAL2DEF(AF_PACKET);
+  ACTUAL2DEF(AF_ASH);
+  ACTUAL2DEF(AF_ECONET);
+  ACTUAL2DEF(AF_ATMSVC);
+  ACTUAL2DEF(AF_RDS);
+  ACTUAL2DEF(AF_SNA);
+  ACTUAL2DEF(AF_IRDA);
+  ACTUAL2DEF(AF_PPPOX);
+  ACTUAL2DEF(AF_WANPIPE);
+  ACTUAL2DEF(AF_LLC);
+  ACTUAL2DEF(AF_IB);
+  ACTUAL2DEF(AF_MPLS);
+  ACTUAL2DEF(AF_CAN);
+  ACTUAL2DEF(AF_TIPC);
+  ACTUAL2DEF(AF_BLUETOOTH);
+  ACTUAL2DEF(AF_IUCV);
+  ACTUAL2DEF(AF_RXRPC);
+  ACTUAL2DEF(AF_ISDN);
+  ACTUAL2DEF(AF_PHONET);
+  ACTUAL2DEF(AF_IEEE802154);
+  ACTUAL2DEF(AF_CAIF);
+  ACTUAL2DEF(AF_ALG);
+  ACTUAL2DEF(AF_NFC);
+  ACTUAL2DEF(AF_VSOCK);
+  ACTUAL2DEF(AF_KCM);
+  ACTUAL2DEF(AF_MAX);
+  return -1;
+}

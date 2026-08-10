@@ -1,2 +1,2 @@
 #include "libc/sysv/consts/syscon.internal.h"
-.syscon af,AF_IUCV,0x20,0x20,-1,-1,-1,-1,-1,-1
+.syscon af,AF_IUCV_,0x20,0x20,-1,-1,-1,-1,-1,-1

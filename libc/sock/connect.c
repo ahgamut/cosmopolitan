@@ -18,6 +18,7 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/cp.internal.h"
 #include "libc/calls/internal.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/intrin/fds.h"
 #include "libc/intrin/kprintf.h"
@@ -29,6 +30,9 @@
 #include "libc/sock/syscall_fd.internal.h"
 #include "libc/sysv/errfuns.h"
 #include "libc/sysv/pib.h"
+
+/* todo: copy the sockaddr data for __linux2af */
+#pragma GCC diagnostic ignored "-Wdiscarded-qualifiers"
 
 /**
  * Connects socket to remote end.
@@ -62,6 +66,8 @@
 int connect(int fd, const struct sockaddr *addr, uint32_t addrsize) {
   int rc;
   BEGIN_CANCELATION_POINT;
+  struct sockaddr *dummy = addr;
+  dummy->sa_family = __linux2af(dummy->sa_family);
 
   if (addrsize < sizeof(struct sockaddr)) {
     rc = einval();
@@ -79,6 +85,7 @@ int connect(int fd, const struct sockaddr *addr, uint32_t addrsize) {
     rc = enotsock();
   }
 
+  dummy->sa_family = __af2linux(dummy->sa_family);
   END_CANCELATION_POINT;
   STRACE("connect(%d, %s) → %d% lm", fd, DescribeSockaddr(addr, addrsize), rc);
   return rc;
