@@ -1,41 +1,22 @@
 #ifndef COSMOPOLITAN_LIBC_SYSV_CONSTS_IFF_H_
 #define COSMOPOLITAN_LIBC_SYSV_CONSTS_IFF_H_
-COSMOPOLITAN_C_START_
 
-extern const int IFF_UP;
-extern const int IFF_ALLMULTI;
-extern const int IFF_AUTOMEDIA;
-extern const int IFF_BROADCAST;
-extern const int IFF_DEBUG;
-extern const int IFF_DYNAMIC;
-extern const int IFF_LOOPBACK;
-extern const int IFF_MASTER;
-extern const int IFF_MULTICAST;
-extern const int IFF_NOARP;
-extern const int IFF_NOTRAILERS;
-extern const int IFF_POINTOPOINT;
-extern const int IFF_PORTSEL;
-extern const int IFF_PROMISC;
-extern const int IFF_RUNNING;
-extern const int IFF_SLAVE;
-
-COSMOPOLITAN_C_END_
-
-#define IFF_UP          1
-#define IFF_BROADCAST   2
-#define IFF_DEBUG       4
-#define IFF_LOOPBACK    8
-#define IFF_ALLMULTI    IFF_ALLMULTI
-#define IFF_AUTOMEDIA   IFF_AUTOMEDIA
-#define IFF_DYNAMIC     IFF_DYNAMIC
-#define IFF_MASTER      IFF_MASTER
-#define IFF_MULTICAST   IFF_MULTICAST
-#define IFF_NOARP       IFF_NOARP
-#define IFF_NOTRAILERS  IFF_NOTRAILERS
-#define IFF_POINTOPOINT IFF_POINTOPOINT
-#define IFF_PORTSEL     IFF_PORTSEL
-#define IFF_PROMISC     IFF_PROMISC
-#define IFF_RUNNING     IFF_RUNNING
-#define IFF_SLAVE       IFF_SLAVE
+/* picking linux values as default */
+#define IFF_UP          0x1    /* everyone agrees on these values */
+#define IFF_BROADCAST   0x2    /* everyone agrees on these values */
+#define IFF_DEBUG       0x4    /* everyone agrees on these values */
+#define IFF_LOOPBACK    0x8    /* nt uses 0x4 */
+#define IFF_POINTOPOINT 0x10   /* everyone agrees on these values */
+#define IFF_NOTRAILERS  0x20   /* not supported on bsd */
+#define IFF_RUNNING     0x40   /* everyone agrees on these values */
+#define IFF_NOARP       0x80   /* everyone agrees on these values */
+#define IFF_ALLMULTI    0x200  /* everyone agrees on these values */
+#define IFF_MASTER      0x400  /* not supported on bsd */
+#define IFF_SLAVE       0x800  /* not supported on bsd */
+#define IFF_MULTICAST   0x1000 /* bsd uses 0x8000 */
+#define IFF_PORTSEL     0x2000 /* not supported on bsd */
+#define IFF_AUTOMEDIA   0x4000 /* not supported on bsd */
+#define IFF_DYNAMIC     0x8000 /* not supported on bsd */
+#define IFF_PROMISC     0x100  /* everyone agrees on these values */
 
 #endif /* COSMOPOLITAN_LIBC_SYSV_CONSTS_IFF_H_ */

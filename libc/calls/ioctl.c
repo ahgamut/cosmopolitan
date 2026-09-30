@@ -53,6 +53,7 @@
 #include "libc/sysv/consts/fio.h"
 #include "libc/sysv/consts/iff.h"
 #include "libc/sysv/consts/o.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/sysv/consts/sio.h"
 #include "libc/sysv/consts/termios.h"
 #include "libc/sysv/errfuns.h"
@@ -77,6 +78,7 @@ static struct HostAdapterInfoNode {
 static int ioctl_default(int fd, unsigned long request, void *arg) {
   int rc;
   int64_t handle;
+  request = __linux2ioctl(request);
   if (!IsWindows()) {
     return sys_ioctl(fd, request, arg);
   } else if (__isfdopen(fd)) {
@@ -99,11 +101,12 @@ static int ioctl_fionread(int fd, uint32_t *arg) {
   int rc;
   int64_t handle;
   if (!IsWindows()) {
-    return sys_ioctl(fd, FIONREAD, arg);
+    return sys_ioctl(fd, __linux2ioctl(FIONREAD), arg);
   } else if (__isfdopen(fd)) {
     handle = __get_pib()->fds.p[fd].handle;
     if (__get_pib()->fds.p[fd].kind == kFdSocket) {
-      if ((rc = __imp_ioctlsocket(handle, FIONREAD, arg)) != -1) {
+      if ((rc = __imp_ioctlsocket(handle, __linux2ioctl(FIONREAD), arg)) !=
+          -1) {
         return rc;
       } else {
         return _weaken(__winsockerr)();
@@ -510,7 +513,7 @@ static int ioctl_siocgifconf_sysv(int fd, struct ifconf *ifc) {
   struct ifreq *req;
   uint32_t bufLen, ip;
   if (IsLinux()) {
-    return sys_ioctl(fd, SIOCGIFCONF, ifc);
+    return sys_ioctl(fd, __linux2ioctl(SIOCGIFCONF), ifc);
   }
 #pragma GCC push_options
 #pragma GCC diagnostic ignored "-Walloca-larger-than="
@@ -521,7 +524,7 @@ static int ioctl_siocgifconf_sysv(int fd, struct ifconf *ifc) {
 #pragma GCC pop_options
   memcpy(ifcBsd, &bufMax, 8);                /* ifc_len */
   memcpy(ifcBsd + (IsXnu() ? 4 : 8), &b, 8); /* ifc_buf */
-  if ((rc = sys_ioctl(fd, SIOCGIFCONF, &ifcBsd)) != -1) {
+  if ((rc = sys_ioctl(fd, __linux2ioctl(SIOCGIFCONF), &ifcBsd)) != -1) {
     /*
      * On XNU the size of the struct ifreq is different than Linux.
      * On Linux is fixed (40 bytes), but on XNU the struct sockaddr
@@ -562,7 +565,7 @@ static inline void ioctl_sockaddr2linux(void *saddr) {
  * requires adjustment between Linux and XNU
  */
 static int ioctl_siocgifaddr_sysv(int fd, uint64_t op, struct ifreq *ifr) {
-  if (sys_ioctl(fd, op, ifr) == -1)
+  if (sys_ioctl(fd, __linux2ioctl(op), ifr) == -1)
     return -1;
   if (IsBsd())
     ioctl_sockaddr2linux(&ifr->ifr_addr);
@@ -616,11 +619,19 @@ static int ioctl_siocgifdstaddr(int fd, void *arg) {
 }
 
 static int ioctl_siocgifflags(int fd, void *arg) {
+  struct ifreq *ifr = arg;
+  int rc;
   if (!IsWindows()) {
     /* Both XNU and Linux are for once compatible here... */
-    return ioctl_default(fd, SIOCGIFFLAGS, arg);
+    rc = ioctl_default(fd, SIOCGIFFLAGS, ifr);
+    if (rc != -1)
+      ifr->ifr_flags = __iflag2linux(ifr->ifr_flags);
+    return rc;
   } else {
-    return ioctl_siocgifflags_nt(fd, arg);
+    rc = ioctl_siocgifflags_nt(fd, ifr);
+    if (rc != -1)
+      ifr->ifr_flags = __iflag2linux(ifr->ifr_flags);
+    return rc;
   }
 }
 
@@ -719,6 +730,12 @@ int ioctl(int fd, unsigned long request, ...) {
     rc = ioctl_siocgifdstaddr(fd, arg);
   } else if (request == SIOCGIFFLAGS) {
     rc = ioctl_siocgifflags(fd, arg);
+  } else if (request == SIOCSIFFLAGS) {
+    struct ifreq *ifr = arg;
+    short save = ifr->ifr_flags;
+    ifr->ifr_flags = __linux2iflag(save);
+    rc = ioctl_default(fd, request, arg);
+    ifr->ifr_flags = save;
   } else {
     rc = ioctl_default(fd, request, arg);
   }

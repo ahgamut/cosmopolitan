@@ -19,6 +19,7 @@
 #include "libc/calls/calls.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/calls/syscall_support-nt.internal.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/macros.h"
 #include "libc/mem/mem.h"
@@ -45,7 +46,7 @@ static uint32_t *GetUnixIps(void) {
   b = malloc(z);
   memcpy(c, &z, 8);
   memcpy(c + (IsXnu() ? 4 : 8), &b, 8);
-  if (sys_ioctl(fd, SIOCGIFCONF, &c) != -1) {
+  if (sys_ioctl(fd, __linux2ioctl(SIOCGIFCONF), &c) != -1) {
     for (p = b, e = p + MIN(z, READ32LE(c)); p + 16 + 16 <= e;
          p += IsBsd() ? 16 + MAX(16, p[16] & 255) : 40) {
       if ((p[IsBsd() ? 17 : 16] & 255) != AF_INET)
