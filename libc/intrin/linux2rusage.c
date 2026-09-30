@@ -1,7 +1,7 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
 │ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
-│ Copyright 2020 Justine Alexandra Roberts Tunney                              │
+│ Copyright 2026 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
 │ Permission to use, copy, modify, and/or distribute this software for         │
 │ any purpose with or without fee is hereby granted, provided that the         │
@@ -16,22 +16,23 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/struct/rusage.h"
-#include "libc/calls/syscall_support-sysv.internal.h"
-#include "libc/calls/struct/rusage.internal.h"
-#include "libc/sysv/errfuns.h"
+#include "libc/sysv/consts/rusage.h"
 
 /**
- * Returns resource usage statistics.
+ * Translates compile-time rusage selector to host OS value.
  *
- * @param who can be RUSAGE_{SELF,CHILDREN,THREAD}
- * @return 0 on success, or -1 w/ errno
+ * RUSAGE_SELF and RUSAGE_CHILDREN are consensus, so only the
+ * thread and both selectors need translations; selectors that a
+ * host doesn't support map to a value it will reject.
  */
-int sys_getrusage(int who, struct rusage *usage) {
-  int rc;
-  who = __linux2rusagewho(who);
-  if ((rc = __sys_getrusage(who, usage)) != -1) {
-    __rusage2linux(usage);
-  }
-  return rc;
+pureconst int __linux2rusagewho(int who) {
+  if (who == RUSAGE_SELF)
+    return RUSAGE_SELF;
+  if (who == RUSAGE_CHILDREN)
+    return RUSAGE_CHILDREN_;
+  if (who == RUSAGE_THREAD)
+    return RUSAGE_THREAD_;
+  if (who == RUSAGE_BOTH)
+    return RUSAGE_BOTH_;
+  return who;
 }

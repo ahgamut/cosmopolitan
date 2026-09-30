@@ -29,6 +29,7 @@ int __linux2msg(int);
 int __linux2poll(int);
 int __linux2msyncflags(int);
 int __linux2schedpolicy(int);
+int __linux2rusagewho(int);
 int __linux2wflags(int);
 int __linux2sig(int);
 int __linux2how(int);
