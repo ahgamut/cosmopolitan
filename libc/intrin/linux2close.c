@@ -1,7 +1,7 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
 │ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
-│ Copyright 2022 Justine Alexandra Roberts Tunney                              │
+│ Copyright 2026 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
 │ Permission to use, copy, modify, and/or distribute this software for         │
 │ any purpose with or without fee is hereby granted, provided that the         │
@@ -16,40 +16,18 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/calls.h"
-#include "libc/calls/syscall-sysv.internal.h"
-#include "libc/dce.h"
-#include "libc/intrin/strace.h"
-#include "libc/calls/syscall_support-sysv.internal.h"
-#include "libc/sysv/errfuns.h"
+#include "libc/sysv/consts/close.h"
 
 /**
- * Closes inclusive range of file descriptors.
+ * Translates compile-time close_range flags to host OS value.
  *
- * This system call is only supported on Linux 5.9+ and FreeBSD 13+.
- * Consider using closefrom() which will work on all platforms.
- *
- * The following flags are available:
- *
- * - `CLOSE_RANGE_CLOEXEC` to mark file descriptors as close-on-exec
- *   instead of actually closing them.
- *
- * - `CLOSE_RANGE_UNSHARE` (Linux only) can improve performance in
- *   situations where threads are in play.
- *
- * @return 0 on success, or -1 w/ errno
- * @error EINVAL if flags are bad or first is greater than last
- * @error EMFILE if a weird race condition happens on Linux
- * @error ENOSYS if not Linux 5.9+ or FreeBSD 13+
- * @error ENOMEM on Linux maybe
+ * Flags a host doesn't support map to a value it will reject,
+ * preserving the einval behavior.
  */
-int close_range(unsigned int first, unsigned int last, unsigned int flags) {
-  int rc;
-  if (IsLinux() || IsFreebsd()) {
-    rc = sys_close_range(first, last, __linux2closeflags(flags));
-  } else {
-    rc = enosys();
-  }
-  STRACE("close_range(%d, %d, %#x) → %d% m", first, last, flags, rc);
-  return rc;
+pureconst int __linux2closeflags(int flags) {
+  if (flags == CLOSE_RANGE_CLOEXEC)
+    return CLOSE_RANGE_CLOEXEC_;
+  if (flags == CLOSE_RANGE_UNSHARE)
+    return CLOSE_RANGE_UNSHARE_;
+  return flags;
 }
