@@ -11,8 +11,11 @@
 
 COSMOPOLITAN_C_START_
 
-extern const int SOL_SOCKET;
-#define SOL_SOCKET SOL_SOCKET
+extern const int SOL_SOCKET_;
 
 COSMOPOLITAN_C_END_
+
+/* picking linux values as default */
+#define SOL_SOCKET 1
+
 #endif /* COSMOPOLITAN_LIBC_SYSV_CONSTS_SOL_H_ */

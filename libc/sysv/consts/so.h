@@ -1,50 +1,54 @@
 #ifndef COSMOPOLITAN_LIBC_SYSV_CONSTS_SO_H_
 #define COSMOPOLITAN_LIBC_SYSV_CONSTS_SO_H_
 
-#define SO_DEBUG 1
-
 COSMOPOLITAN_C_START_
 
-extern const int SO_TYPE;
-extern const int SO_ERROR;
-extern const int SO_ACCEPTCONN;
-extern const int SO_REUSEADDR;
-extern const int SO_KEEPALIVE;
-extern const int SO_DONTROUTE;
-extern const int SO_BROADCAST;
-extern const int SO_USELOOPBACK;
-extern const int SO_LINGER;
-extern const int SO_OOBINLINE;
-extern const int SO_SNDBUF;
-extern const int SO_RCVBUF;
-extern const int SO_RCVTIMEO;
-extern const int SO_SNDTIMEO;
-extern const int SO_RCVLOWAT;
-extern const int SO_SNDLOWAT;
+extern const int SO_TYPE_;
+extern const int SO_ERROR_;
+extern const int SO_ACCEPTCONN_;
+extern const int SO_REUSEADDR_;
+extern const int SO_KEEPALIVE_;
+extern const int SO_DONTROUTE_;
+extern const int SO_BROADCAST_;
+extern const int SO_USELOOPBACK_;
+extern const int SO_LINGER_;
+extern const int SO_OOBINLINE_;
+extern const int SO_SNDBUF_;
+extern const int SO_RCVBUF_;
+extern const int SO_RCVTIMEO_;
+extern const int SO_SNDTIMEO_;
+extern const int SO_RCVLOWAT_;
+extern const int SO_SNDLOWAT_;
+extern const int SO_REUSEPORT_;
 
-#define SO_TYPE        SO_TYPE
-#define SO_ERROR       SO_ERROR
-#define SO_ACCEPTCONN  SO_ACCEPTCONN
-#define SO_REUSEADDR   SO_REUSEADDR
-#define SO_KEEPALIVE   SO_KEEPALIVE
-#define SO_DONTROUTE   SO_DONTROUTE
-#define SO_BROADCAST   SO_BROADCAST
-#define SO_USELOOPBACK SO_USELOOPBACK
-#define SO_LINGER      SO_LINGER
-#define SO_OOBINLINE   SO_OOBINLINE
-#define SO_SNDBUF      SO_SNDBUF
-#define SO_RCVBUF      SO_RCVBUF
-#define SO_RCVTIMEO    SO_RCVTIMEO
-#define SO_SNDTIMEO    SO_SNDTIMEO
-#define SO_RCVLOWAT    SO_RCVLOWAT
-#define SO_SNDLOWAT    SO_SNDLOWAT
+COSMOPOLITAN_C_END_
+
+/* everyone agrees on these values internally */
+#define SO_DEBUG 1
+
+/* picking linux values as default */
+#define SO_TYPE        3
+#define SO_ERROR       4
+#define SO_ACCEPTCONN  30
+#define SO_REUSEADDR   2
+#define SO_KEEPALIVE   9
+#define SO_DONTROUTE   5
+#define SO_BROADCAST   6
+#define SO_USELOOPBACK 0
+#define SO_LINGER      13
+#define SO_OOBINLINE   10
+#define SO_SNDBUF      7
+#define SO_RCVBUF      8
+#define SO_RCVTIMEO    20
+#define SO_SNDTIMEO    21
+#define SO_RCVLOWAT    18
+#define SO_SNDLOWAT    19
 
 /*
  * this isn't available on windows, but it should be fine to use anyway,
  * setsockopt will return ENOPROTOOPT which is perfectly fine to ignore.
  */
-extern const int SO_REUSEPORT;
-#define SO_REUSEPORT SO_REUSEPORT
+/* polyfill: only bsd-like systems offer this */
+#define SO_REUSEPORT 15
 
-COSMOPOLITAN_C_END_
 #endif /* COSMOPOLITAN_LIBC_SYSV_CONSTS_SO_H_ */

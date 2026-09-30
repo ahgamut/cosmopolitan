@@ -39,8 +39,8 @@ textwindows int sys_setsockopt_nt(struct Fd *fd, int level, int optname,
 
   // socket read/write timeouts
   // timeout of zero means wait forever (default)
-  if (level == SOL_SOCKET &&
-      (optname == SO_RCVTIMEO || optname == SO_SNDTIMEO)) {
+  if (level == SOL_SOCKET_ &&
+      (optname == SO_RCVTIMEO_ || optname == SO_SNDTIMEO_)) {
     if (!optval)
       return einval();
     if (optlen < sizeof(struct timeval))
@@ -49,9 +49,9 @@ textwindows int sys_setsockopt_nt(struct Fd *fd, int level, int optname,
     int64_t ms = timeval_tomillis(*tv);
     if (ms > -1u)
       ms = -1u;
-    if (optname == SO_RCVTIMEO)
+    if (optname == SO_RCVTIMEO_)
       fd->rcvtimeo = ms;
-    if (optname == SO_SNDTIMEO)
+    if (optname == SO_SNDTIMEO_)
       fd->sndtimeo = ms;
     return 0;  // we want to handle this on our own
   }
@@ -61,8 +61,8 @@ textwindows int sys_setsockopt_nt(struct Fd *fd, int level, int optname,
     uint32_t millis;
     struct linger_nt linger;
   } u;
-  if (level == SOL_SOCKET &&             //
-      optname == SO_LINGER && optval &&  //
+  if (level == SOL_SOCKET_ &&              //
+      optname == SO_LINGER_ && optval &&   //
       optlen == sizeof(struct linger)) {
     const struct linger *linger = optval;
     u.linger.l_onoff = linger->l_onoff;

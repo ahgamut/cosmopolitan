@@ -50,22 +50,22 @@ textwindows int sys_getsockopt_nt(struct Fd *fd, int level, int optname,
     in_optlen = 0;
   }
 
-  if (level == SOL_SOCKET && optname == SO_ERROR) {
+  if (level == SOL_SOCKET_ && optname == SO_ERROR_) {
     if (in_optlen < sizeof(int))
       return einval();
     int err;
     uint32_t len = sizeof(err);
-    if (__imp_getsockopt(fd->handle, SOL_SOCKET, SO_ERROR, &err, &len) == -1)
+    if (__imp_getsockopt(fd->handle, SOL_SOCKET_, SO_ERROR_, &err, &len) == -1)
       return __winsockerr();
     *(int *)out_opt_optval = __errno_windows2linux(err);
     *inout_optlen = sizeof(int);
   }
 
-  if (level == SOL_SOCKET &&
-      (optname == SO_RCVTIMEO || optname == SO_SNDTIMEO)) {
+  if (level == SOL_SOCKET_ &&
+      (optname == SO_RCVTIMEO_ || optname == SO_SNDTIMEO_)) {
     if (in_optlen < sizeof(struct timeval))
       return einval();
-    if (optname == SO_RCVTIMEO) {
+    if (optname == SO_RCVTIMEO_) {
       ms = fd->rcvtimeo;
     } else {
       ms = fd->sndtimeo;
@@ -80,8 +80,8 @@ textwindows int sys_getsockopt_nt(struct Fd *fd, int level, int optname,
                        inout_optlen) == -1)
     return __winsockerr();
 
-  if (level == SOL_SOCKET) {
-    if (optname == SO_LINGER && in_optlen == sizeof(struct linger)) {
+  if (level == SOL_SOCKET_) {
+    if (optname == SO_LINGER_ && in_optlen == sizeof(struct linger)) {
       linger = *(struct linger_nt *)out_opt_optval;
       ((struct linger *)out_opt_optval)->l_onoff = !!linger.l_onoff;
       ((struct linger *)out_opt_optval)->l_linger = linger.l_linger;

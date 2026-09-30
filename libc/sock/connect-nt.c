@@ -164,7 +164,8 @@ textwindows static int sys_connect_nt_impl(struct Fd *f, const void *addr,
     if (exfds.fd_count) {
       int err;
       uint32_t len = sizeof(err);
-      if (__imp_getsockopt(f->handle, SOL_SOCKET, SO_ERROR, &err, &len) == -1)
+      if (__imp_getsockopt(f->handle, SOL_SOCKET_, SO_ERROR_, &err,
+                           &len) == -1)
         return __winsockerr();
       if (!err)
         return eio();  // should be impossible

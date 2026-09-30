@@ -29,7 +29,8 @@
 #define IPPORT_WHOSERVER    513
 #define IPPORT_ROUTESERVER  520
 #define IPPORT_RESERVED     1024
-#define IPPORT_USERRESERVED IPPORT_USERRESERVED
+/* picking linux values as default */
+#define IPPORT_USERRESERVED 5000
 
 /**
  * Modern network ports.
@@ -58,9 +59,4 @@
 #define IPPORT_IMAPS       993
 #define IPPORT_POP3S       995
 
-COSMOPOLITAN_C_START_
-
-extern const int IPPORT_USERRESERVED;
-
-COSMOPOLITAN_C_END_
 #endif /* COSMOPOLITAN_LIBC_SYSV_CONSTS_IPPORT_H_ */

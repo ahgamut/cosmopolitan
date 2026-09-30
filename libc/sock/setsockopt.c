@@ -17,6 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/internal.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/intrin/describeflags.h"
@@ -71,7 +72,9 @@ int setsockopt(int fd, int level, int optname, const void *optval,
     rc = -1;
     e = errno;
     do {
-      if (sys_setsockopt(fd, level, optname, optval, optlen) != -1) {
+      if (sys_setsockopt(fd, __linux2socklevel(level),
+                         __linux2sockopt(level, optname), optval,
+                         optlen) != -1) {
         errno = e;
         rc = 0;
         break;
@@ -80,8 +83,8 @@ int setsockopt(int fd, int level, int optname, const void *optval,
   } else if (!__isfdopen(fd)) {
     rc = ebadf();
   } else if (__isfdkind(fd, kFdSocket)) {
-    rc = sys_setsockopt_nt(&__get_pib()->fds.p[fd], level, optname, optval,
-                           optlen);
+    rc = sys_setsockopt_nt(&__get_pib()->fds.p[fd], __linux2socklevel(level),
+                           __linux2sockopt(level, optname), optval, optlen);
   } else {
     rc = enotsock();
   }

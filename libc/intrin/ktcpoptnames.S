@@ -31,21 +31,21 @@
 	.balign	4
 	.underrun
 kTcpOptnames:
-	.e	TCP_NODELAY,"NODELAY"			// bool32
-	.e	TCP_CORK,"CORK"				// bool32
-	.e	TCP_QUICKACK,"QUICKACK"			// bool32
-	.e	TCP_FASTOPEN_CONNECT,"FASTOPEN_CONNECT"	// bool32
-	.e	TCP_DEFER_ACCEPT,"DEFER_ACCEPT"		// bool32
-	.e	TCP_KEEPIDLE,"KEEPIDLE"			// int (seconds)
-	.e	TCP_KEEPINTVL,"KEEPINTVL"		// int (seconds)
-	.e	TCP_FASTOPEN,"FASTOPEN"			// int
-	.e	TCP_KEEPCNT,"KEEPCNT"			// int
-	.e	TCP_MAXSEG,"MAXSEG"			// int
-	.e	TCP_SYNCNT,"SYNCNT"			// int
-	.e	TCP_NOTSENT_LOWAT,"NOTSENT_LOWAT"	// int
-	.e	TCP_WINDOW_CLAMP,"WINDOW_CLAMP"		// int
-	.e	TCP_SAVE_SYN,"SAVE_SYN"			// int
-	.e	TCP_SAVED_SYN,"SAVED_SYN"		// buffer
+	.e	TCP_NODELAY_,"NODELAY"			// bool32
+	.e	TCP_CORK_,"CORK"				// bool32
+	.e	TCP_QUICKACK_,"QUICKACK"			// bool32
+	.e	TCP_FASTOPEN_CONNECT_,"FASTOPEN_CONNECT"	// bool32
+	.e	TCP_DEFER_ACCEPT_,"DEFER_ACCEPT"		// bool32
+	.e	TCP_KEEPIDLE_,"KEEPIDLE"			// int (seconds)
+	.e	TCP_KEEPINTVL_,"KEEPINTVL"		// int (seconds)
+	.e	TCP_FASTOPEN_,"FASTOPEN"			// int
+	.e	TCP_KEEPCNT_,"KEEPCNT"			// int
+	.e	TCP_MAXSEG_,"MAXSEG"			// int
+	.e	TCP_SYNCNT_,"SYNCNT"			// int
+	.e	TCP_NOTSENT_LOWAT_,"NOTSENT_LOWAT"	// int
+	.e	TCP_WINDOW_CLAMP_,"WINDOW_CLAMP"		// int
+	.e	TCP_SAVE_SYN_,"SAVE_SYN"			// int
+	.e	TCP_SAVED_SYN_,"SAVED_SYN"		// buffer
 	.long	MAGNUM_TERMINATOR
 	.endobj	kTcpOptnames,globl,hidden
 	.overrun

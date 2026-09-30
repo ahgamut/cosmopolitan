@@ -17,6 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/internal.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/intrin/describeflags.h"
 #include "libc/intrin/fds.h"
@@ -50,12 +51,15 @@ int getsockopt(int fd, int level, int optname, void *out_opt_optval,
   } else if (__isfdkind(fd, kFdZip)) {
     rc = enotsock();
   } else if (!IsWindows()) {
-    rc = sys_getsockopt(fd, level, optname, out_opt_optval, out_optlen);
+    rc = sys_getsockopt(fd, __linux2socklevel(level),
+                        __linux2sockopt(level, optname), out_opt_optval,
+                        out_optlen);
   } else if (!__isfdopen(fd)) {
     rc = ebadf();
   } else if (__isfdkind(fd, kFdSocket)) {
-    rc = sys_getsockopt_nt(&__get_pib()->fds.p[fd], level, optname,
-                           out_opt_optval, out_optlen);
+    rc = sys_getsockopt_nt(&__get_pib()->fds.p[fd], __linux2socklevel(level),
+                           __linux2sockopt(level, optname), out_opt_optval,
+                           out_optlen);
   } else {
     rc = enotsock();
   }
