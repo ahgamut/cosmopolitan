@@ -27,6 +27,7 @@ int __linux2iflag(int);
 int __linux2map(int);
 int __linux2msg(int);
 int __linux2poll(int);
+int __linux2msyncflags(int);
 int __linux2schedpolicy(int);
 int __linux2sig(int);
 int __linux2how(int);

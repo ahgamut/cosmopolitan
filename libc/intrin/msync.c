@@ -22,6 +22,7 @@
 #include "libc/calls/cp.internal.h"
 #include "libc/calls/syscall-nt.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/intrin/describeflags.h"
 #include "libc/intrin/strace.h"
@@ -57,7 +58,6 @@ int msync(void *addr, size_t size, int flags) {
   // semantics that are (currently) equivalent to specifying MS_ASYNC.
   // ──Quoth msync(2) of Linux Programmer's Manual
   int sysflags = flags;
-  sysflags = flags;
   if (flags & MS_ASYNC) {
     sysflags = MS_ASYNC;
   } else if (flags & MS_SYNC) {
@@ -75,9 +75,7 @@ int msync(void *addr, size_t size, int flags) {
     if (sysflags == (MS_ASYNC | MS_INVALIDATE))
       sysflags = MS_INVALIDATE;
 
-  // FreeBSD specifies MS_SYNC as 0 so we shift the Cosmo constants
-  if (IsFreebsd())
-    sysflags >>= 1;
+  sysflags = __linux2msyncflags(sysflags);
 
   BEGIN_CANCELATION_POINT;
   if (!IsWindows()) {
