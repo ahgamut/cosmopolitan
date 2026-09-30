@@ -21,6 +21,7 @@
 #include "libc/calls/internal.h"
 #include "libc/calls/struct/iovec.h"
 #include "libc/calls/struct/iovec.internal.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/intrin/describeflags.h"
 #include "libc/intrin/kprintf.h"
@@ -70,13 +71,14 @@ ssize_t sendto(int fd, const void *buf, size_t size, int flags,
     rc = enotsock();
   } else if (!IsWindows()) {
     if (!IsBsd() || !opt_addr) {
-      rc = sys_sendto(fd, buf, size, flags, opt_addr, addrsize);
+      rc = sys_sendto(fd, buf, size, __linux2msg(flags), opt_addr, addrsize);
     } else if (!(rc = sockaddr2bsd(opt_addr, addrsize, &bsd, &bsdaddrsize))) {
-      rc = sys_sendto(fd, buf, size, flags, &bsd, bsdaddrsize);
+      rc = sys_sendto(fd, buf, size, __linux2msg(flags), &bsd, bsdaddrsize);
     }
   } else if (__isfdopen(fd)) {
     if (__isfdkind(fd, kFdSocket)) {
-      rc = sys_sendto_nt(fd, (struct iovec[]){{(void *)buf, size}}, 1, flags,
+      rc = sys_sendto_nt(fd, (struct iovec[]){{(void *)buf, size}}, 1,
+                          __linux2msg(flags),
                          opt_addr, addrsize);
     } else if (__isfdkind(fd, kFdFile)) {
       if (flags) {

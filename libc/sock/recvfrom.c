@@ -20,6 +20,7 @@
 #include "libc/calls/internal.h"
 #include "libc/calls/struct/iovec.h"
 #include "libc/calls/struct/iovec.internal.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/intrin/describeflags.h"
 #include "libc/intrin/kprintf.h"
@@ -69,10 +70,11 @@ ssize_t recvfrom(int fd, void *buf, size_t size, int flags,
   } else if (__isfdkind(fd, kFdZip)) {
     rc = enotsock();
   } else if (!IsWindows()) {
-    rc = sys_recvfrom(fd, buf, size, flags, &addr, &addrsize);
+    rc = sys_recvfrom(fd, buf, size, __linux2msg(flags), &addr, &addrsize);
   } else if (__isfdopen(fd)) {
     if (__isfdkind(fd, kFdSocket)) {
-      rc = sys_recvfrom_nt(fd, (struct iovec[]){{buf, size}}, 1, flags, &addr,
+      rc = sys_recvfrom_nt(fd, (struct iovec[]){{buf, size}}, 1,
+                         __linux2msg(flags), &addr,
                            &addrsize);
       if (rc != -1 && addrsize == sizeof(addr)) {
         addrsize = 0;

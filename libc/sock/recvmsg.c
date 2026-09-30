@@ -21,6 +21,7 @@
 #include "libc/calls/internal.h"
 #include "libc/calls/struct/iovec.h"
 #include "libc/calls/struct/iovec.internal.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
 #include "libc/intrin/fds.h"
@@ -65,19 +66,23 @@ ssize_t recvmsg(int fd, struct msghdr *msg, int flags) {
       if (!(rc = sockaddr2bsd(msg->msg_name, msg->msg_namelen, &bsd,
                               &msg2.msg_namelen))) {
         msg2.msg_name = &bsd.sa;
-        if ((rc = sys_recvmsg(fd, &msg2, flags)) != -1) {
+        if ((rc = sys_recvmsg(fd, &msg2, __linux2msg(flags))) != -1) {
           sockaddr2linux(msg2.msg_name, msg2.msg_namelen, msg->msg_name,
                          &msg->msg_namelen);
+          msg->msg_flags = __msg2linux(msg2.msg_flags);
         }
       }
     } else {
-      rc = sys_recvmsg(fd, msg, flags);
+      rc = sys_recvmsg(fd, msg, __linux2msg(flags));
+      if (rc != -1)
+        msg->msg_flags = __msg2linux(msg->msg_flags);
     }
   } else if (__isfdopen(fd)) {
     if (!msg->msg_control) {
       if (__isfdkind(fd, kFdSocket)) {
-        rc = sys_recvfrom_nt(fd, msg->msg_iov, msg->msg_iovlen, flags,
-                             msg->msg_name, &msg->msg_namelen);
+        rc = sys_recvfrom_nt(fd, msg->msg_iov, msg->msg_iovlen,
+                             __linux2msg(flags), msg->msg_name,
+                             &msg->msg_namelen);
       } else if (__isfdkind(fd, kFdFile) && !msg->msg_name) { /* socketpair */
         if (!flags) {
           if ((got = sys_read_nt(fd, msg->msg_iov, msg->msg_iovlen, -1)) !=

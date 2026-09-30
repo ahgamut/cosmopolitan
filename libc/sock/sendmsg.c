@@ -21,6 +21,7 @@
 #include "libc/calls/internal.h"
 #include "libc/calls/struct/iovec.h"
 #include "libc/calls/struct/iovec.internal.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/intrin/describeflags.h"
 #include "libc/intrin/fds.h"
@@ -63,16 +64,16 @@ ssize_t sendmsg(int fd, const struct msghdr *msg, int flags) {
       if (!(rc = sockaddr2bsd(msg->msg_name, msg->msg_namelen, &bsd,
                               &msg2.msg_namelen))) {
         msg2.msg_name = &bsd.sa;
-        rc = sys_sendmsg(fd, &msg2, flags);
+        rc = sys_sendmsg(fd, &msg2, __linux2msg(flags));
       }
     } else {
-      rc = sys_sendmsg(fd, msg, flags);
+      rc = sys_sendmsg(fd, msg, __linux2msg(flags));
     }
   } else if (__isfdopen(fd)) {
     if (msg->msg_control) {
       rc = einval(); /* control msg not supported */
     } else if (__isfdkind(fd, kFdSocket)) {
-      rc = sys_sendto_nt(fd, msg->msg_iov, msg->msg_iovlen, flags,
+      rc = sys_sendto_nt(fd, msg->msg_iov, msg->msg_iovlen, __linux2msg(flags),
                          msg->msg_name, msg->msg_namelen);
     } else if (__isfdkind(fd, kFdFile)) {  // e.g. socketpair
       rc = sys_write_nt(fd, msg->msg_iov, msg->msg_iovlen, -1);
