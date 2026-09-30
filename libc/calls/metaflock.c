@@ -17,6 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/struct/flock.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/dce.h"
 
 union metaflock {
@@ -106,7 +107,7 @@ void flock2cosmo(uintptr_t memory) {
   u->cosmo.l_start = l_start;
   u->cosmo.l_len = l_len;
   u->cosmo.l_pid = l_pid;
-  u->cosmo.l_type = l_type;
+  u->cosmo.l_type = __flocktype2linux(l_type);
   u->cosmo.l_whence = l_whence;
 }
 
@@ -129,32 +130,32 @@ void cosmo2flock(uintptr_t memory) {
     u->linux.l_start = l_start;
     u->linux.l_len = l_len;
     u->linux.l_pid = l_pid;
-    u->linux.l_type = l_type;
+    u->linux.l_type = __linux2flocktype(l_type);
     u->linux.l_whence = l_whence;
   } else if (IsXnu()) {
     u->xnu.l_start = l_start;
     u->xnu.l_len = l_len;
     u->xnu.l_pid = l_pid;
-    u->xnu.l_type = l_type;
+    u->xnu.l_type = __linux2flocktype(l_type);
     u->xnu.l_whence = l_whence;
   } else if (IsFreebsd()) {
     u->freebsd.l_start = l_start;
     u->freebsd.l_len = l_len;
     u->freebsd.l_pid = l_pid;
-    u->freebsd.l_type = l_type;
+    u->freebsd.l_type = __linux2flocktype(l_type);
     u->freebsd.l_whence = l_whence;
     u->freebsd.l_sysid = l_sysid;
   } else if (IsOpenbsd()) {
     u->openbsd.l_start = l_start;
     u->openbsd.l_len = l_len;
     u->openbsd.l_pid = l_pid;
-    u->openbsd.l_type = l_type;
+    u->openbsd.l_type = __linux2flocktype(l_type);
     u->openbsd.l_whence = l_whence;
   } else if (IsNetbsd()) {
     u->netbsd.l_start = l_start;
     u->netbsd.l_len = l_len;
     u->netbsd.l_pid = l_pid;
-    u->netbsd.l_type = l_type;
+    u->netbsd.l_type = __linux2flocktype(l_type);
     u->netbsd.l_whence = l_whence;
   }
 }

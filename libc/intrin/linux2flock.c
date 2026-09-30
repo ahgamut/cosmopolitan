@@ -1,7 +1,7 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
 │ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
-│ Copyright 2025 Justine Alexandra Roberts Tunney                              │
+│ Copyright 2026 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
 │ Permission to use, copy, modify, and/or distribute this software for         │
 │ any purpose with or without fee is hereby granted, provided that the         │
@@ -16,53 +16,57 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/cp.internal.h"
-#include "libc/calls/flocks.h"
-#include "libc/calls/internal.h"
-#include "libc/calls/struct/flock.internal.h"
-#include "libc/calls/struct/sigset.internal.h"
-#include "libc/calls/syscall-sysv.internal.h"
-#include "libc/calls/syscall_support-sysv.internal.h"
-#include "libc/intrin/describeflags.h"
-#include "libc/intrin/fds.h"
-#include "libc/intrin/strace.h"
 #include "libc/sysv/consts/f.h"
-#include "libc/sysv/errfuns.h"
-#include "libc/sysv/pib.h"
 
-int __fcntl_lock(int fd, int cmd, ...) {
-  int rc;
-  va_list va;
-  uintptr_t arg;
-  va_start(va, cmd);
-  arg = va_arg(va, uintptr_t);
-  va_end(va);
-  if (__isfdkind(fd, kFdZip)) {
-    rc = einval();
-  } else if (!IsWindows()) {
-    cmd = __linux2flockcmd(cmd);
-    cosmo2flock(arg);
-    if (cmd == F_SETLKW) {
-      BEGIN_CANCELATION_POINT;
-      rc = __sys_fcntl_cp(fd, cmd, arg);
-      END_CANCELATION_POINT;
-    } else {
-      rc = __sys_fcntl(fd, cmd, arg);
-    }
-    flock2cosmo(arg);
-  } else if (__isfdopen(fd)) {
-    BLOCK_SIGNALS;
-    struct Fd *f = __get_pib()->fds.p + fd;
-    if (f->cursor) {
-      rc = __flocks_fcntl(f, fd, cmd, arg, _SigMask);
-    } else {
-      rc = ebadf();
-    }
-    ALLOW_SIGNALS;
-  } else {
-    rc = ebadf();
-  }
-  STRACE("fcntl(%d, %s, %s) → %d% m", fd, DescribeFcntlCmd(cmd),
-         DescribeFlock(cmd, (struct flock *)arg), rc);
-  return rc;
+/**
+ * Translates compile-time file locking fcntl() commands to host OS
+ * value.
+ *
+ * Only the lock commands translate; the other F_ commands are
+ * runtime externs of their own.
+ */
+pureconst int __linux2flockcmd(int cmd) {
+  if (cmd == F_GETLK)
+    return F_GETLK_;
+  if (cmd == F_SETLK)
+    return F_SETLK_;
+  if (cmd == F_SETLKW)
+    return F_SETLKW_;
+  return cmd;
+}
+
+/**
+ * Translates host OS file locking fcntl() commands to compile-time
+ * value.
+ */
+pureconst int __flockcmd2linux(int cmd) {
+  if (cmd == F_GETLK_)
+    return F_GETLK;
+  if (cmd == F_SETLK_)
+    return F_SETLK;
+  if (cmd == F_SETLKW_)
+    return F_SETLKW;
+  return cmd;
+}
+
+/**
+ * Translates compile-time file lock types to host OS value.
+ */
+pureconst int16_t __linux2flocktype(int16_t type) {
+  if (type == F_RDLCK)
+    return F_RDLCK_;
+  if (type == F_WRLCK)
+    return F_WRLCK_;
+  return type;
+}
+
+/**
+ * Translates host OS file lock types to compile-time value.
+ */
+pureconst int16_t __flocktype2linux(int16_t type) {
+  if (type == F_RDLCK_)
+    return F_RDLCK;
+  if (type == F_WRLCK_)
+    return F_WRLCK;
+  return type;
 }
