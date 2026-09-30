@@ -20,6 +20,7 @@
 #include "libc/calls/struct/metasigaltstack.h"
 #include "libc/calls/struct/sigaltstack.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/intrin/describeflags.h"
 #include "libc/intrin/strace.h"
@@ -39,7 +40,7 @@ static void sigaltstack2bsd(struct sigaltstack_bsd *bsd,
   flags = linux->ss_flags;
   size = linux->ss_size;
   bsd->ss_sp = sp;
-  bsd->ss_flags = flags;
+  bsd->ss_flags = __linux2ssflags(flags);
   bsd->ss_size = size;
 }
 
@@ -52,7 +53,7 @@ static void sigaltstack2linux(struct sigaltstack *linux,
   flags = bsd->ss_flags;
   size = bsd->ss_size;
   linux->ss_sp = sp;
-  linux->ss_flags = flags;
+  linux->ss_flags = __ssflag2linux(flags);
   linux->ss_size = size;
 }
 
