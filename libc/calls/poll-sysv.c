@@ -18,12 +18,15 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/timespec.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/cosmotime.h"
 #include "libc/errno.h"
 #include "libc/sock/struct/pollfd.internal.h"
+#include "libc/sysv/consts/poll.h"
 
 int sys_poll(struct pollfd *fds, size_t nfds, int timeout_ms) {
   int e, rc;
+  size_t i;
   struct timespec ts, *tp;
   if (timeout_ms >= 0) {
     ts = timespec_frommillis(timeout_ms);
@@ -31,11 +34,15 @@ int sys_poll(struct pollfd *fds, size_t nfds, int timeout_ms) {
   } else {
     tp = 0;
   }
+  for (i = 0; i < nfds; ++i)
+    fds[i].events = __linux2poll(fds[i].events);
   e = errno;
   rc = sys_ppoll(fds, nfds, tp, 0, 0);
   if (rc == -1 && errno == ENOSYS) {
     errno = e;
     rc = __sys_poll(fds, nfds, timeout_ms);
   }
+  for (i = 0; i < nfds; ++i)
+    fds[i].revents = __poll2linux(fds[i].revents);
   return rc;
 }

@@ -23,6 +23,7 @@
 #include "libc/calls/struct/sigset.internal.h"
 #include "libc/calls/struct/timespec.h"
 #include "libc/calls/struct/timespec.internal.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/cosmotime.h"
 #include "libc/dce.h"
 #include "libc/errno.h"
@@ -88,10 +89,17 @@ static int ppoll_impl(struct pollfd *fds, size_t nfds,
     } else {
       tsp = 0;
     }
+    for (size_t i = 0; i < nfds; ++i)
+      fds[i].events = __linux2poll(fds[i].events);
     fdcount = sys_ppoll(fds, nfds, tsp, sigmask2p, 8);
-    if (fdcount == -1 && errno == ENOSYS) {
+    if (fdcount != -1) {
+      for (size_t i = 0; i < nfds; ++i)
+        fds[i].revents = __poll2linux(fds[i].revents);
+    } else if (errno == ENOSYS) {
       int64_t ms;
       errno = e;
+      for (size_t i = 0; i < nfds; ++i)
+        fds[i].events = __poll2linux(fds[i].events);
       if (timeout) {
         ms = timespec_tomillis(*timeout);
         if (ms > INT_MAX)
@@ -106,7 +114,13 @@ static int ppoll_impl(struct pollfd *fds, size_t nfds,
         sys_sigprocmask(SIG_SETMASK, &oldmask, 0);
     }
   } else {
+    for (size_t i = 0; i < nfds; ++i)
+      fds[i].events = __linux2poll(fds[i].events);
     fdcount = sys_poll_nt(fds, nfds, timeout, sigmask);
+    if (fdcount != -1) {
+      for (size_t i = 0; i < nfds; ++i)
+        fds[i].revents = __poll2linux(fds[i].revents);
+    }
   }
 
   if (IsOpenbsd() && fdcount != -1) {
