@@ -1,7 +1,7 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
 │ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
-│ Copyright 2021 Justine Alexandra Roberts Tunney                              │
+│ Copyright 2026 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
 │ Permission to use, copy, modify, and/or distribute this software for         │
 │ any purpose with or without fee is hereby granted, provided that the         │
@@ -16,30 +16,28 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/mount.h"
-#include "libc/calls/syscall-sysv.internal.h"
-#include "libc/calls/syscall_support-sysv.internal.h"
-#include "libc/intrin/strace.h"
+#include "libc/sysv/consts/reboot.h"
 
 /**
- * Unmounts file system.
+ * Translates compile-time reboot() commands to host OS value.
  *
- * The following flags may be specified:
- *
- * - `MNT_FORCE`
- *
- * The following flags may also be used, but could be set to zero at
- * runtime if the underlying kernel doesn't support them.
- *
- * - `MNT_DETACH`: lazily unmount; Linux-only
- * - `MNT_EXPIRE`
- * - `UMOUNT_NOFOLLOW`
- * - `MNT_BYFSID`
- *
+ * The RB_NOSYNC bit must be stripped by the caller beforehand, and
+ * the magic values don't compose, so this is a strict translation.
  */
-int unmount(const char *target, int flags) {
-  int rc;
-  rc = sys_unmount(target, __linux2unmountflags(flags));
-  STRACE("unmount(%#s, %#x) → %d% m", target, flags, rc);
-  return rc;
+unsigned __linux2reboothow(unsigned howto) {
+  if (howto == RB_AUTOBOOT)
+    return RB_AUTOBOOT_;
+  if (howto == RB_POWER_OFF)
+    return RB_POWER_OFF_;
+  if (howto == RB_HALT_SYSTEM)
+    return RB_HALT_SYSTEM_;
+  if (howto == RB_SW_SUSPEND)
+    return RB_SW_SUSPEND_;
+  if (howto == RB_KEXEC)
+    return RB_KEXEC_;
+  if (howto == RB_ENABLE_CAD)
+    return RB_ENABLE_CAD_;
+  if (howto == RB_DISABLE_CAD)
+    return RB_DISABLE_CAD_;
+  return howto;
 }

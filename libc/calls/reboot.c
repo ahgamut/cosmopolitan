@@ -18,10 +18,12 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
 #include "libc/calls/struct/framebuffervirtualscreeninfo.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/nt/system.h"
 #include "libc/runtime/runtime.h"
 #include "libc/sysv/errfuns.h"
+#include "libc/sysv/consts/reboot.h"
 
 #define kNtShutdownForceOthers   1
 #define kNtShutdownForceSelf     2
@@ -52,23 +54,24 @@ int32_t sys_reboot_bsd(int32_t, const char *) asm("sys_reboot");
 int reboot(int howto) {
   bool ok, immediately;
   if (howto != -1) {
-    if (!(howto & 0x20000000)) {
+    if (!(howto & RB_NOSYNC)) {
       sync();
       immediately = false;
     } else {
-      howto &= ~0x20000000;
+      howto &= ~RB_NOSYNC;
       immediately = true;
     }
     if (!IsWindows()) {
       if (IsLinux()) {
         return sys_reboot_linux(0xFEE1DEAD, 0x28121969, howto);
       } else {
-        return sys_reboot_bsd(howto, 0);
+        return sys_reboot_bsd(__linux2reboothow(howto), 0);
       }
     } else {
-      if (howto == 0xD000FCE2u) {
+      if (howto == RB_SW_SUSPEND) {
         ok = !!SetSuspendState(0, 0, 0);
       } else {
+        howto = __linux2reboothow(howto);
         howto |= kNtShutdownForceSelf;
         howto |= kNtShutdownForceOthers;
         howto |= kNtShutdownHybrid;

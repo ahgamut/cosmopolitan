@@ -17,6 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/mount.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/str/str.h"
 #include "libc/sysv/errfuns.h"
@@ -93,7 +94,7 @@ int mount(const char *source, const char *target, const char *type,
           type = "msdosfs";
         }
       }
-      return sys_mount_bsd(type, target, flags, data);
+      return sys_mount_bsd(type, target, __linux2mountflags(flags), data);
     }
   } else {
     return enosys();
