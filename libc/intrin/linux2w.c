@@ -1,7 +1,7 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
 │ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
-│ Copyright 2021 Justine Alexandra Roberts Tunney                              │
+│ Copyright 2026 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
 │ Permission to use, copy, modify, and/or distribute this software for         │
 │ any purpose with or without fee is hereby granted, provided that the         │
@@ -16,37 +16,43 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/calls.h"
-#include "libc/calls/struct/rusage.h"
-#include "libc/calls/struct/rusage.internal.h"
-#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/dce.h"
+#include "libc/sysv/consts/waitid.h"
+#include "libc/sysv/consts/w.h"
 
-static int sys_wait4_wstatus2linux(int ws) {
-  // translate wait status
-  if (IsFreebsd() && ws == 19)  // SIGCONT
-    return (ws & -0xffff) | 0xffff;
-  if (IsXnu() && (ws & 0xff7f) == 0x137f)  // SIGCONT
-    return (ws & -0xffff) | 0xffff;
-  if ((ws & 0xff) == 0x7f) {
-    // tranlate stop signal
-    return (ws & -0xffff) | __sig2linux(((ws & 0xff00) >> 8)) << 8 | 0x7f;
+#define W2(X, A)   \
+  if (flags & X)   \
+    r |= A;
+
+#define W2EXIT(X, A) \
+  if (flags & A)     \
+    r |= X;
+
+/**
+ * Translates compile-time wait options to host OS value.
+ *
+ * WNOHANG and WUNTRACED are consensus, so only WCONTINUED needs a
+ * translation; unknown bits pass through unchanged.
+ */
+pureconst int __linux2wflags(int flags) {
+  int r = 0;
+  if (IsLinux()) {
+    return flags;
   } else {
-    // tranlate termination signal
-    // this won't do anything to exit statuses
-    return (ws & -0x7f) | __sig2linux(ws & 0x7f);
+    W2(WCONTINUED, WCONTINUED_);
+    return r;
   }
 }
 
-int sys_wait4(int pid, int *opt_out_wstatus, int options,
-              struct rusage *opt_out_rusage) {
-  int rc;
-  options = __linux2wflags(options);
-  if ((rc = __sys_wait4(pid, opt_out_wstatus, options, opt_out_rusage)) != -1) {
-    if (opt_out_rusage)
-      __rusage2linux(opt_out_rusage);
-    if (opt_out_wstatus)
-      *opt_out_wstatus = sys_wait4_wstatus2linux(*opt_out_wstatus);
+/**
+ * Translates host OS wait options to compile-time value.
+ */
+pureconst int __wflags2linux(int flags) {
+  int r = 0;
+  if (IsLinux()) {
+    return flags;
+  } else {
+    W2EXIT(WCONTINUED, WCONTINUED_);
+    return r;
   }
-  return rc;
 }
