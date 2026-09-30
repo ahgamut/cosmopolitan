@@ -41,8 +41,9 @@ int socketpair(int family, int type, int protocol, int sv[2]) {
   if (family == AF_UNSPEC)
     family = AF_UNIX;
   if (!IsWindows()) {
-    return sys_socketpair(__linux2af(family), type, protocol, sv);
+    return sys_socketpair(__linux2af(family), __linux2sock(type), protocol, sv);
   } else {
-    return sys_socketpair_nt(__linux2af(family), type, protocol, sv);
+    return sys_socketpair_nt(__linux2af(family), __linux2sock(type), protocol,
+                             sv);
   }
 }

@@ -22,6 +22,6 @@
 #include "libc/sysv/consts/sock.h"
 
 int __fixupnewsockfd(int fd, int flags) {
-  return __fixupnewfd(fd, (((flags & SOCK_CLOEXEC) ? O_CLOEXEC : 0) |
-                           ((flags & SOCK_NONBLOCK) ? O_NONBLOCK : 0)));
+  return __fixupnewfd(fd, (((flags & SOCK_CLOEXEC_) ? O_CLOEXEC : 0) |
+                           ((flags & SOCK_NONBLOCK_) ? O_NONBLOCK : 0)));
 }

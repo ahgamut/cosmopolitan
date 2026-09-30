@@ -36,7 +36,7 @@ int sys_accept4(int server, struct sockaddr_storage *addr, int flags) {
   if (client == -1 && errno == ENOSYS) {
     // XNU/RHEL5/etc. don't support accept4(), but it's easilly polyfilled
     errno = olderr;
-    if (flags & ~(SOCK_CLOEXEC | SOCK_NONBLOCK))
+    if (flags & ~(SOCK_CLOEXEC_ | SOCK_NONBLOCK_))
       return einval();
     if ((client = __sys_accept(server, addr, &size, 0)) != -1) {
       // __sys_accept() has inconsistent flag inheritance across platforms
@@ -44,12 +44,12 @@ int sys_accept4(int server, struct sockaddr_storage *addr, int flags) {
       unassert((file_mode = __sys_fcntl(client, F_GETFD)) != -1);
       unassert(!__sys_fcntl(client, F_SETFD,
                             ((file_mode & ~FD_CLOEXEC) |
-                             (flags & SOCK_CLOEXEC ? FD_CLOEXEC : 0))));
+                             (flags & SOCK_CLOEXEC_ ? FD_CLOEXEC : 0))));
       unassert((file_mode = __sys_fcntl(client, F_GETFL)) != -1);
       unassert(!__sys_fcntl(
           client, F_SETFL,
           ((file_mode & ~O_NONBLOCK) |
-           (flags & SOCK_NONBLOCK ? (IsLinux() ? O_NONBLOCK : 4) : 0))));
+           (flags & SOCK_NONBLOCK_ ? (IsLinux() ? O_NONBLOCK : 4) : 0))));
     }
   }
   return client;

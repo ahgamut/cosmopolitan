@@ -23,7 +23,7 @@
 
 int sys_socket(int family, int type, int protocol) {
   int sock, tf, e = errno;
-  tf = SOCK_CLOEXEC | SOCK_NONBLOCK;
+  tf = SOCK_CLOEXEC_ | SOCK_NONBLOCK_;
   sock = __sys_socket(family, type, protocol);
   if (sock == -1 && (type & tf) &&
       (errno == EINVAL || errno == EPROTOTYPE || errno == EPROTONOSUPPORT)) {

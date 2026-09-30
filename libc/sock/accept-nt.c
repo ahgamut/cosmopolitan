@@ -101,9 +101,9 @@ textwindows static int sys_accept_nt_impl(struct Fd *f,
   // create file descriptor for new socket
   // don't inherit the file open mode bits
   int oflags = 0;
-  if (accept4_flags & SOCK_CLOEXEC)
+  if (accept4_flags & SOCK_CLOEXEC_)
     oflags |= O_CLOEXEC;
-  if (accept4_flags & SOCK_NONBLOCK)
+  if (accept4_flags & SOCK_NONBLOCK_)
     oflags |= O_NONBLOCK;
   __get_pib()->fds.p[client].flags = oflags;
   __get_pib()->fds.p[client].mode = 0140666;

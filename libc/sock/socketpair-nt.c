@@ -49,9 +49,9 @@ textwindows static int sys_socketpair_nt_impl(int family, int type, int proto,
   }
 
   oflags = 0;
-  if (type & SOCK_CLOEXEC)
+  if (type & SOCK_CLOEXEC_)
     oflags |= O_CLOEXEC;
-  type &= ~SOCK_CLOEXEC;
+  type &= ~SOCK_CLOEXEC_;
 
   if (type == SOCK_STREAM) {
     mode = kNtPipeTypeByte | kNtPipeReadmodeByte;

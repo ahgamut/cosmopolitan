@@ -47,9 +47,9 @@ int socket(int family, int type, int protocol) {
   if (family == -1) {
     rc = eafnosupport();
   } else if (!IsWindows()) {
-    rc = sys_socket(__linux2af(family), type, protocol);
+    rc = sys_socket(__linux2af(family), __linux2sock(type), protocol);
   } else {
-    rc = sys_socket_nt(__linux2af(family), type, protocol);
+    rc = sys_socket_nt(__linux2af(family), __linux2sock(type), protocol);
   }
   STRACE("socket(%s, %s, %s) → %d% lm", DescribeSocketFamily(family),
          DescribeSocketType(type), DescribeSocketProtocol(protocol), rc);

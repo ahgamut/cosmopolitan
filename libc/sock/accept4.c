@@ -62,11 +62,11 @@ int accept4(int fd, struct sockaddr *opt_out_addr, uint32_t *opt_inout_addrsize,
   if (__isfdkind(fd, kFdZip)) {
     rc = enotsock();
   } else if (!IsWindows()) {
-    rc = sys_accept4(fd, &ss, flags);
+    rc = sys_accept4(fd, &ss, __linux2sock(flags));
   } else if (!__isfdopen(fd)) {
     rc = ebadf();
   } else if (__isfdkind(fd, kFdSocket)) {
-    rc = sys_accept_nt(__get_pib()->fds.p + fd, &ss, flags);
+    rc = sys_accept_nt(__get_pib()->fds.p + fd, &ss, __linux2sock(flags));
   } else {
     rc = enotsock();
   }

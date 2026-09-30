@@ -25,10 +25,10 @@ int sys_socketpair(int family, int type, int protocol, int sv[2]) {
   int e = errno;
   if (__sys_socketpair(family, type, protocol, sv) != -1)
     return 0;
-  if ((type & (SOCK_CLOEXEC | SOCK_NONBLOCK)) &&
+  if ((type & (SOCK_CLOEXEC_ | SOCK_NONBLOCK_)) &&
       (errno == EINVAL || errno == EPROTOTYPE || errno == EPROTONOSUPPORT)) {
     errno = e;
-    if (__sys_socketpair(family, type & ~(SOCK_CLOEXEC | SOCK_NONBLOCK),
+    if (__sys_socketpair(family, type & ~(SOCK_CLOEXEC_ | SOCK_NONBLOCK_),
                          protocol, sv) != -1) {
       __fixupnewsockfd(sv[0], type);
       __fixupnewsockfd(sv[1], type);
