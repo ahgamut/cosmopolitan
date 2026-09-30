@@ -44,16 +44,16 @@
 #define SIGTHR    32 /* internal to pthreads */
 #define SIGIOT    SIGABRT
 
-#define SIG_BLOCK   SIG_BLOCK
-#define SIG_SETMASK SIG_SETMASK
-#define SIG_UNBLOCK SIG_UNBLOCK
+#define SIG_BLOCK   0 /* consensus on linux values */
+#define SIG_SETMASK 2
+#define SIG_UNBLOCK 1
 
 #ifndef __ASSEMBLER__
 COSMOPOLITAN_C_START_
 
-extern const int SIG_BLOCK;
-extern const int SIG_SETMASK;
-extern const int SIG_UNBLOCK;
+extern const int SIG_BLOCK_;
+extern const int SIG_SETMASK_;
+extern const int SIG_UNBLOCK_;
 
 COSMOPOLITAN_C_END_
 #endif /* __ASSEMBLER__ */
