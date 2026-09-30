@@ -1,7 +1,7 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
 │ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
-│ Copyright 2020 Justine Alexandra Roberts Tunney                              │
+│ Copyright 2026 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
 │ Permission to use, copy, modify, and/or distribute this software for         │
 │ any purpose with or without fee is hereby granted, provided that the         │
@@ -16,46 +16,20 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/assert.h"
-#include "libc/calls/syscall_support-sysv.internal.h"
-#include "libc/calls/struct/timespec.internal.h"
-#include "libc/calls/struct/timeval.internal.h"
-#include "libc/cosmotime.h"
-#include "libc/dce.h"
-#include "libc/errno.h"
-#include "libc/fmt/conv.h"
-#include "libc/runtime/zipos.internal.h"
-#include "libc/sysv/consts/at.h"
-#include "libc/time.h"
+#include "libc/calls/struct/timespec.h"
+#include "libc/sysv/consts/utime.h"
 
-int sys_utimensat(int dirfd, const char *path, const struct timespec ts[2],
-                  int flags) {
-  int rc, olderr;
-  struct timeval tv[2];
-  struct timespec hts[2];
-  unassert(!IsWindows() && !IsXnu());
-  dirfd = __linux2atfd(dirfd);
-  flags = __linux2atflags(flags);
-  if (ts) {
-    hts[0] = __linux2utimensentinel(ts[0]);
-    hts[1] = __linux2utimensentinel(ts[1]);
+/**
+ * Translates compile-time utimensat sentinels to host OS value.
+ *
+ * Regular nanosecond counts pass through unchanged, since only
+ * the UTIME_NOW and UTIME_OMIT sentinels have a host encoding.
+ */
+pureconst struct timespec __linux2utimensentinel(struct timespec ts) {
+  if (ts.tv_nsec == UTIME_NOW) {
+    ts.tv_nsec = UTIME_NOW_;
+  } else if (ts.tv_nsec == UTIME_OMIT) {
+    ts.tv_nsec = UTIME_OMIT_;
   }
-  if (!path && (IsFreebsd() || IsNetbsd() || IsOpenbsd())) {
-    rc = sys_futimens(dirfd, ts ? hts : 0);
-  } else {
-    olderr = errno;
-    rc = __sys_utimensat(dirfd, path, ts ? hts : 0, flags);
-    // TODO(jart): How does RHEL5 do futimes()?
-    if (rc == -1 && errno == ENOSYS && path) {
-      errno = olderr;
-      if (ts) {
-        tv[0] = timespec_totimeval(ts[0]);
-        tv[1] = timespec_totimeval(ts[1]);
-        rc = sys_utimes(path, tv);
-      } else {
-        rc = sys_utimes(path, NULL);
-      }
-    }
-  }
-  return rc;
+  return ts;
 }

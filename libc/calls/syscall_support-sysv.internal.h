@@ -20,6 +20,7 @@ int __linux2af(int);
 int __linux2atfd(int);
 int __linux2atflags(int);
 unsigned long __linux2auxvkey(unsigned long);
+struct timespec __linux2utimensentinel(struct timespec);
 int __linux2clock(int);
 int __linux2ioctl(unsigned long);
 int __linux2iflag(int);
