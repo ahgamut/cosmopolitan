@@ -17,6 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/calls/internal.h"
 #include "libc/calls/struct/fsid.h"
 #include "libc/calls/struct/statfs.h"
@@ -70,7 +71,7 @@ textwindows int sys_fstatfs_nt(int64_t handle, struct statfs *f) {
   f->f_fstypename[j] = 0;
   f->f_type = h;
   f->f_fsid = (fsid_t){{VolumeSerialNumber}};
-  f->f_flags = FileSystemFlags;
+  f->f_flags = __statfs2linux(FileSystemFlags);
   f->f_bsize = fs.BytesPerSector;
   f->f_bsize *= fs.SectorsPerAllocationUnit;
   f->f_frsize = f->f_bsize;

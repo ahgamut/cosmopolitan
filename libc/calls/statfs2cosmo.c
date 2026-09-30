@@ -17,6 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/struct/statfs-meta.internal.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/str/str.h"
 
@@ -298,7 +299,7 @@ void statfs2cosmo(struct statfs *f, const union statfs_meta *m) {
   f->f_fsid = f_fsid;
   f->f_namelen = f_namelen;
   f->f_frsize = f_frsize;
-  f->f_flags = f_flags;
+  f->f_flags = __statfs2linux(f_flags);
   f->f_owner = f_owner;
   memcpy(f->f_fstypename, f_fstypename, 16);
 }

@@ -27,6 +27,7 @@ int __linux2flockcmd(int);
 int __flockcmd2linux(int);
 int16_t __linux2flocktype(int16_t);
 int16_t __flocktype2linux(int16_t);
+int __statfs2linux(int);
 int __linux2ioctl(unsigned long);
 int __linux2iflag(int);
 int __linux2map(int);
