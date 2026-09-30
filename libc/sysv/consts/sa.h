@@ -2,21 +2,21 @@
 #define COSMOPOLITAN_LIBC_SYSV_CONSTS_SA_H_
 COSMOPOLITAN_C_START_
 
-extern const unsigned SA_NOCLDSTOP;
-extern const unsigned SA_NOCLDWAIT;
-extern const unsigned SA_NODEFER;
-extern const unsigned SA_ONSTACK;
-extern const unsigned SA_RESETHAND;
-extern const unsigned SA_RESTART;
-extern const unsigned SA_SIGINFO;
+extern const unsigned SA_NOCLDSTOP_;
+extern const unsigned SA_NOCLDWAIT_;
+extern const unsigned SA_NODEFER_;
+extern const unsigned SA_ONSTACK_;
+extern const unsigned SA_RESETHAND_;
+extern const unsigned SA_RESTART_;
+extern const unsigned SA_SIGINFO_;
 
-#define SA_NOCLDSTOP SA_NOCLDSTOP
-#define SA_NOCLDWAIT SA_NOCLDWAIT
-#define SA_NODEFER   SA_NODEFER
-#define SA_ONSTACK   SA_ONSTACK
-#define SA_RESETHAND SA_RESETHAND
-#define SA_RESTART   SA_RESTART
-#define SA_SIGINFO   SA_SIGINFO
+#define SA_NOCLDSTOP 1 /* consensus on linux values */
+#define SA_NOCLDWAIT 2
+#define SA_SIGINFO   4
+#define SA_ONSTACK   0x08000000
+#define SA_RESTART   0x10000000
+#define SA_NODEFER   0x40000000
+#define SA_RESETHAND 0x80000000
 
 /* compatibility constants */
 #define SA_NOMASK  SA_NODEFER

@@ -63,7 +63,7 @@ static void sigaction_cosmo2native(union metasigaction *sa) {
   uint32_t maskhi;
   if (!sa)
     return;
-  flags = sa->cosmo.sa_flags;
+  flags = __linux2saflags(sa->cosmo.sa_flags);
   handler = sa->cosmo.sa_handler;
   restorer = sa->cosmo.sa_restorer;
   mask = __linux2mask(sa->cosmo.sa_mask);
@@ -144,7 +144,7 @@ static void sigaction_native2cosmo(union metasigaction *sa) {
   } else {
     return;
   }
-  sa->cosmo.sa_flags = flags;
+  sa->cosmo.sa_flags = __saflag2linux(flags);
   sa->cosmo.sa_handler = handler;
   sa->cosmo.sa_restorer = restorer;
   sa->cosmo.sa_mask = __mask2linux(masklo | (uint64_t)maskhi << 32);
@@ -254,8 +254,8 @@ static int __sigaction(int sig, const struct sigaction *act,
       // xnu silicon claims to support sa_resethand but it does nothing
       // this can be tested, since it clears the bit from flags as well
       if (!rc && oldact &&
-          (((struct sigaction_silicon *)oldact)->sa_flags & SA_RESETHAND)) {
-        ((struct sigaction_silicon *)oldact)->sa_flags |= SA_RESETHAND;
+          (((struct sigaction_silicon *)oldact)->sa_flags & SA_RESETHAND_)) {
+        ((struct sigaction_silicon *)oldact)->sa_flags |= SA_RESETHAND_;
       }
     }
     if (rc != -1) {
