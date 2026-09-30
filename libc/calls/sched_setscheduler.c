@@ -17,6 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/sched-sysv.internal.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/calls/struct/sched_param.h"
 #include "libc/calls/struct/sched_param.internal.h"
 #include "libc/dce.h"
@@ -84,11 +85,12 @@ int sched_setscheduler(int pid, int policy, const struct sched_param *param) {
   }
 
   if (rc != -1) {
-    old = rc;
+    old = __schedpolicy2linux(rc);
     if (IsNetbsd()) {
-      rc = sys_sched_setparam_netbsd(pid, P_ALL_LWPS, policy, param);
+      rc = sys_sched_setparam_netbsd(pid, P_ALL_LWPS,
+                                    __linux2schedpolicy(policy), param);
     } else {
-      rc = sys_sched_setscheduler(pid, policy, param);
+      rc = sys_sched_setscheduler(pid, __linux2schedpolicy(policy), param);
     }
     if (rc != -1) {
       rc = old;

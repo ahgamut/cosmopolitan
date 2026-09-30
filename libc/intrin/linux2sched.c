@@ -1,7 +1,7 @@
 /*-*- mode:c;indent-tabs-mode:nil;c-basic-offset:2;tab-width:8;coding:utf-8 -*-│
 │ vi: set et ft=c ts=2 sts=2 sw=2 fenc=utf-8                               :vi │
 ╞══════════════════════════════════════════════════════════════════════════════╡
-│ Copyright 2022 Justine Alexandra Roberts Tunney                              │
+│ Copyright 2026 Justine Alexandra Roberts Tunney                              │
 │                                                                              │
 │ Permission to use, copy, modify, and/or distribute this software for         │
 │ any purpose with or without fee is hereby granted, provided that the         │
@@ -16,37 +16,51 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/calls/sched-sysv.internal.h"
-#include "libc/calls/syscall_support-sysv.internal.h"
-#include "libc/calls/struct/sched_param.h"
-#include "libc/dce.h"
-#include "libc/intrin/describeflags.h"
-#include "libc/intrin/strace.h"
+#include "libc/sysv/consts/sched.h"
 
 /**
- * Gets scheduler policy for `pid`.
+ * Translates compile-time scheduling policy to host OS value.
  *
- * @param pid is the id of the process whose scheduling policy should be
- *     queried. Setting `pid` to zero means the same thing as getpid().
- *     This applies to all threads associated with the process. Linux is
- *     special; the kernel treats this as a thread id (noting that
- *     `getpid() == gettid()` is always the case on Linux for the main
- *     thread) and will only take effect for the specified tid.
- * @return scheduler policy, or -1 w/ errno
- * @error ESRCH if `pid` not found
- * @error EPERM if not permitted
- * @error EINVAL if `pid` is negative on Linux
+ * Unknown policies pass through unchanged, so we don't drop user
+ * input; unknown values are best reported by the host OS itself.
  */
-int sched_getscheduler(int pid) {
-  int rc;
-  if (IsNetbsd()) {
-    struct sched_param p;
-    rc = sys_sched_getscheduler_netbsd(pid, &p);
-  } else {
-    rc = sys_sched_getscheduler(pid);
-  }
-  if (rc != -1)
-    rc = __schedpolicy2linux(rc);
-  STRACE("sched_getscheduler(%d) → %s% m", pid, DescribeSchedPolicy(rc));
-  return rc;
+pureconst int __linux2schedpolicy(int policy) {
+  int fork, base;
+  fork = policy & SCHED_RESET_ON_FORK;
+  base = policy & ~SCHED_RESET_ON_FORK;
+  if (base == SCHED_OTHER)
+    base = SCHED_OTHER_;
+  else if (base == SCHED_FIFO)
+    base = SCHED_FIFO_;
+  else if (base == SCHED_RR)
+    base = SCHED_RR_;
+  else if (base == SCHED_BATCH)
+    base = SCHED_BATCH_;
+  else if (base == SCHED_IDLE)
+    base = SCHED_IDLE_;
+  else if (base == SCHED_DEADLINE)
+    base = SCHED_DEADLINE_;
+  return base | (fork ? SCHED_RESET_ON_FORK_ : 0);
+}
+
+/**
+ * Translates host OS scheduling policy to compile-time value.
+ */
+pureconst int __schedpolicy2linux(int policy) {
+  int fork, base;
+  fork = policy & SCHED_RESET_ON_FORK_;
+  base = policy & ~SCHED_RESET_ON_FORK_;
+  if (base == SCHED_OTHER_)
+    base = SCHED_OTHER;
+  else if (base == SCHED_FIFO_)
+    base = SCHED_FIFO;
+  else if (base == SCHED_RR_)
+    base = SCHED_RR;
+  else if (base == SCHED_BATCH_)
+    base = SCHED_BATCH;
+  else if (base == SCHED_IDLE_)
+    base = SCHED_IDLE;
+  else if (base == SCHED_DEADLINE_)
+    base = SCHED_DEADLINE;
+  return base | (fork ? SCHED_RESET_ON_FORK : 0);
 }
