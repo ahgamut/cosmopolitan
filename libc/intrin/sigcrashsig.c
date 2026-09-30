@@ -29,17 +29,6 @@
 // so, we trade away maintanibility for tininess
 // see libc/sysv/consts.sh for canonical magnums
 
-#define ILL_ILLOPC_ 1
-#define ILL_PRVOPC_ 5
-#define SI_USER_    0
-#define FPE_FLTDIV_ 3
-#define FPE_FLTOVF_ 4
-#define FPE_INTOVF_ 2
-#define FPE_FLTUND_ 5
-#define FPE_FLTRES_ 6
-#define FPE_FLTINV_ 7
-#define SI_KERNEL_  128
-
 #define LO(x) (x & 255)
 #define HI(x) ((x >> 24) / !(x & 0x00ffff00u))
 #define ROW(x, sic, sig)                                                   \
@@ -65,30 +54,30 @@ struct CrashSig {
 
 static const struct CrashSig kNtCrashSigs[] = {
     ROW(kNtStatusBreakpoint, TRAP_BRKPT, SIGTRAP),             //
-    ROW(kNtStatusIllegalInstruction, ILL_ILLOPC_, SIGILL),     //
-    ROW(kNtStatusPrivilegedInstruction, ILL_PRVOPC_, SIGILL),  //
+    ROW(kNtStatusIllegalInstruction, ILL_ILLOPC, SIGILL),     //
+    ROW(kNtStatusPrivilegedInstruction, ILL_PRVOPC, SIGILL),  //
     ROW(kNtStatusInPageError, BUS_ADRERR, SIGBUS),             //
     ROW(kNtStatusStackOverflow, SEGV_MAPERR, SIGSEGV),         //
     ROW(kNtStatusGuardPageViolation, SEGV_ACCERR, SIGSEGV),    //
     ROW(kNtStatusAccessViolation, SEGV_ACCERR, SIGSEGV),       //
-    ROW(kNtStatusInvalidHandle, SI_USER_, SIGABRT),            //
-    ROW(kNtStatusInvalidParameter, SI_USER_, SIGABRT),         //
-    ROW(kNtStatusIntegerOverflow, FPE_INTOVF_, SIGFPE),        //
-    ROW(kNtStatusFloatDivideByZero, FPE_FLTDIV_, SIGFPE),      //
-    ROW(kNtStatusFloatOverflow, FPE_FLTOVF_, SIGFPE),          //
-    ROW(kNtStatusFloatUnderflow, FPE_FLTUND_, SIGFPE),         //
-    ROW(kNtStatusFloatInexactResult, FPE_FLTRES_, SIGFPE),     //
-    ROW(kNtStatusFloatDenormalOperand, FPE_FLTINV_, SIGFPE),   //
-    ROW(kNtStatusFloatInvalidOperation, FPE_FLTINV_, SIGFPE),  //
-    ROW(kNtStatusFloatStackCheck, FPE_FLTINV_, SIGFPE),        //
-    ROW(kNtStatusIntegerDivideBYZero, FPE_FLTINV_, SIGFPE),    //
-    // ROW(kNtSignalAssertionFailure, SI_USER_, SIGABRT),
-    // ROW(kNtSignalFloatMultipleTraps, FPE_FLTINV_, SIGFPE),
-    // ROW(kNtSignalFloatMultipleFaults, FPE_FLTINV_, SIGFPE),
-    // ROW(kNtSignalDllNotFound, SI_KERNEL_, SIGSYS),
-    // ROW(kNtSignalOrdinalNotFound, SI_KERNEL_, SIGSYS),
-    // ROW(kNtSignalEntrypointNotFound, SI_KERNEL_, SIGSYS),
-    // ROW(kNtSignalDllInitFailed, SI_KERNEL_, SIGSYS),
+    ROW(kNtStatusInvalidHandle, SI_USER, SIGABRT),            //
+    ROW(kNtStatusInvalidParameter, SI_USER, SIGABRT),         //
+    ROW(kNtStatusIntegerOverflow, FPE_INTOVF, SIGFPE),        //
+    ROW(kNtStatusFloatDivideByZero, FPE_FLTDIV, SIGFPE),      //
+    ROW(kNtStatusFloatOverflow, FPE_FLTOVF, SIGFPE),          //
+    ROW(kNtStatusFloatUnderflow, FPE_FLTUND, SIGFPE),         //
+    ROW(kNtStatusFloatInexactResult, FPE_FLTRES, SIGFPE),     //
+    ROW(kNtStatusFloatDenormalOperand, FPE_FLTINV, SIGFPE),   //
+    ROW(kNtStatusFloatInvalidOperation, FPE_FLTINV, SIGFPE),  //
+    ROW(kNtStatusFloatStackCheck, FPE_FLTINV, SIGFPE),        //
+    ROW(kNtStatusIntegerDivideBYZero, FPE_FLTINV, SIGFPE),    //
+    // ROW(kNtSignalAssertionFailure, SI_USER, SIGABRT),
+    // ROW(kNtSignalFloatMultipleTraps, FPE_FLTINV, SIGFPE),
+    // ROW(kNtSignalFloatMultipleFaults, FPE_FLTINV, SIGFPE),
+    // ROW(kNtSignalDllNotFound, SI_KERNEL, SIGSYS),
+    // ROW(kNtSignalOrdinalNotFound, SI_KERNEL, SIGSYS),
+    // ROW(kNtSignalEntrypointNotFound, SI_KERNEL, SIGSYS),
+    // ROW(kNtSignalDllInitFailed, SI_KERNEL, SIGSYS),
 };
 
 textwindows dontinstrument int __sig_crash_sig(unsigned exception, int *code) {

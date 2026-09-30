@@ -53,7 +53,7 @@ int sigqueue(int pid, int sig, const union sigval value) {
   } else {
     bzero(&info, sizeof(info));
     info.si_signo = __linux2sig(sig);
-    info.si_code = SI_QUEUE;
+    info.si_code = __linux2sicode(SI_QUEUE);
     info.si_pid = getpid();
     info.si_uid = geteuid();
     info.si_value = value;

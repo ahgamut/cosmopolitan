@@ -94,6 +94,8 @@ __privileged void __siginfo2cosmo(siginfo_t *si, const union siginfo_meta *m) {
     if (si_signo == SIGBUS && si_code == 3)
       si_code = 2;
 
+  si_code = __sicode2linux(si_signo, si_code);
+
   *si = (siginfo_t){0};
   si->si_signo = si_signo;
   si->si_errno = si_errno;

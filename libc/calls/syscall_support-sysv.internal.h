@@ -25,6 +25,8 @@ int __linux2msg(int);
 int __linux2poll(int);
 int __linux2sig(int);
 int __linux2how(int);
+int32_t __linux2sicode(int32_t);
+int32_t __sicode2linux(int, int32_t);
 uint32_t __linux2saflags(uint32_t);
 int __linux2sock(int);
 int __linux2socklevel(int);
