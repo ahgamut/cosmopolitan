@@ -18,6 +18,7 @@
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/intrin/getauxval.h"
 #include "libc/runtime/runtime.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 
 /**
  * Returns auxiliary value better.
@@ -30,6 +31,7 @@
  */
 struct AuxiliaryValue __getauxval(unsigned long at) {
   unsigned long *ap;
+  at = __linux2auxvkey(at);
   for (ap = __auxv; ap && ap[0]; ap += 2)
     if (at == ap[0])
       return (struct AuxiliaryValue){ap[1], true};

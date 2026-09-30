@@ -16,64 +16,57 @@
 │ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR             │
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
-#include "libc/dce.h"
-#include "libc/sysv/consts/at.h"
 #include "libc/sysv/consts/auxv.h"
 
 /**
- * Translates compile-time at() dirfd to host OS value.
+ * Translates compile-time getauxval() key to host OS value.
  *
- * Real file descriptors pass through unchanged, since the at
- * functions accept actual fds in addition to AT_FDCWD.
+ * __auxv holds the keys the host kernel provided verbatim. Keys
+ * that linux doesn't define (e.g. AT_CANARY) are still runtime
+ * externs, so they translate to themselves.
  */
-pureconst int __linux2atfd(int fd) {
-  if (fd == AT_FDCWD)
-    return AT_FDCWD_;
-  return fd;
-}
-
-#define AT2(X, A)  \
-  if (flags & X)   \
-    r |= A;
-
-#define ATEXIT2(X, A) \
-  if (flags & A)      \
-    r |= X;
-
-/**
- * Translates compile-time at() flags to host OS value.
- *
- * The bits are translated individually, since cosmo at flags may
- * contain several of them at once. Bits that aren't part of the
- * cosmo abi pass through unchanged.
- */
-pureconst int __linux2atflags(int flags) {
-  int r = 0;
-  if (IsLinux()) {
-    return flags;
-  } else {
-    AT2(AT_SYMLINK_NOFOLLOW, AT_SYMLINK_NOFOLLOW_);
-    AT2(AT_SYMLINK_FOLLOW, AT_SYMLINK_FOLLOW_);
-    AT2(AT_REMOVEDIR, AT_REMOVEDIR_);
-    AT2(AT_EACCESS, AT_EACCESS_);
-    AT2(AT_NO_AUTOMOUNT, AT_NO_AUTOMOUNT_);
-    return r;
-  }
-}
-
-/**
- * Translates host OS at() flags to compile-time value.
- */
-pureconst int __atflag2linux(int flags) {
-  int r = 0;
-  if (IsLinux()) {
-    return flags;
-  } else {
-    ATEXIT2(AT_SYMLINK_NOFOLLOW, AT_SYMLINK_NOFOLLOW_);
-    ATEXIT2(AT_SYMLINK_FOLLOW, AT_SYMLINK_FOLLOW_);
-    ATEXIT2(AT_REMOVEDIR, AT_REMOVEDIR_);
-    ATEXIT2(AT_EACCESS, AT_EACCESS_);
-    ATEXIT2(AT_NO_AUTOMOUNT, AT_NO_AUTOMOUNT_);
-    return r;
-  }
+pureconst unsigned long __linux2auxvkey(unsigned long key) {
+  if (key == AT_EXECFN)
+    return AT_EXECFN_;
+  if (key == AT_EXECPATH)
+    return AT_EXECPATH_;
+  if (key == AT_SECURE)
+    return AT_SECURE_;
+  if (key == AT_RANDOM)
+    return AT_RANDOM_;
+  if (key == AT_HWCAP)
+    return AT_HWCAP_;
+  if (key == AT_HWCAP2)
+    return AT_HWCAP2_;
+  if (key == AT_UID)
+    return AT_UID_;
+  if (key == AT_EUID)
+    return AT_EUID_;
+  if (key == AT_GID)
+    return AT_GID_;
+  if (key == AT_EGID)
+    return AT_EGID_;
+  if (key == AT_BASE_PLATFORM)
+    return AT_BASE_PLATFORM_;
+  if (key == AT_CLKTCK)
+    return AT_CLKTCK_;
+  if (key == AT_DCACHEBSIZE)
+    return AT_DCACHEBSIZE_;
+  if (key == AT_EXECFD)
+    return AT_EXECFD_;
+  if (key == AT_ICACHEBSIZE)
+    return AT_ICACHEBSIZE_;
+  if (key == AT_MINSIGSTKSZ)
+    return AT_MINSIGSTKSZ_;
+  if (key == AT_NOTELF)
+    return AT_NOTELF_;
+  if (key == AT_NO_AUTOMOUNT)
+    return AT_NO_AUTOMOUNT_;
+  if (key == AT_PLATFORM)
+    return AT_PLATFORM_;
+  if (key == AT_SYSINFO_EHDR)
+    return AT_SYSINFO_EHDR_;
+  if (key == AT_UCACHEBSIZE)
+    return AT_UCACHEBSIZE_;
+  return key;
 }
