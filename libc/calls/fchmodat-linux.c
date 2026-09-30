@@ -26,6 +26,7 @@
 │                                                                              │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/struct/stat.internal.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/errno.h"
 #include "libc/sysv/consts/at.h"
@@ -66,12 +67,12 @@ int sys_fchmodat_linux(int fd, const char *path, unsigned mode, int flag) {
 		return fd2;
 	}
 	__procfdname(proc, fd2);
-	ret = sys_fstatat(AT_FDCWD, proc, &st, 0);
+	ret = sys_fstatat(__linux2atfd(AT_FDCWD), proc, &st, 0);
 	if (!ret) {
 		if (S_ISLNK(st.st_mode))
 			ret = eopnotsupp();
 		else
-			ret = sys_fchmodat(AT_FDCWD, proc, mode, 0);
+			ret = sys_fchmodat(__linux2atfd(AT_FDCWD), proc, mode, 0);
 	}
 	sys_close(fd2);
 	return ret;

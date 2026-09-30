@@ -99,7 +99,7 @@ static ssize_t GetDevUrandom(char *p, size_t n, unsigned f) {
   oflags = O_RDONLY | O_CLOEXEC;
   if (f & GRND_NONBLOCK)
     oflags |= O_NONBLOCK;
-  fd = sys_openat(AT_FDCWD, dev, oflags, 0);
+  fd = sys_openat(__linux2atfd(AT_FDCWD), dev, oflags, 0);
   if (fd != -1) {
     rc = sys_read(fd, p, n);
     sys_close(fd);

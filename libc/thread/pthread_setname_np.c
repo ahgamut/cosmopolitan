@@ -17,6 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/blockcancel.internal.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
@@ -62,7 +63,7 @@ static errno_t pthread_setname_impl(struct PosixThread *pt, const char *name) {
       p = stpcpy(p, "/proc/self/task/");
       p = FormatUint32(p, tid);
       p = stpcpy(p, "/comm");
-      if ((fd = sys_openat(AT_FDCWD, path, O_WRONLY | O_CLOEXEC, 0)) == -1) {
+      if ((fd = sys_openat(__linux2atfd(AT_FDCWD), path, O_WRONLY | O_CLOEXEC, 0)) == -1) {
         rc = errno;
         errno = e;
         return rc;

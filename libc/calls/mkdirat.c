@@ -67,7 +67,7 @@ int mkdirat(int dirfd, const char *path, unsigned mode) {
              (rc = __zipos_notat(dirfd, path)) == -1) {
     rc = erofs();
   } else if (!IsWindows()) {
-    rc = sys_mkdirat(dirfd, path, mode);
+    rc = sys_mkdirat(__linux2atfd(dirfd), path, mode);
   } else {
     rc = sys_mkdirat_nt(dirfd, path, mode);
   }

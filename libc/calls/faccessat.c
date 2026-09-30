@@ -17,6 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/calls/internal.h"
 #include "libc/calls/syscall-nt.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
@@ -99,7 +100,7 @@ int faccessat(int dirfd, const char *path, int amode, int flags) {
       if (errno == ENOSYS) {
         errno = e;
       NoFlags:
-        rc = sys_faccessat(dirfd, path, amode, flags);
+        rc = sys_faccessat(__linux2atfd(dirfd), path, amode, __linux2atflags(flags));
       }
     }
   } else {

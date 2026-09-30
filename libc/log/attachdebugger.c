@@ -17,6 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/calls/struct/stat.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
@@ -76,7 +77,7 @@ relegated int(AttachDebugger)(intptr_t continuetoaddr) {
       !(gdb = GetGdbPath()) ||  //
       !isatty(0) ||             //
       !isatty(1) ||             //
-      (ttyfd = sys_openat(AT_FDCWD, _PATH_TTY, O_RDWR | O_CLOEXEC, 0)) == -1) {
+      (ttyfd = sys_openat(__linux2atfd(AT_FDCWD), _PATH_TTY, O_RDWR | O_CLOEXEC, 0)) == -1) {
     return enosys();
   }
   FormatUint32(pidstr, getpid());

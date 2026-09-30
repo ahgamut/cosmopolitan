@@ -17,6 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/struct/metastat.internal.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/calls/syscall_support-nt.internal.h"
 #include "libc/dce.h"
@@ -43,7 +44,7 @@ static int sys_getcwd_xnu(char *res, size_t size) {
     if (__sys_fstat(fd, &st[0]) != -1) {
       if (st[0].xnu.st_dev && st[0].xnu.st_ino) {
         if (__sys_fcntl(fd, XNU_F_GETPATH, (uintptr_t)buf) != -1) {
-          if (__sys_fstatat(AT_FDCWD, buf, &st[1], 0) != -1) {
+          if (__sys_fstatat(__linux2atfd(AT_FDCWD), buf, &st[1], 0) != -1) {
             if (st[0].xnu.st_dev == st[1].xnu.st_dev &&
                 st[0].xnu.st_ino == st[1].xnu.st_ino) {
               if ((len = strlen(buf)) < size) {

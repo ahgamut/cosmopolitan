@@ -17,6 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "ape/sections.internal.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/calls/blockcancel.internal.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/syscall-sysv.internal.h"
@@ -57,7 +58,7 @@ void EnableCruiseControlForCool(void) {
   if (!IsLinux())
     return;
   BLOCK_CANCELATION;
-  if ((fd = __sys_openat(AT_FDCWD, "/dev/cpu_dma_latency", O_WRONLY, 0)) !=
+  if ((fd = __sys_openat(__linux2atfd(AT_FDCWD), "/dev/cpu_dma_latency", O_WRONLY, 0)) !=
       -1) {
     sys_write(fd, &micros, sizeof(micros));
     fcntl(fd, F_DUPFD_CLOEXEC, 123);

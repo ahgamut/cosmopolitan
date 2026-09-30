@@ -17,6 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/blockcancel.internal.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/syscall-nt.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
@@ -83,7 +84,7 @@ int fchmodat(int dirfd, const char *path, uint32_t mode, int flags) {
         ALLOW_CANCELATION;
       }
     } else {
-      rc = sys_fchmodat(dirfd, path, mode, flags);
+      rc = sys_fchmodat(__linux2atfd(dirfd), path, mode, __linux2atflags(flags));
     }
   } else {
     rc = sys_fchmodat_nt(dirfd, path, mode, flags);

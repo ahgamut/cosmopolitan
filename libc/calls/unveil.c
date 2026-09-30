@@ -247,7 +247,7 @@ int sys_unveil_linux(const char *path, const char *permissions) {
       return eloop();
     }
     int err = errno;
-    if ((rc = sys_readlinkat(AT_FDCWD, next, b.lbuf, PATH_MAX)) != -1) {
+    if ((rc = sys_readlinkat(__linux2atfd(AT_FDCWD), next, b.lbuf, PATH_MAX)) != -1) {
       if (rc < PATH_MAX) {
         // we need to nul-terminate
         b.lbuf[rc] = 0;
@@ -286,7 +286,7 @@ int sys_unveil_linux(const char *path, const char *permissions) {
 
   // now we can open the path
   BLOCK_CANCELATION;
-  rc = sys_openat(AT_FDCWD, path, _O_PATH | O_NOFOLLOW | O_CLOEXEC, 0);
+  rc = sys_openat(__linux2atfd(AT_FDCWD), path, _O_PATH | O_NOFOLLOW | O_CLOEXEC, 0);
   ALLOW_CANCELATION;
   if (rc == -1)
     return rc;

@@ -17,6 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/calls/syscall-nt.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
@@ -48,7 +49,8 @@ int linkat(int olddirfd, const char *oldpath, int newdirfd, const char *newpath,
               (rc = __zipos_notat(newdirfd, newpath)) == -1)) {
     rc = erofs();
   } else if (!IsWindows()) {
-    rc = sys_linkat(olddirfd, oldpath, newdirfd, newpath, flags);
+    rc = sys_linkat(__linux2atfd(olddirfd), oldpath, __linux2atfd(newdirfd),
+                    newpath, __linux2atflags(flags));
   } else {
     rc = sys_linkat_nt(olddirfd, oldpath, newdirfd, newpath);
   }

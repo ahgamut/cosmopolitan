@@ -17,6 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/calls/struct/stat.h"
 #include "libc/calls/syscall-nt.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
@@ -83,7 +84,7 @@ int unlinkat(int dirfd, const char *path, int flags) {
              (rc = __zipos_notat(dirfd, path)) == -1) {
     rc = erofs();
   } else if (!IsWindows()) {
-    rc = sys_unlinkat(dirfd, path, flags);
+    rc = sys_unlinkat(__linux2atfd(dirfd), path, __linux2atflags(flags));
   } else {
     rc = sys_unlinkat_nt(dirfd, path, flags);
   }

@@ -17,6 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/atomic.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/calls/calls.h"
 #include "libc/calls/metalfile.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
@@ -187,8 +188,8 @@ static inline void InitProgramExecutableNameImpl(void) {
     }
   }
   if (IsLinux()) {
-    if ((got = sys_readlinkat(AT_FDCWD, "/proc/self/exe", b, n)) > 0 ||
-        (got = sys_readlinkat(AT_FDCWD, "/proc/curproc/file", b, n)) > 0) {
+    if ((got = sys_readlinkat(__linux2atfd(AT_FDCWD), "/proc/self/exe", b, n)) > 0 ||
+        (got = sys_readlinkat(__linux2atfd(AT_FDCWD), "/proc/curproc/file", b, n)) > 0) {
       b[got] = 0;
       if (!OldApeLoader(b)) {
         goto UseBuf;

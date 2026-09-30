@@ -17,6 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/intrin/describeflags.h"
@@ -49,7 +50,8 @@ int fchownat(int dirfd, const char *path, uint32_t uid, uint32_t gid,
              (rc = __zipos_notat(dirfd, path)) == -1) {
     rc = erofs();
   } else {
-    rc = sys_fchownat(dirfd, path, uid, gid, flags);
+    rc = sys_fchownat(__linux2atfd(dirfd), path, uid, gid,
+                      __linux2atflags(flags));
   }
   STRACE("fchownat(%s, %#s, %d, %d, %#b) → %d% m", DescribeDirfd(dirfd), path,
          uid, gid, flags, rc);

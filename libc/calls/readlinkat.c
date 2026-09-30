@@ -17,6 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/syscall-nt.internal.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
 #include "libc/intrin/describeflags.h"
@@ -71,7 +72,7 @@ ssize_t readlinkat(int dirfd, const char *path, char *buf, size_t bufsiz) {
     STRACE("TODO: zipos support for readlinkat");
     bytes = einval();
   } else if (!IsWindows()) {
-    bytes = sys_readlinkat(dirfd, path, buf, bufsiz);
+    bytes = sys_readlinkat(__linux2atfd(dirfd), path, buf, bufsiz);
   } else {
     bytes = sys_readlinkat_nt(dirfd, path, buf, bufsiz);
   }

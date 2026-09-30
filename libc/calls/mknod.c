@@ -59,7 +59,7 @@ int mknod(const char *path, uint32_t mode, uint64_t dev) {
     rc = sys_mknod(path, mode, dev);
     if (rc == -1 && rc == ENOSYS) {
       errno = e;
-      rc = sys_mknodat(AT_FDCWD, path, mode, dev);
+      rc = sys_mknodat(__linux2atfd(AT_FDCWD), path, mode, dev);
     }
   } else {
     rc = enosys();

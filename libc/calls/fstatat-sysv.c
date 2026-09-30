@@ -17,6 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/struct/metastat.internal.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/calls/struct/stat.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
 
@@ -28,6 +29,8 @@ int32_t sys_fstatat(int32_t dirfd, const char *path, struct stat *st,
                     int32_t flags) {
   void *p;
   union metastat ms;
+  dirfd = __linux2atfd(dirfd);
+  flags = __linux2atflags(flags);
   if (st) {
     p = &ms;
   } else {

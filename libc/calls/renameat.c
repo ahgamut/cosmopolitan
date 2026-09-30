@@ -72,7 +72,8 @@ int renameat(int olddirfd, const char *oldpath, int newdirfd,
               (rc = __zipos_notat(newdirfd, newpath)) == -1)) {
     rc = erofs();
   } else if (!IsWindows()) {
-    rc = sys_renameat(olddirfd, oldpath, newdirfd, newpath);
+    rc = sys_renameat(__linux2atfd(olddirfd), oldpath, __linux2atfd(newdirfd),
+                      newpath);
   } else {
     rc = sys_renameat_nt(olddirfd, oldpath, newdirfd, newpath);
   }

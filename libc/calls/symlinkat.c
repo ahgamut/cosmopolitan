@@ -17,6 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/calls/calls.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/calls/syscall-nt.internal.h"
 #include "libc/calls/syscall-sysv.internal.h"
 #include "libc/dce.h"
@@ -50,7 +51,7 @@ int symlinkat(const char *target, int newdirfd, const char *linkpath) {
   } else if (!*target || !*linkpath) {
     rc = enoent();
   } else if (!IsWindows()) {
-    rc = sys_symlinkat(target, newdirfd, linkpath);
+    rc = sys_symlinkat(target, __linux2atfd(newdirfd), linkpath);
   } else {
     rc = sys_symlinkat_nt(target, newdirfd, linkpath);
   }

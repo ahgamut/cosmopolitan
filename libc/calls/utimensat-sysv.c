@@ -17,6 +17,7 @@
 │ PERFORMANCE OF THIS SOFTWARE.                                                │
 ╚─────────────────────────────────────────────────────────────────────────────*/
 #include "libc/assert.h"
+#include "libc/calls/syscall_support-sysv.internal.h"
 #include "libc/calls/struct/timespec.internal.h"
 #include "libc/calls/struct/timeval.internal.h"
 #include "libc/cosmotime.h"
@@ -32,6 +33,8 @@ int sys_utimensat(int dirfd, const char *path, const struct timespec ts[2],
   int rc, olderr;
   struct timeval tv[2];
   unassert(!IsWindows() && !IsXnu());
+  dirfd = __linux2atfd(dirfd);
+  flags = __linux2atflags(flags);
   if (!path && (IsFreebsd() || IsNetbsd() || IsOpenbsd())) {
     rc = sys_futimens(dirfd, ts);
   } else {

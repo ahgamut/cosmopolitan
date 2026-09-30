@@ -28,6 +28,7 @@
 
 static int sys_openat_impl(int dirfd, const char *file, int flags,
                            unsigned mode) {
+  dirfd = __linux2atfd(dirfd);
   if ((flags = __xoflags(flags)) == -1)
     return -1;
   return __sys_openat(dirfd, file, flags, mode);
