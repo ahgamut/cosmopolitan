@@ -49,7 +49,7 @@ COSMOPOLITAN_C_END_
 #define MAP_ANONYMOUS       0x00000020
 #define MAP_32BIT           0x00000040
 #define MAP_CONCEAL         0x00000080 /* polyfill */
-#define MAP_HASSEMAPHORE    0x00000100 /* polyfill */
+/*      MAP_GROWSDOWN       0x00000100 */ /* linux, unused */
 #define MAP_NOSYNC          0x00000200 /* polyfill */
 #define MAP_JIT             0x00000400 /* polyfill */
 #define MAP_DENYWRITE       0x00000800
@@ -58,12 +58,14 @@ COSMOPOLITAN_C_END_
 #define MAP_NORESERVE       0x00004000
 #define MAP_POPULATE        0x00008000
 #define MAP_NONBLOCK        0x00010000
-#define MAP_INHERIT         0x00020000 /* polyfill */
+/*      MAP_STACK           0x00020000 */ /* linux, unused */
 #define MAP_HUGETLB         0x00040000
 #define MAP_SYNC            0x00080000
 #define MAP_FIXED_NOREPLACE 0x00100000 /* linux/freebsd weirdness */
 #define MAP_NOCACHE         0x00200000 /* polyfill */
 #define MAP_NOEXTEND        0x00400000 /* polyfill */
+#define MAP_INHERIT         0x00800000 /* polyfill */
+#define MAP_HASSEMAPHORE    0x01000000 /* polyfill */
 
 #define MAP_ANON   MAP_ANONYMOUS
 #define MAP_NOCORE MAP_CONCEAL
